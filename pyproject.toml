@@ -1,0 +1,65 @@
+[project]
+name = "ai-agents-education"
+version = "0.1.0"
+description = "Custom LLM framework for learning agentic AI patterns"
+requires-python = ">=3.10"
+
+dependencies = [
+    # OpenAI-compatible HTTP client — used for openai, ollama, gemini, deepseek backends
+    "openai>=1.50",
+    # Anthropic native SDK — used for the anthropic backend
+    "anthropic>=0.25",
+    # .env file loading
+    "python-dotenv>=1.0",
+    # Adds the git repository root to sys.path so absolute imports work from any directory
+    "git-root-to-syspath>=0.1",
+    # Python wrapper for the graphviz system tool — used by Describable.get_svg/png/html/open_browser
+    # System prerequisite: sudo apt install graphviz  (or: brew install graphviz)
+    "graphviz>=0.20",
+]
+
+[project.optional-dependencies]
+# Extra deps used only in src/examples/ — not required for src/agentflow/
+examples = [
+    "python-dateutil>=2.8",
+    # crewai and langgraph are large; install only when working with those examples
+    # "crewai>=0.80",
+    # "langgraph>=0.2",
+    # "langchain-core>=0.3",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+
+[tool.pytest.ini_options]
+# Both directories are collected on every run.
+# src/agentflow/tests/ travels with the library if it is ever split into its own repo.
+testpaths = ["tests", "src/agentflow/tests"]
+
+# Integration tests (marked @pytest.mark.integration) are EXCLUDED by default
+# because they make real LLM API calls and cost money.
+# Run them explicitly when needed:
+#   pytest -m integration                        # integration only
+#   pytest -m "not integration"                  # same as default
+#   pytest -p no:randomly -m "unit or integration"  # all tests
+addopts = "-m 'not integration'"
+
+markers = [
+    "unit: fast, no I/O — run on every save and in CI",
+    "integration: live LLM API call — costs tokens, run explicitly only",
+    "slow: > 5 s",
+]
