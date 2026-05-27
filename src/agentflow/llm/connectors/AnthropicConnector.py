@@ -53,6 +53,7 @@ class AnthropicConnector(LlmConnector):
         Args:
             config: Resolved ``LlmConfig`` for the anthropic backend.
         """
+        super().__init__()
         self._config = config
         self._client = anthropic.Anthropic(api_key=config.api_key)
         logger.info(

@@ -16,19 +16,21 @@ import json
 import logging
 from typing import Any
 
+from git_root_to_syspath import agr
+agr()
+
+from src.agentflow.describable.describable import Describable
 from src.agentflow.tools.Tool import ToolBase
 
 logger = logging.getLogger(__name__)
 
 
-class ToolRegistry:
+class ToolRegistry(Describable):
     """Registry of stateful tool objects with schema generation and call dispatch.
 
     Usage::
 
-        registry = ToolRegistry()
-        registry.register(GetWeather(api_key="..."))
-        registry.register(Calculator())
+        registry = ToolRegistry(tools=[GetWeather(api_key="..."), Calculator()])
 
         # Pass schemas to the LLM:
         response = connector.chat(messages, tools=registry.schemas())
@@ -36,10 +38,22 @@ class ToolRegistry:
         # Dispatch each tool call returned by the LLM:
         for call in response.tool_calls:
             result = registry.execute(call.name, call.arguments)
+
+    Pattern: Registry (PEAA).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, tools: list[ToolBase] | None = None) -> None:
+        super().__init__()
         self._tools: dict[str, ToolBase] = {}
+        self.tools: list[ToolBase] = []  # public list kept in sync; used by Describable graph
+        for tool in tools or []:
+            self.register(tool)
+
+    def _get_own_attributes(self) -> dict[str, Any]:
+        d = super()._get_own_attributes()
+        d["tool_count"] = len(self._tools)
+        d["tool_names"] = self.names()
+        return d
 
     # ------------------------------------------------------------------
     # Registration
@@ -61,6 +75,7 @@ class ToolRegistry:
                 "Unregister it first or use a subclass with a different name."
             )
         self._tools[tool.name] = tool
+        self.tools.append(tool)
         logger.debug("Tool registered: name=%s type=%s", tool.name, type(tool).__name__)
 
     def unregister(self, name: str) -> None:
@@ -74,7 +89,8 @@ class ToolRegistry:
         """
         if name not in self._tools:
             raise KeyError(f"No tool named {name!r} is registered.")
-        del self._tools[name]
+        tool = self._tools.pop(name)
+        self.tools.remove(tool)
         logger.debug("Tool unregistered: name=%s", name)
 
     # ------------------------------------------------------------------

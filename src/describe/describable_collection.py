@@ -1,1 +1,0 @@
-src/examples/self_education/Agentni_systemy

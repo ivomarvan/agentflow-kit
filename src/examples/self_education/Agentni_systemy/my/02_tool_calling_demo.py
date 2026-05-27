@@ -23,6 +23,8 @@ Switch backend:
 from __future__ import annotations
 
 import logging
+import os
+from datetime import date as _date
 
 from git_root_to_syspath import agr
 agr()
@@ -31,6 +33,7 @@ from src.agentflow.agents.ToolAgent import ToolAgent
 from src.agentflow.llm.LlmConfig import LlmConfig
 from src.agentflow.llm.LlmConnector import LlmConnector
 from src.agentflow.tools.Tool import ToolBase, param_desc
+from src.agentflow.tools.ToolRegistry import ToolRegistry
 from src.agentflow.tools.common_tools.Calculator import Calculator
 
 logger = logging.getLogger(__name__)
@@ -75,7 +78,7 @@ class FakeWeather(ToolBase):
 if __name__ == "__main__":
     case = ToolAgent(
         connector=LlmConnector.create(LlmConfig.from_env()),
-        tools=[Calculator(), FakeWeather()],
+        tools=ToolRegistry(tools=[Calculator(), FakeWeather()]),
         system_prompt=(
             "You are a helpful assistant. "
             "When a tool would give a more reliable answer, call it. "
@@ -90,11 +93,20 @@ if __name__ == "__main__":
         max_steps=6,
     )
 
+    _title = os.path.basename(__file__)
+    _title_tooltip = (
+        f"**{_title}**\n\n"
+        f"_{_date.today()}_\n\n"
+        f"{__doc__}"
+    )
     case.run_argparse(
         doc=__doc__,
         name=__name__,
+        title=_title,
+        title_tooltip=_title_tooltip,
         default_question=(
             "What's the weather in Prague? "
             "And what is the Prague temperature (the number only) multiplied by 23?"
         ),
+        default_command="run",
     )
