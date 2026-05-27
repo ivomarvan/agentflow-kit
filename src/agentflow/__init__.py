@@ -25,7 +25,7 @@ from src.agentflow.llm.OllamaManager import OllamaManager, OllamaModelInfo
 from src.agentflow.tools.Tool import ToolBase, param_desc, build_parameters_schema
 from src.agentflow.tools.ToolRegistry import ToolRegistry
 from src.agentflow.agents.ToolAgent import ToolAgent
-from src.agentflow.describe import Describable, GraphContext, GraphFragment
+from src.agentflow.describable import Describable, Graph, Vertex, Edge, GraphRenderer
 
 __all__ = [
     # Config & connectors
@@ -52,6 +52,8 @@ __all__ = [
     "ToolAgent",
     # Self-description interface
     "Describable",
-    "GraphContext",
-    "GraphFragment",
+    "Graph",
+    "Vertex",
+    "Edge",
+    "GraphRenderer",
 ]

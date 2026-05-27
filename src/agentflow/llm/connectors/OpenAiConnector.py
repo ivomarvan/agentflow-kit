@@ -38,6 +38,7 @@ class OpenAiConnector(LlmConnector):
         Args:
             config: Resolved ``LlmConfig`` for an OpenAI-compatible backend.
         """
+        super().__init__()
         self._config = config
         self._client = self._build_client(config)
         logger.info(

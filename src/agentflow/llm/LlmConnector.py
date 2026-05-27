@@ -27,7 +27,7 @@ from typing import Any
 from git_root_to_syspath import agr  # locate project root and add it to sys.path
 agr()
 
-from src.agentflow.describe import Describable, GraphContext, GraphFragment, _dot_node
+from src.agentflow.describable.describable import Describable
 from src.agentflow.llm.ChatResponse import ChatResponse
 from src.agentflow.llm.LlmConfig import LlmConfig, OPENAI_COMPATIBLE_BACKENDS
 
@@ -95,111 +95,6 @@ class LlmConnector(Describable):
             Multi-line string with backend, model, URL, and timeout.
         """
         return self.config.describe()
-
-    # ------------------------------------------------------------------
-    # Describable — concrete implementations using self.config
-    # ------------------------------------------------------------------
-
-    def get_markdown(self) -> str:
-        """Return a Markdown section describing this connector's configuration.
-
-        Returns:
-            Markdown string with backend, model, URL, and timeout.
-        """
-        cfg = self.config
-        lines = [
-            f"## LLM: `{cfg.backend}` / `{cfg.model}`",
-            "",
-            f"- Backend: `{cfg.backend}`",
-            f"- Model: `{cfg.model}`",
-        ]
-        if cfg.base_url:
-            lines.append(f"- Base URL: `{cfg.base_url}`")
-        lines.append(f"- Timeout: {cfg.timeout}s")
-        return "\n".join(lines)
-
-    def get_json(self) -> dict[str, Any]:
-        """Return a JSON-serializable dict of this connector's configuration.
-
-        Returns:
-            Dict with ``backend``, ``model``, ``base_url``, ``timeout`` keys.
-        """
-        cfg = self.config
-        return {
-            "backend": cfg.backend,
-            "model": cfg.model,
-            "base_url": cfg.base_url,
-            "timeout": cfg.timeout,
-        }
-
-    def get_graphviz_fragment(self, ctx: GraphContext) -> GraphFragment:
-        """Return a DOT cylinder node representing this LLM backend.
-
-        Also registers the node in vis.js data via ``ctx.add_node()`` so that
-        ``get_html()`` produces a matching interactive node with a Markdown
-        tooltip.
-
-        Args:
-            ctx: Mutable context for unique ID allocation and vis.js data.
-
-        Returns:
-            ``GraphFragment`` with one node statement.
-        """
-        cfg = self.config
-        node_id = ctx.alloc_id(f"llm_{cfg.backend}")
-        stmt = _dot_node(
-            node_id,
-            label=f"{cfg.backend}\\n{cfg.model}",
-            tooltip=f"{cfg.backend}: {cfg.model}, timeout={cfg.timeout}s",
-            shape="cylinder",
-            style="filled",
-            fillcolor="lightcyan",
-            color="steelblue",
-        )
-        # Cytoscape: label = class name only (rule: "shape title = class name")
-        # Backend/model details are in the tooltip (get_markdown())
-        ctx.add_node(
-            node_id,
-            label=type(self).__name__,
-            description_md=self.get_markdown(),
-            node_class="llm",
-        )
-        return GraphFragment(dot_statements=[stmt], root_id=node_id)
-
-    # ------------------------------------------------------------------
-    # Argparse hooks — adds connector-specific CLI commands
-    # ------------------------------------------------------------------
-
-    def _add_argparse_commands(self, subparsers: Any) -> None:
-        """Register ``show`` and ``ping`` subcommands."""
-        subparsers.add_parser("show", help="Print connector configuration.")
-        p_ping = subparsers.add_parser(
-            "ping", help="Send a test request to verify the LLM connection."
-        )
-        p_ping.add_argument(
-            "--prompt",
-            default="Say hello in one short sentence.",
-            help="Prompt to send (default: 'Say hello in one short sentence.').",
-        )
-
-    def _handle_argparse_command(self, args: Any) -> None:
-        """Dispatch ``show`` and ``ping`` commands."""
-        import sys
-
-        if args.command == "show":
-            print(self.describe())
-
-        elif args.command == "ping":
-            print(self.describe())
-            print()
-            try:
-                response = self.chat([{"role": "user", "content": args.prompt}])
-            except Exception as exc:
-                print(f"ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
-                sys.exit(1)
-            print(f"Response : {response.text}")
-            if response.usage:
-                print(f"Usage    : {response.usage}")
 
     def __str__(self) -> str:
         return f"{type(self).__name__}({self.config})"

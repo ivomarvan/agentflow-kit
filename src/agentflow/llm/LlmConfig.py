@@ -26,8 +26,13 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
+from git_root_to_syspath import agr
+agr()
+
+from src.agentflow.describable.describable import Describable
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +103,7 @@ _API_KEY_ENV_VARS: dict[str, list[str]] = {
 
 
 @dataclass
-class LlmConfig:
+class LlmConfig(Describable):
     """Immutable snapshot of the active LLM backend configuration.
 
     Holds all parameters needed to build an OpenAI-compatible client:
@@ -114,6 +119,19 @@ class LlmConfig:
     api_key: str | None
     timeout: float
     available_models: dict[str, list[str]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Initialise Describable attributes after the dataclass fields are set."""
+        Describable.__init__(self, name=f"{self.backend}/{self.model}")
+
+    def _get_own_attributes(self) -> dict[str, Any]:
+        """Expose only the key configuration fields, omitting API keys and full model lists."""
+        return {
+            "backend": self.backend,
+            "model": self.model,
+            "base_url": self.base_url,
+            "timeout": self.timeout,
+        }
 
     # ------------------------------------------------------------------
     # Private static helpers

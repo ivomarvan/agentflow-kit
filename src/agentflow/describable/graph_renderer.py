@@ -15,8 +15,8 @@ The HTML output uses:
 
 Usage::
 
-    from src.describe.graph_renderer import GraphRenderer
-    from src.describe.structure_example import build_demo_agent
+    from src.agentflow.describable.graph_renderer import GraphRenderer
+    from src.agentflow.describable import Describable  # build your own Describable subclass
 
     graph = build_demo_agent().get_graph()
     print(GraphRenderer.to_dot(graph))
@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.describe.graph import Edge, Graph, Vertex
+    from src.agentflow.describable.graph import Edge, Graph, Vertex
 
 
 # ---------------------------------------------------------------------------
@@ -131,17 +131,21 @@ class GraphRenderer:
         return result
 
     @staticmethod
-    def to_html(graph: "Graph", title: str = "") -> str:
+    def to_html(graph: "Graph", title: str = "", title_tooltip: str = "") -> str:
         """Return a standalone interactive HTML page for *graph*.
 
         Graphviz generates the SVG layout.  JavaScript overlays rich Markdown
         tooltips on hover using ``marked.js`` from CDN.  Hovering over any
         vertex (leaf or cluster) shows its full attribute description.
+        When ``title_tooltip`` is provided, hovering over the page title shows
+        a rich Markdown tooltip with that content.
 
         Args:
             graph: The composition graph to render.
             title: Page title shown in the browser tab and the header bar.
                    Defaults to the root vertex label.
+            title_tooltip: Markdown shown as a tooltip when hovering the title.
+                           When empty, no header tooltip is attached.
 
         Returns:
             Complete self-contained HTML string (no external files needed).
@@ -153,11 +157,13 @@ class GraphRenderer:
         dot, descs = GraphRenderer._build_dot(graph)
         svg = gv.Source(dot, format="svg").pipe().decode("utf-8")
         page_title = title or graph.root.label
+        title_tt_json = json.dumps(title_tooltip if title_tooltip else None, ensure_ascii=False)
         return (
             _HTML_TEMPLATE
-            .replace("%%TITLE%%",        _html_stdlib.escape(page_title))
-            .replace("%%SVG%%",          svg)
-            .replace("%%DESCRIPTIONS%%", json.dumps(descs, ensure_ascii=False))
+            .replace("%%TITLE%%",          _html_stdlib.escape(page_title))
+            .replace("%%SVG%%",            svg)
+            .replace("%%DESCRIPTIONS%%",   json.dumps(descs, ensure_ascii=False))
+            .replace("%%TITLE_TOOLTIP%%",  title_tt_json)
         )
 
     @staticmethod
@@ -188,7 +194,7 @@ class GraphRenderer:
         return GraphRenderer._inject_svg_interactivity(raw_svg, descs)
 
     @staticmethod
-    def open_browser(graph: "Graph", title: str = "") -> None:
+    def open_browser(graph: "Graph", title: str = "", title_tooltip: str = "") -> None:
         """Render *graph* as HTML and open it in the default web browser.
 
         Saves a temporary HTML file and passes its ``file://`` URL to the
@@ -197,8 +203,9 @@ class GraphRenderer:
         Args:
             graph: The composition graph to render.
             title: Forwarded to ``to_html()``.
+            title_tooltip: Forwarded to ``to_html()``.
         """
-        content  = GraphRenderer.to_html(graph, title=title)
+        content  = GraphRenderer.to_html(graph, title=title, title_tooltip=title_tooltip)
         safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", graph.root.label)
         tmp = Path(tempfile.mktemp(suffix=f"_{safe_name}.html"))
         tmp.write_text(content, encoding="utf-8")
@@ -647,6 +654,14 @@ _SVG_INJECTION_TEMPLATE = """\
     g.removeChild(titleEl);
   }
 
+  // Remove xlink:title from <a> elements: Graphviz tooltip= DOT attribute
+  // generates these, causing a second native grey tooltip alongside the custom panel.
+  var allAnchors = svg.querySelectorAll("a");
+  for (var ai = 0; ai < allAnchors.length; ai++) {
+    allAnchors[ai].removeAttribute("xlink:title");
+    allAnchors[ai].removeAttribute("title");
+  }
+
   function getSVGPoint(e) {
     try {
       var pt = svg.createSVGPoint();
@@ -775,7 +790,7 @@ _HTML_TEMPLATE = """\
   </style>
 </head>
 <body>
-  <div id="header"><h1>%%TITLE%%</h1></div>
+  <div id="header"><h1 id="hdr-title">%%TITLE%%</h1></div>
   <div id="svg-wrap">%%SVG%%</div>
   <div id="tt"></div>
   <script>
@@ -792,6 +807,37 @@ _HTML_TEMPLATE = """\
       if (md) { g._md = md; g.style.cursor = "pointer"; }
       tel.remove();
     });
+
+    // Remove xlink:title from <a> elements: Graphviz tooltip= DOT attribute
+    // generates these, causing a second native grey tooltip to appear.
+    document.querySelectorAll("#svg-wrap svg a").forEach(function(a) {
+      a.removeAttribute("xlink:title");
+      a.removeAttribute("title");
+    });
+
+    // Optional header tooltip — shown when hovering the page title.
+    const titleTt = %%TITLE_TOOLTIP%%;
+    if (titleTt) {
+      const hdrEl = document.getElementById("hdr-title");
+      if (hdrEl) {
+        hdrEl.style.cursor = "help";
+        hdrEl.addEventListener("mouseover", function() {
+          tt.innerHTML = (typeof marked !== "undefined")
+            ? marked.parse(titleTt)
+            : "<pre>" + titleTt.replace(/</g, "&lt;") + "</pre>";
+          tt.style.display = "block";
+        });
+        hdrEl.addEventListener("mousemove", function(e) {
+          const x = e.clientX + 18, y = e.clientY + 8;
+          const w = tt.offsetWidth || 420;
+          tt.style.left = (x + w > window.innerWidth ? e.clientX - w - 4 : x) + "px";
+          tt.style.top  = Math.max(8, y) + "px";
+        });
+        hdrEl.addEventListener("mouseleave", function() {
+          tt.style.display = "none";
+        });
+      }
+    }
 
     // On hover: find the innermost group with a description and show tooltip.
     document.getElementById("svg-wrap").addEventListener("mouseover", function(e) {

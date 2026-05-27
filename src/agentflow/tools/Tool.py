@@ -36,7 +36,7 @@ from typing import Any, get_type_hints
 from git_root_to_syspath import agr
 agr()
 
-from src.agentflow.describe import Describable, GraphContext, GraphFragment, _dot_node, _esc
+from src.agentflow.describable.describable import Describable
 
 logger = logging.getLogger(__name__)
 
@@ -200,28 +200,20 @@ class ToolBase(Describable):
     # Identity — override in subclasses when needed
     # ------------------------------------------------------------------
 
-    @property
-    def name(self) -> str:
-        """Tool name sent to the LLM.
+    def __init__(self, name: str | None = None) -> None:
+        """Initialise the tool, setting snake_case name and docstring description.
 
-        Defaults to the class name converted to snake_case.
-        Override in subclasses to use a different name.
-
-        Returns:
-            Snake_case tool name string.
+        Args:
+            name: Optional explicit tool name.  When omitted, derived from the
+                  class name via ``_camel_to_snake()``.
         """
-        return _camel_to_snake(type(self).__name__)
+        super().__init__(name=name or _camel_to_snake(type(self).__name__))
+        # self.description is set from __doc__ by Describable.__init__
 
-    @property
-    def description(self) -> str:
-        """Tool description sent to the LLM.
-
-        Defaults to the class docstring.  Override for a custom description.
-
-        Returns:
-            Description string.
-        """
-        return inspect.getdoc(type(self)) or f"Tool: {self.name}"
+    def _get_own_attributes(self) -> dict[str, Any]:
+        d = super()._get_own_attributes()
+        d["parameters"] = self.parameters_schema()
+        return d
 
     # ------------------------------------------------------------------
     # Contract
@@ -269,72 +261,6 @@ class ToolBase(Describable):
         }
         logger.debug("Tool schema built: name=%s", self.name)
         return schema
-
-    # ------------------------------------------------------------------
-    # Describable — concrete default implementations
-    # Subclasses inherit these; override only when custom output is needed.
-    # ------------------------------------------------------------------
-
-    def get_markdown(self) -> str:
-        """Return a Markdown section describing this tool.
-
-        Returns:
-            Markdown string with name, description, and parameters table.
-        """
-        lines = [f"## Tool: `{self.name}`", "", self.description]
-        schema = self.parameters_schema()
-        props: dict[str, Any] = schema.get("properties", {})
-        required: list[str] = schema.get("required", [])
-        if props:
-            lines += ["", "**Parameters:**", ""]
-            for param_name, prop in props.items():
-                req = " *(required)*" if param_name in required else " *(optional)*"
-                desc = prop.get("description", "")
-                desc_part = f" — {desc}" if desc else ""
-                lines.append(f"- `{param_name}` ({prop.get('type', 'string')}{req}){desc_part}")
-        return "\n".join(lines)
-
-    def get_json(self) -> dict[str, Any]:
-        """Return the OpenAI tool schema as a JSON-serializable dict.
-
-        Returns:
-            Full ``{"type": "function", "function": {...}}`` schema dict.
-        """
-        return self.to_openai_schema()
-
-    def get_graphviz_fragment(self, ctx: GraphContext) -> GraphFragment:
-        """Return a DOT node for this tool.
-
-        The node uses a box shape with a green fill.  Also registers the node
-        in the vis.js data via ``ctx.add_node()`` so that ``get_html()``
-        produces a matching interactive node with a Markdown tooltip.
-
-        Args:
-            ctx: Mutable context for unique ID allocation and vis.js data.
-
-        Returns:
-            ``GraphFragment`` with one node statement and the node's ID as
-            ``root_id``.
-        """
-        node_id = ctx.alloc_id(self.name)
-        first_line = self.description.split("\n")[0][:80]
-        stmt = _dot_node(
-            node_id,
-            label=f"[T] {self.name}",
-            tooltip=first_line,
-            shape="box",
-            style="rounded,filled",
-            fillcolor="honeydew",
-            color="darkgreen",
-        )
-        # Cytoscape: label = concrete class name (rule: "shape title = class name")
-        ctx.add_node(
-            node_id,
-            label=type(self).__name__,
-            description_md=self.get_markdown(),
-            node_class="tool",
-        )
-        return GraphFragment(dot_statements=[stmt], root_id=node_id)
 
     # ------------------------------------------------------------------
     # Diagnostics

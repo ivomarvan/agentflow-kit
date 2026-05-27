@@ -57,7 +57,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.describe.graph import Graph, Vertex
+    from src.agentflow.describable.graph import Graph, Vertex
 
 
 class Describable:
@@ -216,7 +216,7 @@ class Describable:
         Returns:
             ``Graph`` with a root ``Vertex`` and an empty edge list.
         """
-        from src.describe.graph import Graph  # lazy import — keeps module standalone
+        from src.agentflow.describable.graph import Graph  # lazy import — keeps module standalone
         root = self._build_vertex(type(self).__name__)
         return Graph(root=root)
 
@@ -226,7 +226,7 @@ class Describable:
         Returns:
             Multi-line DOT source string.
         """
-        from src.describe.graph_renderer import GraphRenderer
+        from src.agentflow.describable.graph_renderer import GraphRenderer
         return GraphRenderer.to_dot(self.get_graph())
 
     def get_graph_svg(self) -> str:
@@ -242,7 +242,7 @@ class Describable:
         Raises:
             ImportError: If the ``graphviz`` Python package is not installed.
         """
-        from src.describe.graph_renderer import GraphRenderer
+        from src.agentflow.describable.graph_renderer import GraphRenderer
         return GraphRenderer.to_svg(self.get_graph())
 
     def get_graph_interactive_svg(self) -> str:
@@ -259,7 +259,7 @@ class Describable:
         Raises:
             ImportError: If the ``graphviz`` Python package is not installed.
         """
-        from src.describe.graph_renderer import GraphRenderer
+        from src.agentflow.describable.graph_renderer import GraphRenderer
         return GraphRenderer.to_interactive_svg(self.get_graph())
 
     def get_graph_png(self, path: Path | None = None) -> Path:
@@ -274,14 +274,15 @@ class Describable:
         Raises:
             ImportError: If the ``graphviz`` Python package is not installed.
         """
-        from src.describe.graph_renderer import GraphRenderer
+        from src.agentflow.describable.graph_renderer import GraphRenderer
         return GraphRenderer.to_png(self.get_graph(), path=path)
 
-    def get_graph_html(self, title: str = "") -> str:
+    def get_graph_html(self, title: str = "", title_tooltip: str = "") -> str:
         """Return a standalone interactive HTML page for this object's graph.
 
         Args:
             title: Page title.  Defaults to ``self.name``.
+            title_tooltip: Markdown shown as tooltip when hovering the title.
 
         Returns:
             Complete self-contained HTML string with hover tooltips.
@@ -289,17 +290,22 @@ class Describable:
         Raises:
             ImportError: If the ``graphviz`` Python package is not installed.
         """
-        from src.describe.graph_renderer import GraphRenderer
-        return GraphRenderer.to_html(self.get_graph(), title=title or self.name)
+        from src.agentflow.describable.graph_renderer import GraphRenderer
+        return GraphRenderer.to_html(
+            self.get_graph(), title=title or self.name, title_tooltip=title_tooltip
+        )
 
-    def open_graph_browser(self, title: str = "") -> None:
+    def open_graph_browser(self, title: str = "", title_tooltip: str = "") -> None:
         """Render this object's graph as HTML and open it in the default browser.
 
         Args:
             title: Forwarded to ``get_graph_html()``.
+            title_tooltip: Forwarded to ``get_graph_html()``.
         """
-        from src.describe.graph_renderer import GraphRenderer
-        GraphRenderer.open_browser(self.get_graph(), title=title or self.name)
+        from src.agentflow.describable.graph_renderer import GraphRenderer
+        GraphRenderer.open_browser(
+            self.get_graph(), title=title or self.name, title_tooltip=title_tooltip
+        )
 
     # ------------------------------------------------------------------
     # Public — execution and CLI
@@ -316,24 +322,60 @@ class Describable:
         """
         return None
 
-    def run_argparse(self, default_command: str = "markdown") -> None:
+    def run_argparse(
+        self,
+        doc: str | None = None,
+        *,
+        name: str = "",
+        default_question: str | None = None,
+        default_command: str = "markdown",
+        title: str = "",
+        title_tooltip: str = "",
+    ) -> None:
         """Parse ``sys.argv`` and execute the requested output command.
 
         Built-in commands::
 
-            dict     [-o FILE]   Print / save JSON from get_description_dict().
-            markdown [-o FILE]   Print / save Markdown from get_description_markdown().
-            html     [-o FILE]   Print / save HTML from get_description_html().
-            run                  Call self.run() and print the result.
+            dict         [-o FILE]  Print / save JSON from get_description_dict().
+            markdown     [-o FILE]  Print / save Markdown from get_description_markdown().
+            html         [-o FILE]  Print / save HTML from get_description_html().
+            graph-dot    [-o FILE]  Graphviz DOT source.
+            graph-svg    [-o FILE]  Interactive SVG with hover tooltips.
+            graph-svg-raw[-o FILE]  Raw SVG for document embedding.
+            graph-html   [-o FILE]  Standalone interactive HTML page.
+            graph-png    [-o FILE]  PNG file via Graphviz.
+            graph-browser           Open graph diagram in the browser.
+            run          [QUESTION] Call self.run([question]) and print the result.
 
         When no command is given, ``default_command`` is used.  Pass
         ``default_command="run"`` from top-level runnable objects (e.g. ToolAgent).
 
+        When ``name`` is provided and differs from ``"__main__"``, the method
+        returns immediately — the script was imported, not executed directly.
+        Pass ``name=__name__`` to enforce this guard.
+
+        When ``default_question`` is provided, the ``run`` subcommand gains an
+        optional positional ``question`` argument that defaults to it.
+
         Args:
+            doc: Module docstring (``__doc__``) used as the CLI description.
+            name: Module name guard.  Pass ``__name__`` to run only when the
+                  script is the entry-point; omit or pass ``""`` to always run.
+            default_question: Default question for the ``run`` command.  When
+                              set, the ``run`` subcommand forwards it to
+                              ``self.run(question)``.
             default_command: Command used when none is provided on the CLI.
                              One of ``"dict"``, ``"markdown"``, ``"html"``, ``"run"``.
+            title: Title shown in the graph HTML header.  Defaults to
+                   ``self.name`` when empty.
+            title_tooltip: Markdown shown as a tooltip when hovering the title
+                           in the HTML/browser graph output.
         """
+        if name and name != "__main__":
+            return
+
         parser = argparse.ArgumentParser(
+            description=doc,
             formatter_class=argparse.RawDescriptionHelpFormatter,
             parents=[self._output_file_parser()],
         )
@@ -376,7 +418,16 @@ class Describable:
             "graph-browser",
             help="Open interactive graph diagram in the default browser.",
         )
-        subparsers.add_parser("run", help="Run this object (if supported).")
+        if default_question is not None:
+            p_run = subparsers.add_parser("run", help="Run this object with a question.")
+            p_run.add_argument(
+                "question",
+                nargs="?",
+                default=default_question,
+                help=f"Question to answer (default: {default_question!r}).",
+            )
+        else:
+            subparsers.add_parser("run", help="Run this object (if supported).")
 
         args = parser.parse_args()
         if args.command is None:
@@ -404,14 +455,18 @@ class Describable:
         elif args.command == "graph-svg-raw":
             _write(self.get_graph_svg())
         elif args.command == "graph-html":
-            _write(self.get_graph_html())
+            _write(self.get_graph_html(title=title, title_tooltip=title_tooltip))
         elif args.command == "graph-png":
             saved = self.get_graph_png(Path(out_file) if out_file else None)
             print(f"PNG saved: {saved}")
         elif args.command == "graph-browser":
-            self.open_graph_browser()
+            self.open_graph_browser(title=title, title_tooltip=title_tooltip)
         elif args.command == "run":
-            result = self.run()
+            if default_question is not None:
+                question = getattr(args, "question", default_question)
+                result = self.run(question)  # type: ignore[call-arg]
+            else:
+                result = self.run()
             if result is not None:
                 print(result)
 
@@ -433,7 +488,7 @@ class Describable:
             ``Vertex`` with description from ``get_description_item_dict()``
             and children built from public ``Describable`` attributes.
         """
-        from src.describe.graph import Vertex  # lazy import — keeps module standalone
+        from src.agentflow.describable.graph import Vertex  # lazy import — keeps module standalone
         children: list[Vertex] = []
         for key, value in vars(self).items():
             if key.startswith("_"):
