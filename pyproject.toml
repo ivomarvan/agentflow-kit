@@ -16,6 +16,9 @@ dependencies = [
     # Python wrapper for the graphviz system tool — used by Describable.get_svg/png/html/open_browser
     # System prerequisite: sudo apt install graphviz  (or: brew install graphviz)
     "graphviz>=0.20",
+    # Immutable dict for State containers in agentflow.statemachine; see brief §1.2
+    "frozendict>=2.4",
+    "python-dateutil>=2.9.0.post0",
 ]
 
 [project.optional-dependencies]
@@ -44,8 +47,11 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.mypy]
 python_version = "3.10"
 strict = true
+explicit_package_bases = true
 
 [tool.pytest.ini_options]
+# Git repo root on sys.path — absolute ``from src.*`` imports work without agr() in each test file.
+pythonpath = ["."]
 # Both directories are collected on every run.
 # src/agentflow/tests/ travels with the library if it is ever split into its own repo.
 testpaths = ["tests", "src/agentflow/tests"]
