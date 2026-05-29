@@ -23,11 +23,16 @@ class VertexResolver:
 
     def __init__(self) -> None:
         self._store: dict[type[StateVertex], StateVertex] = {}
+        # Name index for lookup_by_name(); first-registration-wins per class name.
+        self._name_index: dict[str, StateVertex] = {}
 
     def resolve(self, v: type[StateVertex] | StateVertex) -> StateVertex:
         """Return v if it is already an instance; otherwise auto-instantiate.
 
         If v is a StateVertex instance it is returned unchanged (identity).
+        Also registers the instance in the name index (first registration per
+        class name wins) so that lookup_by_name() can locate it later.
+
         If v is a StateVertex subclass, the resolver checks the internal cache:
         on first access it validates the constructor, creates an instance, and
         stores it; subsequent calls return the same cached instance.
@@ -43,6 +48,10 @@ class VertexResolver:
                 default values.
         """
         if isinstance(v, StateVertex):
+            # Maintain name index without changing return-value identity.
+            cls_name = type(v).__name__
+            if cls_name not in self._name_index:
+                self._name_index[cls_name] = v
             return v
 
         cls: type[StateVertex] = v
@@ -50,6 +59,7 @@ class VertexResolver:
             self._validate_constructor(cls)
             instance = cls()
             self._store[cls] = instance
+            self._name_index[cls.__name__] = instance
             logger.debug("Auto-instantiated: class=%s", cls.__name__)
 
         return self._store[cls]
@@ -84,4 +94,20 @@ class VertexResolver:
         brand-new instance instead of returning the previously cached one.
         """
         self._store.clear()
+        self._name_index.clear()
         logger.debug("VertexResolver cache cleared")
+
+    def lookup_by_name(self, name: str) -> StateVertex | None:
+        """Return the registered instance whose class __name__ matches, or None.
+
+        Searches the name index populated by resolve(). For graphs using instance-
+        based vertices, first-registration-wins when multiple instances share the
+        same class name — use unique subclasses for each node when resume() is needed.
+
+        Args:
+            name: The class __name__ to look up (e.g. 'Research', 'StdEnd').
+
+        Returns:
+            The registered StateVertex instance, or None if not found.
+        """
+        return self._name_index.get(name)
