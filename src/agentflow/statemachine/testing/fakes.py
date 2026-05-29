@@ -121,6 +121,32 @@ class FakeLlmConnector(LlmConnector):  # type: ignore[misc]
         content = self._queue.popleft()
         return ChatResponse(role="assistant", content=content, tool_calls=None, usage=None)
 
+    async def achat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float = 0.2,
+        model_override: str | None = None,
+    ) -> ChatResponse:
+        """Async version of chat() — delegates to the sync implementation.
+
+        Safe to call from async context because the fake performs no I/O.
+
+        Args:
+            messages: Ignored — fake connector does not call any LLM.
+            tools: Ignored.
+            temperature: Ignored.
+            model_override: Ignored.
+
+        Returns:
+            ChatResponse with the next queued string as content.
+
+        Raises:
+            RuntimeError: When the response queue is empty.
+        """
+        return self.chat(messages, tools=tools, temperature=temperature,
+                         model_override=model_override)
+
 
 def make_fake_context(**overrides: Any) -> Context:
     """Create a Context with FakeLlmConnector and sensible test defaults.

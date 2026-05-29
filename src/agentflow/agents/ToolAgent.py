@@ -145,6 +145,53 @@ class ToolAgent(Describable):
         logger.warning("max_steps=%d exceeded for agent=%s", self.max_steps, self.name)
         return "AGENT ERROR: exceeded max_steps"
 
+    async def arun(self, question: str) -> str:
+        """Async counterpart to run() — uses connector.achat() for native coroutines.
+
+        Identical logic to run() but awaits achat() instead of calling chat().
+        Prefer arun() when integrating ToolAgent inside an async StateVertex.
+
+        Args:
+            question: User question or instruction.
+
+        Returns:
+            Final text answer from the LLM, or an error string when
+            max_steps is exceeded.
+        """
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": question},
+        ]
+        schemas = self.tools.schemas()
+
+        for step in range(1, self.max_steps + 1):
+            logger.debug("step=%d messages=%d", step, len(messages))
+            response = await self.connector.achat(
+                messages, tools=schemas, temperature=self.temperature
+            )
+            messages.append(response.to_message_dict())
+
+            if not response.has_tool_calls:
+                logger.debug("step=%d final answer received", step)
+                return response.text.strip()
+
+            for tc in response.tool_calls:  # type: ignore[union-attr]
+                logger.info("tool_call name=%s args=%s", tc.name, tc.arguments[:80])
+                try:
+                    result = self.tools.execute(tc.name, tc.arguments)
+                except KeyError as exc:
+                    result = f"ERROR: {exc}"
+                logger.info("tool_result name=%s result=%s", tc.name, result[:80])
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "name": tc.name,
+                    "content": result,
+                })
+
+        logger.warning("max_steps=%d exceeded for agent=%s", self.max_steps, self.name)
+        return "AGENT ERROR: exceeded max_steps"
+
     # ------------------------------------------------------------------
     # Diagnostics
     # ------------------------------------------------------------------

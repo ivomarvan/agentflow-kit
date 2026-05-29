@@ -84,6 +84,30 @@ class LlmConnector(Describable):
         """
         ...
 
+    @abstractmethod
+    async def achat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float = 0.2,
+        model_override: str | None = None,
+    ) -> ChatResponse:
+        """Async counterpart to chat() — native coroutine, no thread pool needed.
+
+        Args:
+            messages: List of message dicts in OpenAI format.
+            tools: Optional list of OpenAI-format tool definitions.
+            temperature: Sampling temperature.
+            model_override: Per-call model name override.
+
+        Returns:
+            ChatResponse with role, content, tool_calls, and usage.
+
+        Raises:
+            Exception: Backend-specific error on network, auth, or quota failures.
+        """
+        ...
+
     # ------------------------------------------------------------------
     # Shared diagnostics — available on every connector
     # ------------------------------------------------------------------
