@@ -3,13 +3,14 @@
 RunnerHooks defines asynchronous callbacks invoked at key points of the BSP
 execution loop. NoOpHooks is the default (used when no hooks are provided).
 LoggingHooks provides structured DEBUG/INFO logs for development use.
-Full RecorderHooks with step history will be added in Epic E030.
+RecorderHooks captures full super-step history for post-run test assertions.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import logging
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from src.agentflow.statemachine.vertex import StateVertex
@@ -41,6 +42,19 @@ class RunnerHooks(Protocol):
             step: Super-step counter (1-based).
             state: Current state snapshot.
             active: List of vertices about to be executed.
+        """
+        ...
+
+    async def on_super_step_results(
+        self,
+        step: int,
+        node_results: list[tuple[StateVertex, Any, Any]],
+    ) -> None:
+        """Called after Compute phase, before Apply — provides raw per-vertex results.
+
+        Args:
+            step: Super-step counter (1-based).
+            node_results: List of (vertex, signal, patch) tuples — one per active vertex.
         """
         ...
 
@@ -98,6 +112,19 @@ class NoOpHooks:
             step: Super-step counter (1-based).
             state: Current state snapshot.
             active: List of vertices about to be executed.
+        """
+        return None
+
+    async def on_super_step_results(
+        self,
+        step: int,
+        node_results: list[tuple[StateVertex, Any, Any]],
+    ) -> None:
+        """Called after Compute phase with per-vertex results; no-op.
+
+        Args:
+            step: Super-step counter (1-based).
+            node_results: List of (vertex, signal, patch) tuples.
         """
         return None
 
@@ -165,6 +192,25 @@ class LoggingHooks:
         node_names = [type(n).__name__ for n in active]
         self._logger.debug("super_step_start: step=%d active=%s", step, node_names)
 
+    async def on_super_step_results(
+        self,
+        step: int,
+        node_results: list[tuple[StateVertex, Any, Any]],
+    ) -> None:
+        """Called after Compute phase; logs each vertex's signal at DEBUG level.
+
+        Args:
+            step: Super-step counter (1-based).
+            node_results: List of (vertex, signal, patch) tuples.
+        """
+        for node, signal, _ in node_results:
+            self._logger.debug(
+                "vertex_result: step=%d node=%s signal=%s",
+                step,
+                type(node).__name__,
+                signal,
+            )
+
     async def on_vertex_error(self, node: StateVertex, exc: Exception) -> None:
         """Called when a vertex raises an unexpected exception; logs at ERROR with traceback.
 
@@ -200,3 +246,121 @@ class LoggingHooks:
             state: Final state after the last super-step.
         """
         self._logger.info("run_end: final_state_type=%s", type(state).__name__)
+
+
+@dataclasses.dataclass
+class SuperStepRecord:
+    """Full record of one BSP super-step captured by RecorderHooks.
+
+    Fields are populated incrementally across three callbacks:
+    - on_super_step_start  → step, state_before, active_nodes
+    - on_super_step_results → results
+    - on_super_step_end    → state_after, next_active
+
+    Attributes:
+        step: Super-step counter (1-based).
+        state_before: State snapshot at the start of the super-step.
+        active_nodes: List of vertices executed in this super-step.
+        results: Per-vertex (vertex, signal, patch) tuples.
+        state_after: State after applying all patches; None until on_super_step_end.
+        next_active: Vertices scheduled for the next super-step.
+    """
+
+    step: int
+    state_before: object
+    active_nodes: list[StateVertex]
+    results: list[tuple[StateVertex, Any, Any]] = dataclasses.field(default_factory=list)
+    state_after: object | None = None
+    next_active: set[StateVertex] = dataclasses.field(default_factory=set)
+
+
+class RecorderHooks:
+    """Records full execution history for post-run assertions in tests.
+
+    Implements all RunnerHooks callbacks. Super-step callbacks build a
+    SuperStepRecord incrementally; on_super_step_end archives it to history.
+    on_run_start, on_run_end, and on_vertex_error are no-ops.
+
+    Attributes:
+        history: List of SuperStepRecord, one per completed super-step,
+                 in execution order.
+    """
+
+    def __init__(self) -> None:
+        self.history: list[SuperStepRecord] = []
+        self._pending: dict[int, SuperStepRecord] = {}
+
+    async def on_run_start(self, state: object) -> None:
+        """Called once before the BSP loop starts; no-op.
+
+        Args:
+            state: Initial state passed to runner.run().
+        """
+        return None
+
+    async def on_super_step_start(
+        self,
+        step: int,
+        state: object,
+        active: list[StateVertex],
+    ) -> None:
+        """Create a pending SuperStepRecord for this super-step.
+
+        Args:
+            step: Super-step counter (1-based).
+            state: Current state snapshot.
+            active: List of vertices about to be executed.
+        """
+        self._pending[step] = SuperStepRecord(
+            step=step,
+            state_before=state,
+            active_nodes=list(active),
+        )
+
+    async def on_super_step_results(
+        self,
+        step: int,
+        node_results: list[tuple[StateVertex, Any, Any]],
+    ) -> None:
+        """Store per-vertex results in the pending record for this super-step.
+
+        Args:
+            step: Super-step counter (1-based).
+            node_results: List of (vertex, signal, patch) tuples.
+        """
+        self._pending[step].results = node_results
+
+    async def on_super_step_end(
+        self,
+        step: int,
+        state: object,
+        next_active: set[StateVertex],
+    ) -> None:
+        """Finalize and archive the pending SuperStepRecord.
+
+        Args:
+            step: Super-step counter (same as on_super_step_start).
+            state: New state after applying patches.
+            next_active: Set of vertices scheduled for the next super-step.
+        """
+        record = self._pending.pop(step)
+        record.state_after = state
+        record.next_active = next_active
+        self.history.append(record)
+
+    async def on_run_end(self, state: object) -> None:
+        """Called once after the BSP loop completes; no-op.
+
+        Args:
+            state: Final state after the last super-step.
+        """
+        return None
+
+    async def on_vertex_error(self, node: StateVertex, exc: Exception) -> None:
+        """Called when a vertex raises an exception; no-op.
+
+        Args:
+            node: The vertex that raised the exception.
+            exc: The exception that was raised.
+        """
+        return None

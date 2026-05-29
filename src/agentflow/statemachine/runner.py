@@ -88,6 +88,12 @@ class StateGraphRunner:
 
             # --- PHASE 2: BARRIER already happened (gather synchronises) ---
 
+            node_results = [
+                (node, signal, patch)
+                for node, (signal, patch) in zip(active_nodes, results, strict=True)
+            ]
+            await self.hooks.on_super_step_results(step, node_results)
+
             # --- PHASE 3A: APPLY (per-field reducers) ---
             patches = [patch for _, patch in results]
             current_state = self.graph.apply_patches(current_state, patches)
@@ -135,7 +141,8 @@ class StateGraphRunner:
             Tuple (signal, patch). On exception: (StdSignal.fail, _EmptyPatch()).
         """
         try:
-            return await node.run(state, self.context)
+            result: tuple[Any, Any] = await node.run(state, self.context)
+            return result
         except Exception as exc:
             _logger.exception(
                 "Vertex failed: node=%s exc_type=%s",
