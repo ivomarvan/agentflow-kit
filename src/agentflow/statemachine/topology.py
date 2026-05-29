@@ -4,17 +4,20 @@ Defines the declarative graph structure: Transition edges, Parallel fan-out
 markers, and StateGraph which holds the topology and provides query methods
 used by StateGraphRunner during the BSP Apply&Route phase.
 
-In Epic E010 only manually instantiated vertices are supported.
-Auto-instantiation (VertexResolver singleton-per-class) will be added in E020.
+Starting from Epic E020, bare StateVertex subclasses (classes, not instances)
+are accepted everywhere and auto-instantiated via VertexResolver
+(singleton-per-class semantics).
 """
 
 from __future__ import annotations
 
 import dataclasses
 import logging
+from collections import deque
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+from src.agentflow.statemachine.resolver import VertexResolver
 from src.agentflow.statemachine.state import apply_patches
 from src.agentflow.statemachine.vertex import StateVertex
 
@@ -29,76 +32,161 @@ class Transition:
     """A directed edge in the state graph.
 
     Args:
-        from_node: Source vertex instance.
+        from_node: Source vertex — a StateVertex instance or subclass.
         signal: Routing signal emitted by from_node.run().
-        to_target: Target — a StateVertex instance or a Parallel fan-out.
+        to_target: Target — a StateVertex instance/class or a Parallel fan-out.
     """
 
-    from_node: StateVertex
+    from_node: type[StateVertex] | StateVertex
     signal: object  # EnumSignal at runtime — object keeps mypy strict happy
-    to_target: StateVertex | Parallel
+    to_target: type[StateVertex] | StateVertex | Parallel
 
 
 class Parallel:
     """Fan-out marker: activates all contained vertices in the next super-step.
 
     Args:
-        *vertices: StateVertex instances to run in parallel.
+        *vertices: StateVertex instances or subclasses to run in parallel.
     """
 
-    def __init__(self, *vertices: StateVertex) -> None:
-        self.vertices: tuple[StateVertex, ...] = vertices
+    def __init__(self, *vertices: type[StateVertex] | StateVertex) -> None:
+        self.vertices: tuple[type[StateVertex] | StateVertex, ...] = vertices
 
-    def expand(self) -> list[StateVertex]:
-        """Return all contained vertex instances as a flat list.
+    def expand(self, resolver: VertexResolver) -> list[StateVertex]:
+        """Expand and auto-instantiate all branches via resolver.
+
+        Args:
+            resolver: VertexResolver for singleton-per-class lookups.
 
         Returns:
-            List of StateVertex instances — each will be scheduled for the
-            next BSP super-step.
+            List of resolved StateVertex instances — each will be scheduled
+            for the next BSP super-step.
         """
-        return list(self.vertices)
+        return [resolver.resolve(v) for v in self.vertices]
 
 
 class StateGraph:
     """Immutable state graph holding topology and providing query methods.
 
-    Accepts only pre-instantiated StateVertex objects in transitions.
-    Passing a class (not an instance) raises TypeError with a helpful message
-    pointing to Epic E020 for auto-instantiation support.
+    Accepts both pre-instantiated StateVertex objects and bare StateVertex
+    subclasses in transitions and as the start node. Classes are
+    auto-instantiated via VertexResolver (singleton-per-class) at build time.
 
     Args:
-        start: Starting vertex instance.
+        start: Starting vertex — a StateVertex instance or subclass.
         transitions: List of Transition edges defining the graph.
 
     Raises:
-        TypeError: If any transition contains a class rather than an instance.
+        ValueError: If any class in start or transitions has required
+            constructor parameters without default values.
     """
 
     def __init__(
         self,
-        start: StateVertex,
+        start: type[StateVertex] | StateVertex,
         transitions: Sequence[Transition],
     ) -> None:
-        self._start = start
-        self._transitions = list(transitions)
-        self._validate_no_classes()
+        self._resolver = VertexResolver()
+        self._start = self._resolver.resolve(start)
+        self._transitions = self._normalize_transitions(transitions)
+        self._analyze_asymmetric_joins()
 
-    def _validate_no_classes(self) -> None:
-        """Guard against passing classes instead of instances — E020 note."""
+    def _analyze_asymmetric_joins(self) -> None:
+        """Warn about nodes with incoming edges from branches of different depth.
+
+        Builds an in-edge map and successor map from normalized transitions,
+        then runs a forward BFS from the start node to compute shortest-path
+        distances. For each node with more than one predecessor, emits a
+        WARNING if the predecessor distances differ — indicating that one fan-out
+        branch is longer than another and the join node may run multiple times
+        per cycle.
+
+        Cycles (e.g. Review → Research) are handled safely by a visited set in
+        the BFS, ensuring the traversal always terminates.
+        """
+        # Build in_edges and successors; expand Parallel targets to individual vertices.
+        in_edges: dict[StateVertex, list[StateVertex]] = {}
+        successors: dict[StateVertex, list[StateVertex]] = {}
+
         for t in self._transitions:
-            for field_name, node in [("from_node", t.from_node), ("to_target", t.to_target)]:
-                if isinstance(node, type):
-                    raise TypeError(
-                        f"Transition {field_name}={node.__name__!r} is a class, not an instance. "
-                        "Auto-instantiation will be added in Epic E020; "
-                        "pass an instance (e.g. MyVertex()) for now."
-                    )
+            from_node = self._resolver.resolve(t.from_node)
+            if isinstance(t.to_target, Parallel):
+                targets = t.to_target.expand(self._resolver)
+            else:
+                targets = [self._resolver.resolve(t.to_target)]
+
+            for target in targets:
+                successors.setdefault(from_node, []).append(target)
+                in_edges.setdefault(target, []).append(from_node)
+
+        # Only join nodes (multiple predecessors) can exhibit asymmetry.
+        join_nodes = [node for node, preds in in_edges.items() if len(preds) > 1]
+        if not join_nodes:
+            return
+
+        # Forward BFS from start; visited set prevents re-processing in cycles.
+        distances: dict[StateVertex, int] = {self._start: 0}
+        bfs_queue: deque[StateVertex] = deque([self._start])
+        visited: set[StateVertex] = {self._start}
+
+        while bfs_queue:
+            current = bfs_queue.popleft()
+            for neighbor in successors.get(current, []):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    distances[neighbor] = distances[current] + 1
+                    bfs_queue.append(neighbor)
+
+        # Warn whenever a join node's predecessors have unequal depths.
+        for node in join_nodes:
+            preds = in_edges[node]
+            depths = [distances.get(p, -1) for p in preds]
+            if len(set(depths)) > 1:
+                _logger.warning(
+                    "Node %r has %d incoming transitions from branches of different depths "
+                    "(%s). It may run multiple times per cycle. If barrier semantics are "
+                    "needed, ensure branch symmetry or use an explicit Join (not yet "
+                    "implemented).",
+                    node.__class__.__name__,
+                    len(preds),
+                    ", ".join(
+                        f"{p.__class__.__name__}=depth{d}"
+                        for p, d in zip(preds, depths, strict=False)
+                    ),
+                )
+
+    def _normalize_transitions(self, transitions: Sequence[Transition]) -> list[Transition]:
+        """Resolve all class references in transitions to singleton instances.
+
+        For each Transition:
+        - from_node: resolved via self._resolver (class or instance → instance).
+        - to_target: if Parallel, kept as-is (expanded lazily in expand_target);
+          otherwise resolved via self._resolver.
+
+        Args:
+            transitions: Raw transitions, possibly containing class references.
+
+        Returns:
+            New list of Transition objects with all non-Parallel references resolved.
+        """
+        normalized: list[Transition] = []
+        for t in transitions:
+            resolved_from = self._resolver.resolve(t.from_node)
+            resolved_to: StateVertex | Parallel
+            if isinstance(t.to_target, Parallel):
+                resolved_to = t.to_target
+            else:
+                resolved_to = self._resolver.resolve(t.to_target)
+            normalized.append(
+                Transition(from_node=resolved_from, signal=t.signal, to_target=resolved_to)
+            )
+        return normalized
 
     def resolve_start(self) -> StateVertex:
         """Return the starting vertex instance.
 
         Returns:
-            The start vertex passed to __init__.
+            The start vertex (auto-instantiated if a class was given).
         """
         return self._start
 
@@ -132,10 +220,10 @@ class StateGraph:
 
         Returns:
             For a StateVertex: ``[target]``.
-            For a Parallel: result of ``target.expand()``.
+            For a Parallel: result of ``target.expand(self._resolver)``.
         """
         if isinstance(target, Parallel):
-            return target.expand()
+            return target.expand(self._resolver)
         return [target]
 
     def apply_patches(self, state: object, patches: Sequence[object]) -> object:
