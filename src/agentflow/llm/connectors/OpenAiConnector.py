@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 from git_root_to_syspath import agr
 agr()
@@ -41,6 +41,9 @@ class OpenAiConnector(LlmConnector):
         super().__init__()
         self._config = config
         self._client = self._build_client(config)
+        # Lazy-initialised on first achat() call to avoid startup overhead
+        # when only the sync path is used.
+        self._async_client_cache: AsyncOpenAI | None = None
         logger.info(
             "OpenAiConnector ready: backend=%s model=%s",
             config.backend,
@@ -54,6 +57,27 @@ class OpenAiConnector(LlmConnector):
     @property
     def config(self) -> LlmConfig:
         return self._config
+
+    # ------------------------------------------------------------------
+    # Async client — lazy property (Pattern: Lazy Initialization)
+    # ------------------------------------------------------------------
+
+    @property
+    def _async_client(self) -> AsyncOpenAI:
+        """Return the shared ``AsyncOpenAI`` client, creating it on first access.
+
+        Returns:
+            Configured ``AsyncOpenAI`` client instance.
+        """
+        if self._async_client_cache is None:
+            kwargs: dict[str, Any] = {
+                "timeout": self._config.timeout,
+                "api_key": self._config.api_key or "local",
+            }
+            if self._config.base_url:
+                kwargs["base_url"] = self._config.base_url
+            self._async_client_cache = AsyncOpenAI(**kwargs)
+        return self._async_client_cache
 
     def chat(
         self,
@@ -97,6 +121,55 @@ class OpenAiConnector(LlmConnector):
 
         logger.debug(
             "LLM response: has_content=%s has_tool_calls=%s usage=%s",
+            bool(response.content), response.has_tool_calls, response.usage,
+        )
+        return response
+
+    async def achat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float = 0.2,
+        model_override: str | None = None,
+    ) -> ChatResponse:
+        """Async counterpart to chat() — uses AsyncOpenAI client natively.
+
+        Lazy-initialises ``AsyncOpenAI`` on first call; subsequent calls reuse
+        the same client instance.
+
+        Args:
+            messages: OpenAI-format message list.
+            tools: Optional list of OpenAI-format tool definitions.  When
+                   provided, ``tool_choice`` is set to ``"auto"``.
+            temperature: Sampling temperature.
+            model_override: Per-call model name override.
+
+        Returns:
+            ``ChatResponse`` with role, content, tool_calls, and usage.
+
+        Raises:
+            openai.OpenAIError: On API-level errors (network, auth, quota).
+        """
+        model = model_override or self._config.model
+        logger.debug(
+            "LLM async request: backend=%s model=%s messages=%d tools=%d",
+            self._config.backend, model, len(messages), len(tools) if tools else 0,
+        )
+
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = "auto"
+
+        resp = await self._async_client.chat.completions.create(**kwargs)
+        response = self._parse_response(resp.choices[0].message, resp.usage)
+
+        logger.debug(
+            "LLM async response: has_content=%s has_tool_calls=%s usage=%s",
             bool(response.content), response.has_tool_calls, response.usage,
         )
         return response

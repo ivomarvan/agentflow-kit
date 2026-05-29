@@ -2,7 +2,8 @@
 
 Context carries the LLM connector, tool registry, logger, and a unique run
 identifier. It also exposes run_sync() to bridge blocking sync code into the
-async BSP loop — used until Epic E040 converts LlmConnector to async-first.
+async BSP loop. For LLM calls, prefer ``await ctx.connector.achat(...)``
+directly — achat() is the preferred async path since Epic E040.
 """
 
 from __future__ import annotations
@@ -38,8 +39,8 @@ class Context:
         """Run a blocking sync callable from an async vertex without blocking the event loop.
 
         Wraps fn(*args, **kwargs) in asyncio.to_thread so the BSP event loop
-        remains unblocked while waiting for slow sync I/O (LLM calls, tools).
-        Remains useful after Epic E040 for user-supplied sync libraries.
+        remains unblocked while waiting for slow sync I/O. Useful for
+        user-supplied sync libraries that cannot be awaited directly.
 
         Args:
             fn: Synchronous callable to execute in a thread pool.

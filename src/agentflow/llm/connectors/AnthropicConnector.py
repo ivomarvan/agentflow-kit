@@ -56,10 +56,28 @@ class AnthropicConnector(LlmConnector):
         super().__init__()
         self._config = config
         self._client = anthropic.Anthropic(api_key=config.api_key)
+        # Lazy-initialised on first achat() call to avoid startup overhead
+        # when only the sync path is used.
+        self._async_client_cache: anthropic.AsyncAnthropic | None = None
         logger.info(
             "AnthropicConnector ready: model=%s",
             config.model,
         )
+
+    # ------------------------------------------------------------------
+    # Async client — lazy property (Pattern: Lazy Initialization)
+    # ------------------------------------------------------------------
+
+    @property
+    def _async_client(self) -> anthropic.AsyncAnthropic:
+        """Return the shared ``AsyncAnthropic`` client, creating it on first access.
+
+        Returns:
+            Configured ``AsyncAnthropic`` client instance.
+        """
+        if self._async_client_cache is None:
+            self._async_client_cache = anthropic.AsyncAnthropic(api_key=self._config.api_key)
+        return self._async_client_cache
 
     # ------------------------------------------------------------------
     # LlmConnector interface
@@ -133,6 +151,67 @@ class AnthropicConnector(LlmConnector):
 
         logger.debug(
             "Anthropic response: stop_reason=%s has_content=%s usage=%s",
+            resp.stop_reason, bool(response.content), response.usage,
+        )
+        return response
+
+    async def achat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float = 0.2,
+        model_override: str | None = None,
+        max_tokens: int = _MAX_TOKENS_DEFAULT,
+    ) -> ChatResponse:
+        """Async counterpart to chat() — uses AsyncAnthropic client natively.
+
+        Extracts ``system`` role messages and forwards them via the dedicated
+        ``system=`` parameter, matching the behaviour of the sync ``chat()``.
+
+        Args:
+            messages: OpenAI-format message list.  ``system`` role entries are
+                      extracted automatically.
+            tools: Tool definitions (not yet implemented for Anthropic — logged as warning).
+            temperature: Sampling temperature (0.0 – 1.0).
+            model_override: Per-call model name override.
+            max_tokens: Maximum tokens to generate; Anthropic requires an explicit value.
+
+        Returns:
+            ``ChatResponse`` with role, content, and usage.
+
+        Raises:
+            anthropic.APIError: On API-level errors (network, auth, quota).
+        """
+        model = model_override or self._config.model
+
+        if tools:
+            logger.warning(
+                "AnthropicConnector: tools parameter is not yet implemented "
+                "(%d tools ignored)", len(tools)
+            )
+
+        system_parts = [m["content"] for m in messages if m["role"] == "system"]
+        user_messages = [m for m in messages if m["role"] != "system"]
+
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "messages": user_messages,
+        }
+        if system_parts:
+            kwargs["system"] = "\n".join(system_parts)
+
+        logger.debug(
+            "Anthropic async request: model=%s messages=%d system=%s",
+            model, len(user_messages), bool(system_parts),
+        )
+
+        resp = await self._async_client.messages.create(**kwargs)
+        response = self._parse_response(resp)
+
+        logger.debug(
+            "Anthropic async response: stop_reason=%s has_content=%s usage=%s",
             resp.stop_reason, bool(response.content), response.usage,
         )
         return response
