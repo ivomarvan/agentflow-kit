@@ -157,7 +157,7 @@ class Review(StateVertex):
 
 
 def build_graph() -> StateGraph:
-    """Construct the §2.5 demo StateGraph with pre-instantiated vertices.
+    """Construct the §2.5 demo StateGraph using bare vertex classes.
 
     Topology:
         Research --ok--> Parallel(WriteIntro, WriteBody)
@@ -169,20 +169,14 @@ def build_graph() -> StateGraph:
     Returns:
         Fully wired StateGraph ready for StateGraphRunner.
     """
-    research = Research()
-    write_intro = WriteIntro()
-    write_body = WriteBody()
-    review = Review()
-    std_end = StdEnd()
-
     return StateGraph(
-        start=research,
+        start=Research,
         transitions=[
-            Transition(research, CustomSignal.ok, Parallel(write_intro, write_body)),
-            Transition(write_intro, StdSignal.done, review),
-            Transition(write_body, StdSignal.done, review),
-            Transition(review, CustomSignal.rejected, research),
-            Transition(review, CustomSignal.approved, std_end),
+            Transition(Research, CustomSignal.ok, Parallel(WriteIntro, WriteBody)),
+            Transition(WriteIntro, StdSignal.done, Review),
+            Transition(WriteBody, StdSignal.done, Review),
+            Transition(Review, CustomSignal.rejected, Research),
+            Transition(Review, CustomSignal.approved, StdEnd),
         ],
     )
 
