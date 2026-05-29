@@ -26,6 +26,7 @@ from src.agentflow.tools.Tool import ToolBase, param_desc, build_parameters_sche
 from src.agentflow.tools.ToolRegistry import ToolRegistry
 from src.agentflow.agents.ToolAgent import ToolAgent
 from src.agentflow.describable import Describable, Graph, Vertex, Edge, GraphRenderer
+from src.agentflow.statemachine import EnumSignal, StdSignal
 
 __all__ = [
     # Config & connectors
@@ -56,4 +57,7 @@ __all__ = [
     "Vertex",
     "Edge",
     "GraphRenderer",
+    # State machine (Epic E010)
+    "EnumSignal",
+    "StdSignal",
 ]
