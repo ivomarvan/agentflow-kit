@@ -127,8 +127,45 @@ print(json.dumps(agent.to_json(), indent=2))  # JSON: full config as dict
 
 | Future class | Purpose |
 |---|---|
-| `StateMachineAgent` | ReAct loop with explicit state transitions (graphviz export) |
 | `MultiModelAgent` | Orchestrator + specialist sub-agents |
+
+## agentflow.statemachine
+
+Declarative state-graph orchestration for AI agents using the Bulk Synchronous Parallel
+(BSP) model. Define frozen dataclass state, async vertex nodes, and signal-based
+transitions; the runner executes parallel super-steps with automatic patch merging.
+
+| Key Class | Purpose |
+|-----------|---------|
+| `StateGraph` | Declarative topology: start node, transitions, parallel fan-out |
+| `StateVertex` | Abstract base for graph nodes (`async run()` → signal + patch) |
+| `StateGraphRunner` | BSP execution loop with hooks, checkpointing, and sync entry point |
+
+```python
+from dataclasses import dataclass
+from src.agentflow.statemachine import (
+    Context, StateGraph, StateGraphRunner, StateVertex,
+    StdEnd, StdSignal, Transition,
+)
+from src.agentflow.statemachine.testing import FakeLlmConnector
+
+@dataclass(frozen=True)
+class S:
+    msg: str = ""
+
+@dataclass
+class P:
+    msg: str | None = None
+
+class Hello(StateVertex):
+    async def run(self, state, ctx):
+        return StdSignal.ok, P(msg="Hello!")
+
+graph = StateGraph(Hello, [Transition(Hello, StdSignal.ok, StdEnd)])
+StateGraphRunner(graph, Context(FakeLlmConnector())).run_sync(S())
+```
+
+See [statemachine/README.md](statemachine/README.md) for the full reference.
 
 ## Ollama model management
 

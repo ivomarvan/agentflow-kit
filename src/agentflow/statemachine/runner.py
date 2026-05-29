@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from typing import Any
 
+from src.agentflow.statemachine.checkpoint import CheckpointRecord, CheckpointStore
 from src.agentflow.statemachine.context import Context
 from src.agentflow.statemachine.hooks import NoOpHooks, RunnerHooks
 from src.agentflow.statemachine.signal import StdSignal
@@ -125,6 +127,165 @@ class StateGraphRunner:
             Final state after the last super-step.
         """
         return asyncio.run(self.run(initial_state))
+
+    async def run_until(
+        self,
+        initial_state: Any,
+        predicate: Callable[[int, Any, list[StateVertex]], bool],
+        *,
+        store: CheckpointStore,
+        run_id: str,
+    ) -> Any:
+        """Run BSP loop; save checkpoint after each step; stop when predicate is True.
+
+        Identical to run() except: after each super-step, saves a CheckpointRecord
+        and evaluates predicate(step, state, next_active_nodes). When predicate
+        returns True, the loop pauses and current state is returned.
+
+        Use runner.resume(store, run_id, from_step) to continue execution.
+
+        Args:
+            initial_state: Starting state.
+            predicate: (step, state, active_nodes) -> bool. True = pause here.
+            store: CheckpointStore used to persist checkpoints.
+            run_id: Unique run identifier for checkpoint keys.
+
+        Returns:
+            State at time of pause (or final state if predicate never True).
+        """
+        current_state = initial_state
+        active_nodes: list[StateVertex] = [self.graph.resolve_start()]
+        step = 0
+
+        await self.hooks.on_run_start(current_state)
+
+        while active_nodes:
+            end_nodes = [n for n in active_nodes if isinstance(n, End)]
+            for end in end_nodes:
+                await self._safe_run(end, current_state)
+            active_nodes = [n for n in active_nodes if not isinstance(n, End)]
+            if not active_nodes:
+                break
+
+            step += 1
+            await self.hooks.on_super_step_start(step, current_state, active_nodes)
+
+            results: list[tuple[Any, Any]] = list(
+                await asyncio.gather(
+                    *(self._safe_run(node, current_state) for node in active_nodes)
+                )
+            )
+
+            node_results = [
+                (node, signal, patch)
+                for node, (signal, patch) in zip(active_nodes, results, strict=True)
+            ]
+            await self.hooks.on_super_step_results(step, node_results)
+
+            patches = [patch for _, patch in results]
+            current_state = self.graph.apply_patches(current_state, patches)
+
+            next_set: set[StateVertex] = set()
+            for node, (signal, _) in zip(active_nodes, results, strict=True):
+                for target in self.graph.get_targets(node, signal):
+                    for vertex in self.graph.expand_target(target):
+                        next_set.add(vertex)
+
+            await self.hooks.on_super_step_end(step, current_state, next_set)
+            active_nodes = list(next_set)
+
+            await store.save(
+                CheckpointRecord(
+                    run_id=run_id,
+                    step=step,
+                    state=current_state,
+                    active_node_names=[type(n).__name__ for n in active_nodes],
+                )
+            )
+            if predicate(step, current_state, active_nodes):
+                await self.hooks.on_run_end(current_state)
+                return current_state
+
+        await self.hooks.on_run_end(current_state)
+        return current_state
+
+    async def resume(
+        self,
+        store: CheckpointStore,
+        run_id: str,
+        from_step: int,
+    ) -> Any:
+        """Resume execution from a checkpoint saved by run_until().
+
+        Loads the checkpoint at (run_id, from_step), resolves active_node_names
+        to StateVertex instances via graph._resolver.lookup_by_name(), then
+        continues the BSP loop from there.
+
+        Args:
+            store: Same CheckpointStore used in run_until().
+            run_id: Same run_id used in run_until().
+            from_step: The step to resume from (checkpoint must exist).
+
+        Returns:
+            Final state after the graph completes.
+
+        Raises:
+            KeyError: If the checkpoint for (run_id, from_step) does not exist.
+            ValueError: If a vertex name from the checkpoint cannot be resolved.
+        """
+        record = await store.load(run_id, from_step)
+        active_nodes: list[StateVertex] = []
+        for name in record.active_node_names:
+            vertex = self.graph._resolver.lookup_by_name(name)
+            if vertex is None:
+                raise ValueError(
+                    f"Cannot resolve checkpoint vertex {name!r} — "
+                    "ensure the same graph is used for both run_until and resume."
+                )
+            active_nodes.append(vertex)
+
+        current_state = record.state
+        step = from_step
+
+        await self.hooks.on_run_start(current_state)
+
+        while active_nodes:
+            end_nodes = [n for n in active_nodes if isinstance(n, End)]
+            for end in end_nodes:
+                await self._safe_run(end, current_state)
+            active_nodes = [n for n in active_nodes if not isinstance(n, End)]
+            if not active_nodes:
+                break
+
+            step += 1
+            await self.hooks.on_super_step_start(step, current_state, active_nodes)
+
+            results: list[tuple[Any, Any]] = list(
+                await asyncio.gather(
+                    *(self._safe_run(node, current_state) for node in active_nodes)
+                )
+            )
+
+            node_results = [
+                (node, signal, patch)
+                for node, (signal, patch) in zip(active_nodes, results, strict=True)
+            ]
+            await self.hooks.on_super_step_results(step, node_results)
+
+            patches = [patch for _, patch in results]
+            current_state = self.graph.apply_patches(current_state, patches)
+
+            next_set: set[StateVertex] = set()
+            for node, (signal, _) in zip(active_nodes, results, strict=True):
+                for target in self.graph.get_targets(node, signal):
+                    for vertex in self.graph.expand_target(target):
+                        next_set.add(vertex)
+
+            await self.hooks.on_super_step_end(step, current_state, next_set)
+            active_nodes = list(next_set)
+
+        await self.hooks.on_run_end(current_state)
+        return current_state
 
     async def _safe_run(self, node: StateVertex, state: Any) -> tuple[Any, Any]:
         """Execute a vertex with exception handling.
