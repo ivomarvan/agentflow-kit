@@ -4,6 +4,7 @@ RunnerHooks defines asynchronous callbacks invoked at key points of the BSP
 execution loop. NoOpHooks is the default (used when no hooks are provided).
 LoggingHooks provides structured DEBUG/INFO logs for development use.
 RecorderHooks captures full super-step history for post-run test assertions.
+LiveGraphHooks records active-node snapshots per super-step for visualization.
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ import logging
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from src.agentflow.describable.graph import Graph
+    from src.agentflow.statemachine.topology import StateGraph
     from src.agentflow.statemachine.vertex import StateVertex
 
 
@@ -364,3 +367,110 @@ class RecorderHooks:
             exc: The exception that was raised.
         """
         return None
+
+
+class LiveGraphHooks:
+    """RunnerHooks that records active-node snapshots per super-step for visualization.
+
+    Each entry in ``snapshots`` corresponds to one completed super-step and holds
+    the set of vertex class names that were active at the START of that step.
+
+    Use ``get_snapshot_graph(graph, step)`` to get a ``Graph`` with those
+    vertices' ``attributes["active"]`` set to ``True`` — suitable for
+    passing to ``GraphRenderer.to_dot()`` for colored visualization.
+
+    Attributes:
+        snapshots: list of (step_number, active_class_names) tuples.
+    """
+
+    def __init__(self) -> None:
+        self.snapshots: list[tuple[int, frozenset[str]]] = []
+        self._pending_step: int = 0
+        self._pending_active: frozenset[str] = frozenset()
+
+    async def on_run_start(self, state: object) -> None:
+        """Called once before the BSP loop starts; no-op.
+
+        Args:
+            state: Initial state passed to runner.run().
+        """
+        return None
+
+    async def on_run_end(self, state: object) -> None:
+        """Called once after the BSP loop completes; no-op.
+
+        Args:
+            state: Final state after the last super-step.
+        """
+        return None
+
+    async def on_super_step_start(
+        self, step: int, state: object, active: list[StateVertex]
+    ) -> None:
+        """Record which vertices are active at the start of this super-step.
+
+        Args:
+            step: Super-step counter (1-based).
+            state: Current state snapshot.
+            active: List of vertices about to be executed.
+        """
+        self._pending_step = step
+        self._pending_active = frozenset(type(n).__name__ for n in active)
+
+    async def on_super_step_results(
+        self,
+        step: int,
+        node_results: list[tuple[StateVertex, Any, Any]],
+    ) -> None:
+        """Called after Compute phase with per-vertex results; no-op.
+
+        Args:
+            step: Super-step counter (1-based).
+            node_results: List of (vertex, signal, patch) tuples.
+        """
+        return None
+
+    async def on_super_step_end(
+        self, step: int, state: object, next_active: set[StateVertex]
+    ) -> None:
+        """Archive the pending snapshot when the super-step completes.
+
+        Args:
+            step: Super-step counter (same as on_super_step_start).
+            state: New state after applying patches.
+            next_active: Set of vertices scheduled for the next super-step.
+        """
+        self.snapshots.append((self._pending_step, self._pending_active))
+
+    async def on_vertex_error(self, node: StateVertex, exc: Exception) -> None:
+        """Called when a vertex raises an exception; no-op.
+
+        Args:
+            node: The vertex that raised the exception.
+            exc: The exception that was raised.
+        """
+        return None
+
+    def get_snapshot_graph(
+        self, graph: StateGraph, step: int
+    ) -> Graph:
+        """Return graph.get_graph() with active nodes marked in attributes.
+
+        Args:
+            graph: The StateGraph that was run.
+            step: 1-based step index into self.snapshots.
+
+        Returns:
+            Deep-copied Graph with Vertex.attributes["active"] = True for
+            active nodes at the given step.
+        """
+        import copy
+
+        g = copy.deepcopy(graph.get_graph())
+        active_names: frozenset[str] = (
+            self.snapshots[step - 1][1] if 1 <= step <= len(self.snapshots) else frozenset()
+        )
+        for v in g.root.children:
+            if v.label in active_names:
+                v.attributes["active"] = True
+        return g

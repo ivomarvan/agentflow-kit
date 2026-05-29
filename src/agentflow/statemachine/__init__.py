@@ -1,13 +1,16 @@
 """agentflow.statemachine — declarative state graph orchestration for AI agents.
 
-Public API grows incrementally with each Task of Epic E010/E020/E030 (see roadmap.md).
-Current exports (after E030-T010): EnumSignal, StdSignal, apply_patches, UNSET, Context,
+Public API grows incrementally with each Task of Epic E010/E020/E030/E050/E060 (see roadmap.md).
+Current exports (after E060-T020): EnumSignal, StdSignal, apply_patches, UNSET, Context,
 StateVertex, End, StdEnd, RunnerHooks, NoOpHooks, LoggingHooks, RecorderHooks,
-SuperStepRecord, Transition, Parallel, StateGraph, StateGraphRunner, VertexResolver.
+SuperStepRecord, LiveGraphHooks, Transition, Parallel, StateGraph, StateGraphRunner,
+VertexResolver, ToolCallVertex, LlmTurnVertex, ToolAgentVertex.
 """
 
+from src.agentflow.statemachine.adapters import LlmTurnVertex, ToolAgentVertex, ToolCallVertex
 from src.agentflow.statemachine.context import Context
 from src.agentflow.statemachine.hooks import (
+    LiveGraphHooks,
     LoggingHooks,
     NoOpHooks,
     RecorderHooks,
@@ -25,6 +28,8 @@ __all__ = [
     "Context",
     "End",
     "EnumSignal",
+    "LiveGraphHooks",
+    "LlmTurnVertex",
     "LoggingHooks",
     "NoOpHooks",
     "Parallel",
@@ -36,6 +41,8 @@ __all__ = [
     "StdSignal",
     "StateVertex",
     "SuperStepRecord",
+    "ToolAgentVertex",
+    "ToolCallVertex",
     "Transition",
     "UNSET",
     "VertexResolver",
