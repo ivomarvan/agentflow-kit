@@ -15,13 +15,15 @@ import dataclasses
 import logging
 from collections import deque
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from src.agentflow.describable.describable import Describable
 from src.agentflow.statemachine.resolver import VertexResolver
 from src.agentflow.statemachine.state import apply_patches
-from src.agentflow.statemachine.vertex import StateVertex
+from src.agentflow.statemachine.vertex import End, StateVertex
 
 if TYPE_CHECKING:
+    from src.agentflow.describable.graph import Edge, Graph, Vertex
     from src.agentflow.statemachine.signal import EnumSignal  # noqa: F401
 
 _logger = logging.getLogger(__name__)
@@ -65,7 +67,7 @@ class Parallel:
         return [resolver.resolve(v) for v in self.vertices]
 
 
-class StateGraph:
+class StateGraph(Describable):  # type: ignore[misc]
     """Immutable state graph holding topology and providing query methods.
 
     Accepts both pre-instantiated StateVertex objects and bare StateVertex
@@ -86,6 +88,7 @@ class StateGraph:
         start: type[StateVertex] | StateVertex,
         transitions: Sequence[Transition],
     ) -> None:
+        super().__init__()
         self._resolver = VertexResolver()
         self._start = self._resolver.resolve(start)
         self._transitions = self._normalize_transitions(transitions)
@@ -225,6 +228,162 @@ class StateGraph:
         if isinstance(target, Parallel):
             return target.expand(self._resolver)
         return [target]
+
+    # ------------------------------------------------------------------
+    # Describable — topology graph override
+    # ------------------------------------------------------------------
+
+    def get_graph(self) -> Graph:
+        """Build a topology Graph: one Vertex per unique node, one Edge per transition.
+
+        Overrides ``Describable.get_graph()`` to produce a state-machine
+        topology graph rather than a composition tree.  The root vertex
+        summarises the whole graph; its children are the individual node
+        vertices.  Directed edges represent transitions labelled with
+        signal names.
+
+        Returns:
+            ``Graph`` whose root children = topology nodes, edges = transitions.
+        """
+        from src.agentflow.describable.graph import Graph, Vertex
+
+        nodes = self._collect_topology_nodes()
+        node_ids = self._build_node_ids(nodes)
+
+        vertices = [
+            self._make_node_vertex(n, node_ids, is_start=(n is self._start))
+            for n in nodes
+        ]
+        edges = self._make_topology_edges(node_ids)
+
+        root = Vertex(
+            id="StateGraph",
+            label="StateGraph",
+            description={"nodes": len(nodes), "transitions": len(self._transitions)},
+            children=vertices,
+        )
+        return Graph(root=root, edges=edges)
+
+    def _collect_topology_nodes(self) -> list[StateVertex]:
+        """Collect all unique StateVertex instances referenced by this graph.
+
+        Iterates over ``self._start`` and all normalized transitions,
+        expanding ``Parallel`` fan-outs via the resolver.  Deduplicates
+        by object identity (``id()``).
+
+        Returns:
+            Ordered list of unique ``StateVertex`` instances.
+        """
+        seen: set[int] = set()
+        nodes: list[StateVertex] = []
+
+        def _add(node: StateVertex) -> None:
+            if id(node) not in seen:
+                seen.add(id(node))
+                nodes.append(node)
+
+        _add(self._start)
+        for t in self._transitions:
+            _add(t.from_node)
+            if isinstance(t.to_target, Parallel):
+                for branch in t.to_target.expand(self._resolver):
+                    _add(branch)
+            else:
+                _add(t.to_target)
+
+        return nodes
+
+    def _build_node_ids(self, nodes: list[StateVertex]) -> dict[int, str]:
+        """Assign a unique string ID to every node, handling class-name collisions.
+
+        When all nodes have distinct class names, each ID equals the class
+        name.  When multiple instances share a class name, each gets an
+        indexed suffix: ``ClassName_0``, ``ClassName_1``, …
+
+        Args:
+            nodes: Ordered list of unique ``StateVertex`` instances.
+
+        Returns:
+            Dict mapping ``id(node)`` → unique string ID.
+        """
+        # Count how many nodes share each class name.
+        name_counts: dict[str, int] = {}
+        for node in nodes:
+            cls_name = type(node).__name__
+            name_counts[cls_name] = name_counts.get(cls_name, 0) + 1
+
+        name_index: dict[str, int] = {}
+        node_ids: dict[int, str] = {}
+        for node in nodes:
+            cls_name = type(node).__name__
+            if name_counts[cls_name] == 1:
+                node_ids[id(node)] = cls_name
+            else:
+                i = name_index.get(cls_name, 0)
+                node_ids[id(node)] = f"{cls_name}_{i}"
+                name_index[cls_name] = i + 1
+
+        return node_ids
+
+    def _make_node_vertex(
+        self,
+        node: StateVertex,
+        node_ids: dict[int, str],
+        *,
+        is_start: bool,
+    ) -> Vertex:
+        """Create a topology Vertex for a single node.
+
+        Args:
+            node: The ``StateVertex`` instance to represent.
+            node_ids: ID mapping from ``_build_node_ids()``.
+            is_start: Whether this node is the graph start node.
+
+        Returns:
+            ``Vertex`` with topology metadata in ``description`` and ``attributes``.
+        """
+        from src.agentflow.describable.graph import Vertex
+
+        cls_name = type(node).__name__
+        attributes: dict[str, Any] = {}
+        if is_start:
+            attributes["is_start"] = True
+        if isinstance(node, End):
+            attributes["is_end"] = True
+
+        return Vertex(
+            id=node_ids[id(node)],
+            label=cls_name,
+            description={"class": cls_name},
+            attributes=attributes,
+        )
+
+    def _make_topology_edges(self, node_ids: dict[int, str]) -> list[Edge]:
+        """Build the list of directed edges from normalized transitions.
+
+        Each transition produces one Edge, except for ``Parallel`` targets
+        which fan out to one Edge per branch.
+
+        Args:
+            node_ids: ID mapping from ``_build_node_ids()``.
+
+        Returns:
+            List of ``Edge`` objects for ``Graph.edges``.
+        """
+        from src.agentflow.describable.graph import Edge
+
+        edges: list[Edge] = []
+        for t in self._transitions:
+            from_id = node_ids[id(t.from_node)]
+            label = getattr(t.signal, "name", str(t.signal))
+
+            if isinstance(t.to_target, Parallel):
+                for branch in t.to_target.expand(self._resolver):
+                    edges.append(Edge(from_id=from_id, to_id=node_ids[id(branch)], label=label))
+            else:
+                edges.append(Edge(from_id=from_id, to_id=node_ids[id(t.to_target)], label=label))
+
+        return edges
 
     def apply_patches(self, state: object, patches: Sequence[object]) -> object:
         """Merge patches into a new state instance using per-field reducers.

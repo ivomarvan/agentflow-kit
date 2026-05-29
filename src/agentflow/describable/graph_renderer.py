@@ -269,14 +269,20 @@ class GraphRenderer:
         tooltip = GraphRenderer._vertex_to_dot_tooltip(v)
 
         if not v.children:
-            lines.append(
-                f'{pad}{safe} ['
+            node_attrs = (
                 f'label="{v.label}" '
                 f'tooltip="{tooltip}" '
                 f'shape=box style="rounded,filled" '
                 f'fillcolor={_LEAF_FILL} color={_LEAF_BORDER}'
-                f']'
             )
+            if v.attributes.get("active", False):
+                node_attrs = (
+                    f'label="{v.label}" '
+                    f'tooltip="{tooltip}" '
+                    f'shape=box style="rounded,filled" '
+                    f'fillcolor="#90EE90" color={_LEAF_BORDER}'
+                )
+            lines.append(f"{pad}{safe} [{node_attrs}]")
             descs[safe] = md
             return safe
 
