@@ -5,7 +5,7 @@ import pytest
 
 @pytest.mark.unit
 def test_brief_example_runs_to_completion() -> None:
-    """Import and run the demo script; assert expected final state.
+    """Instantiate BriefExampleApp and run the workflow; assert expected final state.
 
     Verifies the complete §2.5 graph cycle:
     - Graph terminates without raising any exception.
@@ -13,11 +13,19 @@ def test_brief_example_runs_to_completion() -> None:
     - iteration equals the expected approval threshold (2 rejections occurred).
     - The final message indicates approval (review accepted the content).
     """
+    import asyncio
     import importlib
+    from typing import cast
 
     mod = importlib.import_module("examples.quickstart.01_brief_example")
 
-    final_state = mod.run_demo()
+    app = mod.BriefExampleApp()
+    # Run run_workflow() directly to capture the final state via the graph runner.
+    from agentflow.statemachine import Context, StateGraphRunner
+
+    ctx = Context(connector=app.connector)
+    runner = StateGraphRunner(graph=app.graph, context=ctx)
+    final_state = cast(mod.DemoState, runner.run_sync(mod.DemoState()))
 
     assert len(final_state.messages) > 0, "No messages produced — graph did not run"
     assert final_state.iteration == mod._APPROVE_AFTER, (
@@ -35,10 +43,16 @@ def test_brief_example_message_count_matches_cycles() -> None:
     The graph runs for _APPROVE_AFTER rejected cycles plus one final approved cycle.
     """
     import importlib
+    from typing import cast
 
     mod = importlib.import_module("examples.quickstart.01_brief_example")
 
-    final_state = mod.run_demo()
+    app = mod.BriefExampleApp()
+    from agentflow.statemachine import Context, StateGraphRunner
+
+    ctx = Context(connector=app.connector)
+    runner = StateGraphRunner(graph=app.graph, context=ctx)
+    final_state = cast(mod.DemoState, runner.run_sync(mod.DemoState()))
 
     expected_cycles = mod._APPROVE_AFTER + 1
     expected_msgs = expected_cycles * 4
@@ -49,11 +63,10 @@ def test_brief_example_message_count_matches_cycles() -> None:
 
 
 @pytest.mark.unit
-def test_brief_example_build_graph_returns_state_graph() -> None:
-    """Ensure build_graph() constructs a StateGraph without error.
+def test_brief_example_app_graph_is_state_graph() -> None:
+    """Ensure BriefExampleApp.graph is a StateGraph instance constructed without error.
 
-    Edge case: the graph builder should not require a Context — it only
-    wires pre-instantiated vertices into a StateGraph.
+    Edge case: the graph should be fully wired in __init__ without requiring a Context.
     """
     import importlib
 
@@ -61,5 +74,5 @@ def test_brief_example_build_graph_returns_state_graph() -> None:
 
     mod = importlib.import_module("examples.quickstart.01_brief_example")
 
-    graph = mod.build_graph()
-    assert isinstance(graph, StateGraph)
+    app = mod.BriefExampleApp()
+    assert isinstance(app.graph, StateGraph)

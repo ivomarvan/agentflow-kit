@@ -34,24 +34,60 @@ Závislosti mezi Epics jsou explicitně uvedeny; v rámci závislostí lze běž
 
 ## Přehled — Phase 2: Veřejné publikování (E090+)
 
-| Ref  | Název                                              | Závisí na         | Složitost | Stav     | Priorita |
-|------|----------------------------------------------------|--------------------|-----------|----------|----------|
-| E090 | Příprava knihovny pro veřejné publikování          | E080               | medium    | planned  | 🔴 High  |
-| E091 | PostgreSQL/Redis checkpoint backends               | E070, E090         | medium    | planned  | 🟡 Med   |
-| E092 | LangChain ecosystem integration                   | E050, E090         | medium    | planned  | 🟡 Med   |
-| E093 | Streaming LLM tokenů                               | E040, E090         | high      | planned  | 🟠 Later |
-| E094 | LangGraph export / transpiler                      | E060, E090         | medium    | optional | 🟢 Nice  |
+| Ref  | Název                                              | Závisí na         | Složitost | Stav      | Priorita |
+|------|----------------------------------------------------|--------------------|-----------|-----------|----------|
+| E090 | Příprava knihovny pro veřejné publikování          | E080               | medium    | ✅ done   | 🔴 High  |
+| E091 | PostgreSQL/Redis checkpoint backends               | E070, E090         | medium    | ✅ done   | 🟡 Med   |
+| E095 | ExampleApp: unified CLI + composite visualization  | E060, E090         | medium    | ✅ done   | 🔴 High  |
+| E092 | LangChain ecosystem integration                   | E050, E090         | medium    | planned   | 🟡 Med   |
+| E093 | Streaming LLM tokenů                               | E040, E090         | high      | planned   | 🟠 Later |
+| E094 | LangGraph export / transpiler                      | E060, E090         | medium    | optional  | 🟢 Nice  |
+
+## Přehled — Phase 3: Universal GUI (E096+)
+
+| Ref  | Název                                              | Závisí na         | Složitost | Stav      | Priorita |
+|------|----------------------------------------------------|--------------------|-----------|-----------|----------|
+| E096 | AgentApp foundation: rename + EventBus + Pydantic  | E095               | medium    | planned   | 🔴 High  |
+| E097 | FastAPI backend + WebSocket + `gui` CLI subcommand | E096               | medium    | planned   | 🔴 High  |
+| E098 | Vue GUI: Chat + Log panel (MVP)                    | E097               | high      | planned   | 🔴 High  |
+| E099 | Vue GUI: Settings + Structure (kombinovaný panel)  | E097, E096         | high      | planned   | 🟡 Med   |
+| E100 | VoiceBot záložka                                   | E098               | medium    | planned   | 🟠 Later |
+| E101 | DisplayTool + HotelBookingApp příklad              | E096, E098         | medium    | planned   | 🟠 Later |
 
 ### Závislostní graf Phase 2
 
 ```
 E080 (done)
-  └── E090 (library prep — editable install, cleanup, README)
-        ├── E091 (PostgreSQL/Redis checkpoints)
+  └── E090 (library prep — editable install, cleanup, README) ✅
+        ├── E091 (PostgreSQL/Redis checkpoints) ✅
+        ├── E095 (ExampleApp unified CLI) ✅
         ├── E092 (LangChain integration)
         ├── E093 (streaming tokens)
         └── E094 (LangGraph export, optional)
 ```
+
+### Závislostní graf Phase 3
+
+```
+E095 (ExampleApp CLI) ✅
+  └── E096 (AgentApp + EventBus + Pydantic config)
+        └── E097 (FastAPI backend + WebSocket)
+              ├── E098 (Vue GUI: Chat MVP) ←── revize plánu po MVP
+              │     ├── E099 (Settings + Structure)
+              │     └── E100 (VoiceBot)
+              └── E101 (DisplayTool + HotelBookingApp)  — závisí na E096+E098
+```
+
+**Poznámka k GUI distribuci (E097+):**
+- `agentflow/gui/static/` (pre-built Vue SPA) je commitnuto do gitu (vzor: Jupyter, Streamlit)
+- Uživatel nepotřebuje Node.js pro použití GUI
+- Vývojáři GUI pracují s `cd gui && npm run dev` (Vite dev server + proxy na FastAPI)
+- Port: default `8765`, přepisovatelný přes `AGENTFLOW_GUI_PORT` env nebo `--port` CLI
+- Charakter: dev/demo nástroj (žádná autentizace, single-user) — explicitně zdokumentováno
+
+**Poznámka: GUI jako opt-in feature:**
+- `pip install agentflow[gui]` přidá FastAPI + uvicorn závislosti
+- Základní `agentflow` bez `[gui]` extras nezávisí na web frameworku
 
 **Pravidlo pro srovnávací tabulku:** Každý nový Epic musí v DoD zahrnovat aktualizaci
 srovnávací tabulky `agentflow vs LangGraph vs CrewAI` v `README.md`, pokud přidává

@@ -24,13 +24,11 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-
-from agentflow.describable.describable import Describable
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
@@ -100,9 +98,8 @@ _API_KEY_ENV_VARS: dict[str, list[str]] = {
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class LlmConfig(Describable):
-    """Immutable snapshot of the active LLM backend configuration.
+class LlmConfig(BaseModel):
+    """Snapshot of the active LLM backend configuration.
 
     Holds all parameters needed to build an OpenAI-compatible client:
     backend name, model, endpoint URL, credentials, timeout, and the
@@ -111,16 +108,23 @@ class LlmConfig(Describable):
     Prefer the ``from_env()`` factory over direct instantiation.
     """
 
-    backend: str
-    model: str
-    base_url: str | None
-    api_key: str | None
-    timeout: float
-    available_models: dict[str, list[str]] = field(default_factory=dict)
+    model_config = ConfigDict(frozen=False, arbitrary_types_allowed=True)
 
-    def __post_init__(self) -> None:
-        """Initialise Describable attributes after the dataclass fields are set."""
-        Describable.__init__(self, name=f"{self.backend}/{self.model}")
+    backend: str = Field(
+        description="Active LLM backend name (ollama/openai/gemini/deepseek/anthropic)."
+    )
+    model: str = Field(description="Model identifier passed to the backend API.")
+    base_url: str | None = Field(
+        default=None, description="Override base URL for the backend API endpoint."
+    )
+    api_key: str | None = Field(
+        default=None, description="API key for authenticated backends; None for ollama."
+    )
+    timeout: float = Field(default=120.0, description="Request timeout in seconds.")
+    available_models: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Per-backend lists of available model names from environment variables.",
+    )
 
     def _get_own_attributes(self) -> dict[str, Any]:
         """Expose only the key configuration fields, omitting API keys and full model lists."""

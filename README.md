@@ -17,6 +17,9 @@ is designed to be transparent and educational — no magic, all explicit.
 - **BSP execution model** — deterministic super-steps: Compute → Barrier → Apply & Route
 - **Immutable state** — frozen dataclasses with typed reducers, no accidental mutation
 - **Built-in visualization** — SVG/HTML/DOT graph rendering via `Describable`
+- **AgentApp base class** — `AgentApp` provides CLI, graph visualization, `sample_prompts`, and `get_config_schema()` / `get_config()` / `set_config()` for GUI integration
+- **Domain events** — `EventBus` + `AgentEvent` for vertex → GUI communication; subscribe custom handlers or inspect `bus.history`
+- **Pydantic config** — `LlmConfig` is a `pydantic.BaseModel`; `model_json_schema()` powers the GUI settings panel
 - **Checkpointing** — pluggable backends (Memory, JSON file, PostgreSQL, Redis)
 - **Pause & resume** — `run_until(predicate)` + `resume(store, run_id, step)` for human-in-the-loop
 - **LLM agnostic** — works with OpenAI, Anthropic, Ollama, Gemini, DeepSeek
@@ -68,6 +71,10 @@ final = StateGraphRunner(graph, Context(FakeLlmConnector())).run_sync(AppState(t
 print(final.text)  # HELLO
 ```
 
+Graph topology of the Hello World example:
+
+![Hello World graph](docs/examples/hello_world_graph.svg)
+
 ## Comparison with similar frameworks
 
 | Feature | **agentflow** | LangGraph | CrewAI |
@@ -90,13 +97,29 @@ LangGraph.
 
 ## Examples
 
-| Example | Description |
-|---------|-------------|
-| `examples/quickstart/01_brief_example.py` | Basic graph: research → parallel write → review |
-| `examples/quickstart/04_parallel_research_loop.py` | Parallel nodes + feedback loop |
-| `examples/quickstart/05_human_in_the_loop_demo.py` | Pause/resume with checkpointing |
-| `examples/patterns/02_tool_calling_demo.py` | Tool-calling agent with agentflow |
-| `examples/patterns/04_react_agent_statemachine.py` | ReAct agent using StateGraph |
+| Example | Description | LLM required |
+|---------|-------------|:---:|
+| `examples/quickstart/01_brief_example.py` | Basic graph: research → parallel write → review | no |
+| `examples/quickstart/02_tool_agent_demo.py` | Tool-calling agent wrapped as a graph vertex | yes |
+| `examples/quickstart/03_live_graph_demo.py` | Live graph visualization (saves DOT/HTML) | no |
+| `examples/quickstart/04_parallel_research_loop.py` | Parallel nodes + feedback loop | yes |
+| `examples/quickstart/05_human_in_the_loop_demo.py` | Pause/resume with checkpointing | no |
+| `examples/patterns/02_tool_calling_demo.py` | Tool-calling agent with agentflow | yes |
+| `examples/patterns/04_react_agent_statemachine.py` | ReAct agent using StateGraph | yes |
+
+### Running examples
+
+```bash
+# No LLM key needed — uses FakeLlmConnector
+uv run python examples/quickstart/01_brief_example.py
+
+# Requires .env with LLM_BACKEND + API key
+uv run python examples/quickstart/04_parallel_research_loop.py
+uv run python examples/patterns/04_react_agent_statemachine.py
+```
+
+Examples that require a real LLM read `LLM_BACKEND` and the corresponding API key from `.env`.
+See the [Configuration](#configuration) section below.
 
 ## Documentation
 

@@ -264,6 +264,28 @@ class StateGraph(Describable):  # type: ignore[misc]
         )
         return Graph(root=root, edges=edges)
 
+    def _build_vertex(self, vertex_id: str) -> Vertex:
+        """Expose topology nodes as children when StateGraph is embedded in a parent.
+
+        When a parent Describable (e.g. ExampleApp) calls _build_vertex() on this
+        StateGraph, the returned Vertex includes the topology nodes as children,
+        making them visible in the composite graph visualization.
+
+        Args:
+            vertex_id: Dot-path identifier from the parent, e.g. "MyApp.graph".
+
+        Returns:
+            Vertex whose children are the topology nodes (same as get_graph().root.children).
+        """
+        from agentflow.describable.graph import Vertex  # noqa: F811 — local import avoids circular
+        topology = self.get_graph()
+        return Vertex(
+            id=vertex_id,
+            label=type(self).__name__,
+            description=self.get_description_item_dict(),
+            children=list(topology.root.children),
+        )
+
     def _collect_topology_nodes(self) -> list[StateVertex]:
         """Collect all unique StateVertex instances referenced by this graph.
 
