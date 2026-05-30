@@ -17,7 +17,8 @@ Usage in an example script::
             self.graph = StateGraph(start=..., transitions=[...])
 
         async def run_workflow(self) -> str | None:
-            ctx = Context(connector=self.connector)
+            # Pass self.event_bus to Context so GUI can receive events
+            ctx = Context(connector=self.connector, event_bus=self.event_bus)
             runner = StateGraphRunner(self.graph, ctx)
             final = await runner.run(MyState())
             return str(final)
@@ -34,6 +35,7 @@ import asyncio
 from typing import Any
 
 from agentflow.describable.describable import Describable
+from agentflow.events import EventBus
 
 
 class AgentApp(Describable):
@@ -43,8 +45,20 @@ class AgentApp(Describable):
     Describable attributes in __init__ so the full composition tree is visible.
     The main workflow logic lives in run_workflow(), called by cli().
 
+    GUI integration: pass ``self.event_bus`` to ``Context`` in ``run_workflow()``
+    so that the GUI server can stream events to connected WebSocket clients::
+
+        ctx = Context(connector=self.connector, event_bus=self.event_bus)
+
     Pattern: Template Method (GoF) — cli() orchestrates, run_workflow() specialises.
     """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.event_bus: EventBus = EventBus()
+        """Shared EventBus passed to Context in run_workflow() for GUI streaming."""
+        self.current_prompt: str = ""
+        """Last prompt set via run_workflow_with_prompt(); readable inside run_workflow()."""
 
     async def run_workflow(self) -> str | None:
         """Execute the main application workflow.
@@ -71,6 +85,21 @@ class AgentApp(Describable):
             List of prompt strings.  Returns empty list by default.
         """
         return []
+
+    async def run_workflow_with_prompt(self, prompt: str) -> str | None:
+        """Set current_prompt then execute run_workflow().
+
+        Called by the GUI server so the prompt is available to subclasses
+        via ``self.current_prompt`` inside ``run_workflow()``.
+
+        Args:
+            prompt: User-supplied prompt string.
+
+        Returns:
+            The return value of ``run_workflow()``.
+        """
+        self.current_prompt = prompt
+        return await self.run_workflow()
 
     def run(self, *args: Any, **kwargs: Any) -> str | None:
         """Synchronously execute run_workflow(); called by Describable.run_argparse().
@@ -184,13 +213,18 @@ class AgentApp(Describable):
         )
 
     def cli(self, doc: str | None = None, *, name: str = "") -> None:
-        """Parse sys.argv and run or visualize this application.
+        """Parse sys.argv and run, visualize, or serve GUI for this application.
+
+        Intercepts the ``gui`` subcommand before delegating to
+        ``run_argparse()``; all other commands are handled by the parent.
 
         Default command when no arguments given: run (executes run_workflow).
 
         Available commands::
 
             run              Execute run_workflow() (default)
+            gui              Start local GUI server and open in browser
+                             [--port PORT] [--host HOST] [--no-browser]
             browser          Open topology graph in the default browser
             graph-browser    Same as browser
             graph-html       Print/save standalone interactive HTML graph
@@ -204,4 +238,38 @@ class AgentApp(Describable):
             name: Module name guard — pass __name__ to run only when the
                   script is the direct entry-point (not when imported).
         """
-        self.run_argparse(doc=doc, name=name, default_command="run")
+        import sys
+
+        if name and name != "__main__":
+            return
+
+        if len(sys.argv) > 1 and sys.argv[1] == "gui":
+            import argparse
+
+            parser = argparse.ArgumentParser(
+                description=doc or type(self).__name__,
+                prog=sys.argv[0],
+            )
+            parser.add_argument("command", help="gui")
+            parser.add_argument(
+                "--port",
+                type=int,
+                default=None,
+                help="Port (default: 8765, or AGENTFLOW_GUI_PORT env var)",
+            )
+            parser.add_argument("--host", default="127.0.0.1", help="Bind address")
+            parser.add_argument(
+                "--no-browser", action="store_true", help="Do not open the browser"
+            )
+            args = parser.parse_args()
+            try:
+                from agentflow.gui import serve
+            except ImportError:
+                print(
+                    "GUI not available. Install with: pip install agentflow[gui]",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            serve(self, port=args.port, host=args.host, open_browser=not args.no_browser)
+        else:
+            self.run_argparse(doc=doc, name=name, default_command="run")

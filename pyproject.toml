@@ -22,6 +22,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+gui = [
+    # FastAPI + uvicorn for the optional local GUI server (agentflow[gui])
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",  # [standard] includes websockets + httptools
+    "websockets>=12.0",
+]
 postgres = [
     # Async PostgreSQL driver for PostgresCheckpointStore
     "asyncpg>=0.29",
