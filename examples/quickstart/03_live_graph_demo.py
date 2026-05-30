@@ -5,20 +5,21 @@ using FakeVertex subclasses, runs it with LiveGraphHooks, and saves one DOT
 snapshot per super-step to nogit_data/graphs/step_N.dot.
 
 Run with:
-    python examples/quickstart/03_live_graph_demo.py
+    uv run python examples/quickstart/03_live_graph_demo.py              # run workflow
+    uv run python examples/quickstart/03_live_graph_demo.py -h           # help
+    uv run python examples/quickstart/03_live_graph_demo.py browser      # graph in browser
+    uv run python examples/quickstart/03_live_graph_demo.py graph-html   # save HTML graph
 """
 
+import operator
+from dataclasses import dataclass
+from enum import Enum, auto
 from pathlib import Path
+from typing import Annotated, Any
 
-
-
-import operator  # noqa: E402
-from dataclasses import dataclass  # noqa: E402
-from enum import Enum, auto  # noqa: E402
-from typing import Annotated, Any  # noqa: E402
-
-from agentflow.describable.graph_renderer import GraphRenderer  # noqa: E402
-from agentflow.statemachine import (  # noqa: E402
+from agentflow import AgentApp
+from agentflow.describable.graph_renderer import GraphRenderer
+from agentflow.statemachine import (
     Context,
     LiveGraphHooks,
     Parallel,
@@ -29,7 +30,10 @@ from agentflow.statemachine import (  # noqa: E402
     StdSignal,
     Transition,
 )
-from agentflow.statemachine.testing.fakes import FakeLlmConnector  # noqa: E402
+from agentflow.statemachine.testing.fakes import FakeLlmConnector
+
+# Project root resolved relative to this file (examples/quickstart/ → project root).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 @dataclass(frozen=True)
@@ -59,11 +63,6 @@ class DemoSignal(Enum):
 
     ok = auto()
     approved = auto()
-
-
-# ---------------------------------------------------------------------------
-# FakeVertex subclasses — one per node in the §2.5 topology
-# ---------------------------------------------------------------------------
 
 
 class Research(StateVertex):
@@ -130,52 +129,42 @@ class Review(StateVertex):
         return DemoSignal.approved, DemoPatch(messages=("Review: approved.",))
 
 
-def build_graph() -> StateGraph:
-    """Construct the §2.5 demo StateGraph.
+class LiveGraphDemoApp(AgentApp):
+    """Demonstrates LiveGraphHooks DOT snapshots with the §2.5 topology."""
 
-    Topology:
-        Research --ok--> Parallel(WriteIntro, WriteBody)
-        WriteIntro --done--> Review
-        WriteBody  --done--> Review
-        Review --approved--> StdEnd
+    def __init__(self) -> None:
+        super().__init__()
+        self.connector = FakeLlmConnector()
+        self.graph = StateGraph(
+            start=Research,
+            transitions=[
+                Transition(Research, DemoSignal.ok, Parallel(WriteIntro, WriteBody)),
+                Transition(WriteIntro, StdSignal.done, Review),
+                Transition(WriteBody, StdSignal.done, Review),
+                Transition(Review, DemoSignal.approved, StdEnd),
+            ],
+        )
 
-    Returns:
-        Fully wired StateGraph ready for StateGraphRunner.
-    """
-    return StateGraph(
-        start=Research,
-        transitions=[
-            Transition(Research, DemoSignal.ok, Parallel(WriteIntro, WriteBody)),
-            Transition(WriteIntro, StdSignal.done, Review),
-            Transition(WriteBody, StdSignal.done, Review),
-            Transition(Review, DemoSignal.approved, StdEnd),
-        ],
-    )
+    async def run_workflow(self) -> str | None:
+        """Run the demo graph and save DOT snapshots for each super-step."""
+        ctx = Context(connector=self.connector)
+        hooks = LiveGraphHooks()
+        runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
+        await runner.run(DemoState())
 
+        output_dir = _PROJECT_ROOT / "nogit_data" / "graphs"
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-def run_demo() -> None:
-    """Run the demo graph and save DOT snapshots for each super-step."""
-    connector = FakeLlmConnector()
-    ctx = Context(connector=connector)
-    hooks = LiveGraphHooks()
+        print(f"\n--- Live Graph Demo: {len(hooks.snapshots)} super-steps recorded ---")
+        for i, (step_num, active_names) in enumerate(hooks.snapshots, start=1):
+            snapshot = hooks.get_snapshot_graph(self.graph, i)
+            dot_src = GraphRenderer.to_dot(snapshot)
+            dot_path = output_dir / f"step_{i}.dot"
+            dot_path.write_text(dot_src, encoding="utf-8")
+            print(f"  Step {step_num}: active={sorted(active_names)} → saved {dot_path}")
 
-    graph = build_graph()
-    runner = StateGraphRunner(graph=graph, context=ctx, hooks=hooks)
-    runner.run_sync(DemoState())
-
-    output_dir = PROJECT_ROOT / "nogit_data" / "graphs"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"\n--- Live Graph Demo: {len(hooks.snapshots)} super-steps recorded ---")
-    for i, (step_num, active_names) in enumerate(hooks.snapshots, start=1):
-        snapshot = hooks.get_snapshot_graph(graph, i)
-        dot_src = GraphRenderer.to_dot(snapshot)
-        dot_path = output_dir / f"step_{i}.dot"
-        dot_path.write_text(dot_src, encoding="utf-8")
-        print(f"  Step {step_num}: active={sorted(active_names)} → saved {dot_path}")
-
-    print("\nDOT files saved to:", output_dir)
+        print("\nDOT files saved to:", output_dir)
 
 
 if __name__ == "__main__":
-    run_demo()
+    LiveGraphDemoApp().cli(__doc__, name=__name__)

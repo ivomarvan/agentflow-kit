@@ -205,7 +205,7 @@ class Describable:
         body = self._dict_to_html(self.get_description_dict())
         return self._wrap_html_page(body)
 
-    def get_graph(self) -> "Graph":
+    def get_graph(self) -> Graph:
         """Build a composition Graph rooted at this object.
 
         The base implementation creates vertices from introspection only — no
@@ -418,6 +418,10 @@ class Describable:
             "graph-browser",
             help="Open interactive graph diagram in the default browser.",
         )
+        subparsers.add_parser(
+            "browser",
+            help="Alias for graph-browser: open interactive graph diagram in the default browser.",
+        )
         if default_question is not None:
             p_run = subparsers.add_parser("run", help="Run this object with a question.")
             p_run.add_argument(
@@ -459,7 +463,7 @@ class Describable:
         elif args.command == "graph-png":
             saved = self.get_graph_png(Path(out_file) if out_file else None)
             print(f"PNG saved: {saved}")
-        elif args.command == "graph-browser":
+        elif args.command in ("graph-browser", "browser"):
             self.open_graph_browser(title=title, title_tooltip=title_tooltip)
         elif args.command == "run":
             if default_question is not None:
@@ -474,7 +478,7 @@ class Describable:
     # Private — graph building
     # ------------------------------------------------------------------
 
-    def _build_vertex(self, vertex_id: str) -> "Vertex":
+    def _build_vertex(self, vertex_id: str) -> Vertex:
         """Recursively build a Vertex for this object and all owned Describables.
 
         Traverses ``vars(self)`` to find public ``Describable`` attributes and

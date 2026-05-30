@@ -9,16 +9,19 @@ Demonstrates all major statemachine features in a single script:
   - Loop termination  : auto-approve after _MAX_REVISIONS Research iterations
 
 Run with:
-    python examples/quickstart/04_parallel_research_loop.py
+    uv run python examples/quickstart/04_parallel_research_loop.py              # run workflow
+    uv run python examples/quickstart/04_parallel_research_loop.py -h           # help
+    uv run python examples/quickstart/04_parallel_research_loop.py browser      # graph in browser
+    uv run python examples/quickstart/04_parallel_research_loop.py graph-html   # save HTML graph
 """
 
+import logging
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any, cast
 
-
-from dataclasses import dataclass  # noqa: E402
-from enum import Enum  # noqa: E402
-from typing import Any, cast  # noqa: E402
-
-from agentflow.statemachine import (  # noqa: E402
+from agentflow import AgentApp
+from agentflow.statemachine import (
     Context,
     Parallel,
     StateGraph,
@@ -28,8 +31,8 @@ from agentflow.statemachine import (  # noqa: E402
     StdSignal,
     Transition,
 )
-from agentflow.statemachine.hooks import LoggingHooks  # noqa: E402
-from agentflow.statemachine.testing import FakeLlmConnector  # noqa: E402
+from agentflow.statemachine.hooks import LoggingHooks
+from agentflow.statemachine.testing import FakeLlmConnector
 
 # Minimum number of Review cycles before auto-approval.
 _MAX_REVISIONS: int = 2
@@ -184,63 +187,49 @@ class Publish(StateVertex):
         return StdSignal.ok, ResearchPatch(final_report=report)
 
 
-def build_graph() -> StateGraph:
-    """Construct the parallel-research-with-loop StateGraph.
+class ParallelResearchLoopApp(AgentApp):
+    """Demonstrates parallel fan-out, fan-in join, and a review-revision loop."""
 
-    Topology::
+    def __init__(self) -> None:
+        super().__init__()
+        self.connector = FakeLlmConnector()
+        self.graph = StateGraph(
+            start=Research,
+            transitions=[
+                Transition(Research, StdSignal.ok, Parallel(WriteIntro, WriteBody)),
+                Transition(WriteIntro, StdSignal.done, Review),
+                Transition(WriteBody, StdSignal.done, Review),
+                Transition(Review, ReviewSignal.needs_revision, Research),
+                Transition(Review, ReviewSignal.approved, Publish),
+                Transition(Publish, StdSignal.ok, StdEnd),
+            ],
+        )
 
-        Research --ok--> Parallel(WriteIntro, WriteBody)
-        WriteIntro --done--> Review
-        WriteBody  --done--> Review        (fan-in: both arrive at Review)
-        Review --needs_revision--> Research  (cycle)
-        Review --approved--> Publish
-        Publish --ok--> StdEnd
+    @property
+    def sample_prompts(self) -> list[str]:
+        """Return example prompts for the GUI prompt selector."""
+        return [
+            "Research the impact of large language models on software development.",
+            "Write a report on the current state of autonomous agents.",
+            "Analyze the trade-offs between BSP and event-driven agent architectures.",
+        ]
 
-    Returns:
-        Fully wired StateGraph ready for StateGraphRunner.
-    """
-    return StateGraph(
-        start=Research,
-        transitions=[
-            Transition(Research, StdSignal.ok, Parallel(WriteIntro, WriteBody)),
-            Transition(WriteIntro, StdSignal.done, Review),
-            Transition(WriteBody, StdSignal.done, Review),
-            Transition(Review, ReviewSignal.needs_revision, Research),
-            Transition(Review, ReviewSignal.approved, Publish),
-            Transition(Publish, StdSignal.ok, StdEnd),
-        ],
-    )
+    async def run_workflow(self) -> str | None:
+        """Run the parallel research loop to completion and print the final state."""
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(levelname)s %(name)s — %(message)s",
+        )
 
+        ctx = Context(connector=self.connector)
+        hooks = LoggingHooks()
+        runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
+        final_state = cast(ResearchState, await runner.run(ResearchState()))
 
-def run_demo() -> ResearchState:
-    """Build the graph and run it synchronously to completion.
-
-    Uses FakeLlmConnector so no real LLM calls are made.
-
-    Returns:
-        Final ResearchState after StdEnd is reached; final_report is populated
-        and revision_count equals _MAX_REVISIONS.
-    """
-    connector = FakeLlmConnector()
-    ctx = Context(connector=connector)
-    hooks = LoggingHooks()
-
-    graph = build_graph()
-    runner = StateGraphRunner(graph=graph, context=ctx, hooks=hooks)
-
-    result = runner.run_sync(ResearchState())
-    return cast(ResearchState, result)
+        print(f"\nFinal revision_count: {final_state.revision_count}")
+        print("Done!")
+        return f"Report published: {final_state.final_report[:50]}..." if final_state.final_report else "Completed."
 
 
 if __name__ == "__main__":
-    import logging
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(name)s — %(message)s",
-    )
-
-    final_state = run_demo()
-
-    print(f"\nFinal revision_count: {final_state.revision_count}")
-    print("Done!")
+    ParallelResearchLoopApp().cli(__doc__, name=__name__)

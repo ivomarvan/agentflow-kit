@@ -12,26 +12,27 @@ Graph topology:
     LlmCallVertex --max_steps----> FinalAnswerEnd
 
 Run (requires a running LLM backend, e.g. Ollama):
-    cd <repo-root>
-    ollama pull qwen2.5:7b-instruct
-    uv run python -m src.examples.agent_patterns.my.04_react_agent_statemachine
+    uv run python examples/patterns/04_react_agent_statemachine.py              # run workflow
+    uv run python examples/patterns/04_react_agent_statemachine.py -h           # help
+    uv run python examples/patterns/04_react_agent_statemachine.py browser      # graph in browser
+    uv run python examples/patterns/04_react_agent_statemachine.py graph-html   # save HTML graph
 """
 
+import json
+import logging
+import operator
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import auto
+from typing import Annotated, Any, cast
 
+from dateutil import parser as dateutil_parser
 
-import json  # noqa: E402
-import operator  # noqa: E402
-from dataclasses import dataclass  # noqa: E402
-from datetime import datetime, timedelta  # noqa: E402
-from enum import auto  # noqa: E402
-from typing import Annotated, Any, cast  # noqa: E402
-
-from dateutil import parser as dateutil_parser  # noqa: E402
-
-from agentflow.llm.ChatResponse import ToolCallInfo  # noqa: E402
-from agentflow.llm.LlmConfig import LlmConfig  # noqa: E402
-from agentflow.llm.LlmConnector import LlmConnector  # noqa: E402
-from agentflow.statemachine import (  # noqa: E402
+from agentflow import AgentApp, ToolRegistry
+from agentflow.llm.ChatResponse import ToolCallInfo
+from agentflow.llm.LlmConfig import LlmConfig
+from agentflow.llm.LlmConnector import LlmConnector
+from agentflow.statemachine import (
     Context,
     End,
     EnumSignal,
@@ -41,8 +42,8 @@ from agentflow.statemachine import (  # noqa: E402
     StdSignal,
     Transition,
 )
-from agentflow.statemachine.hooks import LoggingHooks  # noqa: E402
-from agentflow.tools.Tool import ToolBase, param_desc  # noqa: E402
+from agentflow.statemachine.hooks import LoggingHooks
+from agentflow.tools.Tool import ToolBase, param_desc
 
 # ---------------------------------------------------------------------------
 # Tools — same implementations as in orig/04_react_agent_plain.py,
@@ -356,17 +357,6 @@ class FinalAnswerEnd(End):
         return StdSignal.done, ReactPatch()
 
 
-# ---------------------------------------------------------------------------
-# Graph builder
-# ---------------------------------------------------------------------------
-
-_TOOLS: list[ToolBase] = [
-    SearchPolicy(),
-    Calculator(),
-    GetCurrentDate(),
-    AddDaysToDate(),
-]
-
 _SYSTEM_PROMPT = (
     "You are a helpful company assistant. "
     "Break down each user question into elementary logical parts. "
@@ -377,82 +367,58 @@ _SYSTEM_PROMPT = (
 )
 
 
-def build_react_graph(max_steps: int = 7) -> StateGraph:
-    """Construct the ReAct StateGraph with pre-instantiated vertices.
+class ReactAgentApp(AgentApp):
+    """Demonstrates the ReAct loop (LLM + tools) as a BSP StateGraph."""
 
-    Topology (same loop as 04_react_agent_plain.py, expressed as a BSP graph):
-        LlmCallVertex --tool_call------> ToolExecutionVertex
-        ToolExecutionVertex --ok-------> LlmCallVertex   (cycle)
-        LlmCallVertex --final_answer --> FinalAnswerEnd
-        LlmCallVertex --max_steps------> FinalAnswerEnd
-
-    Args:
-        max_steps: Maximum number of LLM calls before forced termination.
-
-    Returns:
-        Fully wired StateGraph ready for StateGraphRunner.
-    """
-    llm_vertex = LlmCallVertex(tools=_TOOLS, max_steps=max_steps)
-    tool_exec = ToolExecutionVertex(tools=_TOOLS)
-    end = FinalAnswerEnd()
-
-    return StateGraph(
-        start=llm_vertex,
-        transitions=[
-            Transition(llm_vertex, ReactSignal.tool_call, tool_exec),
-            Transition(tool_exec, StdSignal.ok, llm_vertex),  # loop
-            Transition(llm_vertex, ReactSignal.final_answer, end),
-            Transition(llm_vertex, ReactSignal.max_steps, end),
-        ],
-    )
-
-
-def run_agent(question: str, max_steps: int = 7) -> str:
-    """Run the ReAct agent for a single question and return the final answer.
-
-    Builds a fresh graph, creates a context with the LLM connector from env,
-    sets up the initial state with system + user messages, and runs synchronously.
-
-    Args:
-        question: User question to answer.
-        max_steps: Maximum number of LLM turns before forced termination.
-
-    Returns:
-        Final answer string from the LLM, or an error message.
-    """
-    connector = LlmConnector.create(LlmConfig.from_env())
-    ctx = Context(connector=connector)
-    hooks = LoggingHooks()
-
-    initial_state = ReactState(
-        messages=(
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": question},
+    def __init__(self) -> None:
+        super().__init__()
+        self.connector = LlmConnector.create(LlmConfig.from_env())
+        self.registry = ToolRegistry(tools=[
+            SearchPolicy(),
+            Calculator(),
+            GetCurrentDate(),
+            AddDaysToDate(),
+        ])
+        llm_vertex = LlmCallVertex(tools=self.registry.tools, max_steps=7)
+        tool_exec = ToolExecutionVertex(tools=self.registry.tools)
+        end = FinalAnswerEnd()
+        self.graph = StateGraph(
+            start=llm_vertex,
+            transitions=[
+                Transition(llm_vertex, ReactSignal.tool_call, tool_exec),
+                Transition(tool_exec, StdSignal.ok, llm_vertex),  # loop
+                Transition(llm_vertex, ReactSignal.final_answer, end),
+                Transition(llm_vertex, ReactSignal.max_steps, end),
+            ],
         )
-    )
 
-    graph = build_react_graph(max_steps=max_steps)
-    runner = StateGraphRunner(graph=graph, context=ctx, hooks=hooks)
+    async def run_workflow(self) -> str | None:
+        """Run the ReAct agent for a demo question and print the final answer."""
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(levelname)s %(name)s — %(message)s",
+        )
 
-    final = cast(ReactState, runner.run_sync(initial_state))
-    return final.final_answer
+        question = (
+            "I haven't had any vacation yet. "
+            "If I take it all in three days from today, when will the vacation end?"
+        )
+        print(f"QUESTION: {question}")
+
+        ctx = Context(connector=self.connector)
+        hooks = LoggingHooks()
+        initial_state = ReactState(
+            messages=(
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": question},
+            )
+        )
+        runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
+        final = cast(ReactState, await runner.run(initial_state))
+
+        print("\n========== FINAL ANSWER ==========")
+        print(final.final_answer)
 
 
 if __name__ == "__main__":
-    import logging
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(name)s — %(message)s",
-    )
-
-    question = (
-        "I haven't had any vacation yet. "
-        "If I take it all in three days from today, when will the vacation end?"
-    )
-    print(f"QUESTION: {question}")
-
-    answer = run_agent(question)
-
-    print("\n========== FINAL ANSWER ==========")
-    print(answer)
+    ReactAgentApp().cli(__doc__, name=__name__)

@@ -15,7 +15,19 @@ Quick start::
 # when the library (or its tests) is loaded from any working directory.
 
 from agentflow.agents.ToolAgent import ToolAgent
+from agentflow.app import AgentApp
+from agentflow.config import ConfigParam
 from agentflow.describable import Describable, Edge, Graph, GraphRenderer, Vertex
+from agentflow.events import (
+    AgentEvent,
+    EventBus,
+    LogEvent,
+    LoggingEventHandler,
+    RunCompleteEvent,
+    RunErrorEvent,
+    StepEndEvent,
+    StepStartEvent,
+)
 from agentflow.llm.ChatResponse import ChatResponse, ToolCallFunction, ToolCallInfo, UsageInfo
 from agentflow.llm.connectors.AnthropicConnector import AnthropicConnector
 from agentflow.llm.connectors.OpenAiConnector import OpenAiConnector
@@ -49,6 +61,20 @@ __all__ = [
     "build_parameters_schema",
     # Agents
     "ToolAgent",
+    # Application base class
+    "AgentApp",
+    "ExampleApp",  # deprecated alias — use AgentApp
+    # Configuration introspection
+    "ConfigParam",
+    # Domain events
+    "AgentEvent",
+    "EventBus",
+    "LoggingEventHandler",
+    "StepStartEvent",
+    "StepEndEvent",
+    "LogEvent",
+    "RunCompleteEvent",
+    "RunErrorEvent",
     # Self-description interface
     "Describable",
     "Graph",
@@ -59,3 +85,6 @@ __all__ = [
     "EnumSignal",
     "StdSignal",
 ]
+
+# Backward-compatible alias — use AgentApp in new code
+ExampleApp = AgentApp

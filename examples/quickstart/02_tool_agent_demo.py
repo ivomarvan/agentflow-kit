@@ -9,16 +9,18 @@ Graph topology:
 FakeLlmConnector is used so no real API key is needed.
 
 Run with:
-    python examples/quickstart/02_tool_agent_demo.py
+    uv run python examples/quickstart/02_tool_agent_demo.py              # run workflow
+    uv run python examples/quickstart/02_tool_agent_demo.py -h           # help
+    uv run python examples/quickstart/02_tool_agent_demo.py browser      # graph in browser
+    uv run python examples/quickstart/02_tool_agent_demo.py graph-html   # save HTML graph
 """
 
+import dataclasses
+from typing import cast
 
-
-import dataclasses  # noqa: E402
-from typing import cast  # noqa: E402
-
-from agentflow.agents.ToolAgent import ToolAgent  # noqa: E402
-from agentflow.statemachine import (  # noqa: E402
+from agentflow import AgentApp
+from agentflow.agents.ToolAgent import ToolAgent
+from agentflow.statemachine import (
     Context,
     StateGraph,
     StateGraphRunner,
@@ -27,11 +29,7 @@ from agentflow.statemachine import (  # noqa: E402
     ToolAgentVertex,
     Transition,
 )
-from agentflow.statemachine.testing import FakeLlmConnector  # noqa: E402
-
-# ---------------------------------------------------------------------------
-# State and patch dataclasses
-# ---------------------------------------------------------------------------
+from agentflow.statemachine.testing import FakeLlmConnector
 
 
 @dataclasses.dataclass(frozen=True)
@@ -58,76 +56,43 @@ class DemoPatch:
     answer: str | None = None
 
 
-# ---------------------------------------------------------------------------
-# Graph construction
-# ---------------------------------------------------------------------------
+class ToolAgentDemoApp(AgentApp):
+    """Demonstrates wrapping a ToolAgent as a single StateGraph vertex."""
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.connector = FakeLlmConnector()
+        # Queue a plain-text final answer — no tool_calls, so arun() terminates immediately.
+        self.connector.queue_responses(["50"])
+        self.agent = ToolAgent(
+            connector=self.connector,
+            tools=[],
+            system_prompt="You are a helpful math assistant.",
+            name="demo_agent",
+        )
+        agent_vertex = ToolAgentVertex(
+            agent=self.agent,
+            question_from_state=lambda state: cast(DemoState, state).question,
+            answer_to_patch=lambda ans: DemoPatch(answer=ans),
+        )
+        self.graph = StateGraph(
+            start=agent_vertex,
+            transitions=[
+                Transition(agent_vertex, StdSignal.ok, StdEnd),
+            ],
+        )
 
-def build_graph(agent: ToolAgent) -> StateGraph:
-    """Construct a single-node graph wrapping the provided ToolAgent.
-
-    Args:
-        agent: Configured ToolAgent to wrap as a vertex.
-
-    Returns:
-        StateGraph with ToolAgentVertex as the sole processing node.
-    """
-    agent_vertex = ToolAgentVertex(
-        agent=agent,
-        question_from_state=lambda state: cast(DemoState, state).question,
-        answer_to_patch=lambda ans: DemoPatch(answer=ans),
-    )
-    return StateGraph(
-        start=agent_vertex,
-        transitions=[
-            Transition(agent_vertex, StdSignal.ok, StdEnd),
-        ],
-    )
-
-
-# ---------------------------------------------------------------------------
-# Demo entry-point
-# ---------------------------------------------------------------------------
-
-
-def run_demo() -> DemoState:
-    """Build the graph and run a single question through the ToolAgent.
-
-    Configures a FakeLlmConnector that immediately returns a final-answer
-    response (no tool calls), so the agent completes in one step.
-
-    Returns:
-        Final DemoState with the answer field populated.
-    """
-    connector = FakeLlmConnector()
-    # Queue a plain-text final answer — no tool_calls, so arun() terminates immediately.
-    connector.queue_responses(["50"])
-
-    agent = ToolAgent(
-        connector=connector,
-        tools=[],
-        system_prompt="You are a helpful math assistant.",
-        name="demo_agent",
-    )
-
-    graph = build_graph(agent)
-    # ctx.connector is not used by ToolAgentVertex; a fresh FakeLlmConnector suffices.
-    ctx = Context(connector=FakeLlmConnector())
-    runner = StateGraphRunner(graph=graph, context=ctx)
-
-    initial_state = DemoState(question="What is 42 + 8?")
-    result = runner.run_sync(initial_state)
-    return cast(DemoState, result)
+    async def run_workflow(self) -> str | None:
+        """Run the ToolAgent demo graph and print the question and answer."""
+        # ctx.connector is not used by ToolAgentVertex; a fresh FakeLlmConnector suffices.
+        ctx = Context(connector=FakeLlmConnector())
+        runner = StateGraphRunner(graph=self.graph, context=ctx)
+        initial_state = DemoState(question="What is 42 + 8?")
+        final_state = cast(DemoState, await runner.run(initial_state))
+        print(f"Question: {final_state.question}")
+        print(f"Answer: {final_state.answer}")
+        return None
 
 
 if __name__ == "__main__":
-    import logging
-
-    logging.basicConfig(
-        level=logging.WARNING,
-        format="%(levelname)s %(name)s — %(message)s",
-    )
-
-    final_state = run_demo()
-    print(f"Question: {final_state.question}")
-    print(f"Answer: {final_state.answer}")
+    ToolAgentDemoApp().cli(__doc__, name=__name__)

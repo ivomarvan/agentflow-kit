@@ -4,20 +4,23 @@ Demonstrates the full agentflow.statemachine MVP:
   Research → Parallel(WriteIntro, WriteBody) → Review → (loop | StdEnd)
 
 Run with:
-    python -m src.examples.statemachine_demos.01_brief_example
+    uv run python examples/quickstart/01_brief_example.py              # run workflow
+    uv run python examples/quickstart/01_brief_example.py -h           # help
+    uv run python examples/quickstart/01_brief_example.py browser      # graph in browser
+    uv run python examples/quickstart/01_brief_example.py graph-html   # save HTML graph
 
 The graph cycles until Review approves — after APPROVE_AFTER rejections.
 FakeLlmConnector is used so no real LLM calls are made.
 """
 
+import logging
+import operator
+from dataclasses import dataclass
+from enum import Enum, auto
+from typing import Annotated, Any, cast
 
-
-import operator  # noqa: E402
-from dataclasses import dataclass  # noqa: E402
-from enum import Enum, auto  # noqa: E402
-from typing import Annotated, Any, cast  # noqa: E402
-
-from agentflow.statemachine import (  # noqa: E402
+from agentflow import AgentApp
+from agentflow.statemachine import (
     Context,
     Parallel,
     StateGraph,
@@ -27,8 +30,8 @@ from agentflow.statemachine import (  # noqa: E402
     StdSignal,
     Transition,
 )
-from agentflow.statemachine.hooks import LoggingHooks  # noqa: E402
-from agentflow.statemachine.testing import FakeLlmConnector  # noqa: E402
+from agentflow.statemachine.hooks import LoggingHooks
+from agentflow.statemachine.testing import FakeLlmConnector
 
 # How many review rejections must occur before the graph terminates.
 _APPROVE_AFTER: int = 2
@@ -154,62 +157,51 @@ class Review(StateVertex):
         return CustomSignal.rejected, patch
 
 
-def build_graph() -> StateGraph:
-    """Construct the §2.5 demo StateGraph using bare vertex classes.
+class BriefExampleApp(AgentApp):
+    """Demonstrates the §2.5 Research→Parallel→Review loop with FakeLlmConnector."""
 
-    Topology:
-        Research --ok--> Parallel(WriteIntro, WriteBody)
-        WriteIntro --done--> Review
-        WriteBody  --done--> Review
-        Review --rejected--> Research   (cycle)
-        Review --approved--> StdEnd     (terminate)
+    def __init__(self) -> None:
+        super().__init__()
+        self.connector = FakeLlmConnector()
+        self.graph = StateGraph(
+            start=Research,
+            transitions=[
+                Transition(Research, CustomSignal.ok, Parallel(WriteIntro, WriteBody)),
+                Transition(WriteIntro, StdSignal.done, Review),
+                Transition(WriteBody, StdSignal.done, Review),
+                Transition(Review, CustomSignal.rejected, Research),
+                Transition(Review, CustomSignal.approved, StdEnd),
+            ],
+        )
 
-    Returns:
-        Fully wired StateGraph ready for StateGraphRunner.
-    """
-    return StateGraph(
-        start=Research,
-        transitions=[
-            Transition(Research, CustomSignal.ok, Parallel(WriteIntro, WriteBody)),
-            Transition(WriteIntro, StdSignal.done, Review),
-            Transition(WriteBody, StdSignal.done, Review),
-            Transition(Review, CustomSignal.rejected, Research),
-            Transition(Review, CustomSignal.approved, StdEnd),
-        ],
-    )
+    @property
+    def sample_prompts(self) -> list[str]:
+        """Return example prompts for the GUI prompt selector."""
+        return [
+            "Write a short essay about the benefits of AI.",
+            "Summarize the history of machine learning.",
+            "Explain the BSP execution model in 3 sentences.",
+        ]
 
+    async def run_workflow(self) -> str | None:
+        """Run the §2.5 demo graph to completion and print the summary."""
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(levelname)s %(name)s — %(message)s",
+        )
 
-def run_demo() -> DemoState:
-    """Build the §2.5 graph and run it to completion using FakeLlmConnector.
+        ctx = Context(connector=self.connector)
+        hooks = LoggingHooks()
+        runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
+        final_state = cast(DemoState, await runner.run(DemoState()))
 
-    Returns:
-        Final DemoState after the graph terminates in StdEnd.
-        Iteration will equal _APPROVE_AFTER; messages will contain all
-        vertex activity accumulated across all cycles.
-    """
-    connector = FakeLlmConnector()
-    ctx = Context(connector=connector)
-    hooks = LoggingHooks()
-
-    graph = build_graph()
-    runner = StateGraphRunner(graph=graph, context=ctx, hooks=hooks)
-
-    result = runner.run_sync(DemoState())
-    return cast(DemoState, result)
+        print("\n--- Demo Complete ---")
+        print(f"Total cycles:  {final_state.iteration + 1}")
+        print(f"Messages ({len(final_state.messages)}):")
+        for msg in final_state.messages:
+            print(f"  · {msg}")
+        return f"Completed {final_state.iteration + 1} cycles."
 
 
 if __name__ == "__main__":
-    import logging
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(name)s — %(message)s",
-    )
-
-    final_state = run_demo()
-
-    print("\n--- Demo Complete ---")
-    print(f"Total cycles:  {final_state.iteration + 1}")
-    print(f"Messages ({len(final_state.messages)}):")
-    for msg in final_state.messages:
-        print(f"  · {msg}")
+    BriefExampleApp().cli(__doc__, name=__name__)

@@ -100,7 +100,7 @@ identity comparison (`is`), so always return the same Enum member instances.
 | `StateVertex` | Abstract base for graph nodes | `src.agentflow.statemachine` |
 | `End` | Marker base for terminal nodes | `src.agentflow.statemachine` |
 | `StdEnd` | Default terminal node (no-op) | `src.agentflow.statemachine` |
-| `Context` | Shared services injected into every vertex | `src.agentflow.statemachine` |
+| `Context` | Shared services injected into every vertex (connector, tools, logger, `event_bus`) | `src.agentflow.statemachine` |
 | `Transition` | Directed edge: node + signal → target | `src.agentflow.statemachine` |
 | `Parallel` | Fan-out marker for parallel branches | `src.agentflow.statemachine` |
 | `StateGraph` | Declarative topology + query methods | `src.agentflow.statemachine` |
@@ -173,6 +173,53 @@ Wrap existing agentflow components as graph nodes without rewriting them:
 - `ToolCallVertex(tool, args_from_state, result_to_patch)` — one tool invocation.
 - `LlmTurnVertex(messages_from_state, response_to_patch)` — one LLM turn.
 - `ToolAgentVertex(agent, question_from_state, answer_to_patch)` — full ReAct loop.
+
+### Domain Events
+
+Every `Context` carries an `EventBus` that vertices can use to publish typed domain
+events. The bus notifies all registered handlers and maintains a full `history`.
+
+```python
+from agentflow import AgentEvent, EventBus, RunCompleteEvent, StepStartEvent
+
+# Emit an event from inside a vertex
+async def run(self, state, ctx):
+    await ctx.event_bus.emit(StepStartEvent(vertex="Research", step=1, run_id=ctx.run_id))
+    # ... do work ...
+    return StdSignal.ok, MyPatch()
+
+# Subscribe a custom handler
+class WebSocketHandler:
+    async def on_event(self, event: AgentEvent) -> None:
+        await websocket.send_text(event.model_dump_json())
+
+ctx.event_bus.subscribe(WebSocketHandler())
+
+# Inspect history after the run
+for event in ctx.event_bus.history:
+    print(event.event_type, event.timestamp)
+```
+
+Built-in framework events emitted automatically:
+
+| Event | `event_type` | Payload |
+|-------|-------------|---------|
+| `StepStartEvent` | `agentflow.step_start` | `vertex`, `step` |
+| `StepEndEvent` | `agentflow.step_end` | `vertex`, `step`, `signal` |
+| `LogEvent` | `agentflow.log` | `level`, `message`, `logger_name` |
+| `RunCompleteEvent` | `agentflow.run_complete` | `result` (optional string) |
+| `RunErrorEvent` | `agentflow.run_error` | `message` |
+
+Subclass `AgentEvent` to define application-specific events:
+
+```python
+class BookingEvent(AgentEvent):
+    event_type: str = "app.booking"
+    booking_id: str
+    amount: float
+
+await ctx.event_bus.emit(BookingEvent(booking_id="B-42", amount=299.0, run_id=ctx.run_id))
+```
 
 ### Observability Hooks
 

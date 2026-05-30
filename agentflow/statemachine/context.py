@@ -15,6 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from agentflow.events import EventBus
 from agentflow.llm.LlmConnector import LlmConnector
 from agentflow.tools.ToolRegistry import ToolRegistry
 
@@ -28,12 +29,14 @@ class Context:
         tools: Optional tool registry; None if the graph uses no tools.
         logger: Logger instance; defaults to 'statemachine' logger.
         run_id: Unique identifier for this graph run; auto-generated if omitted.
+        event_bus: Domain event bus for publishing step/log/result events.
     """
 
     connector: LlmConnector
     tools: ToolRegistry | None = None
     logger: logging.Logger = field(default_factory=lambda: logging.getLogger("statemachine"))
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    event_bus: EventBus = field(default_factory=EventBus)
 
     async def run_sync(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """Run a blocking sync callable from an async vertex without blocking the event loop.
