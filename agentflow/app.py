@@ -264,12 +264,16 @@ class AgentApp(Describable):
             args = parser.parse_args()
             try:
                 from agentflow.gui import serve
+                from agentflow.gui.build import discover_and_build
             except ImportError:
                 print(
                     "GUI not available. Install with: pip install agentflow[gui]",
                     file=sys.stderr,
                 )
                 sys.exit(1)
+            from pathlib import Path
+            app_script = Path(sys.argv[0]).resolve()
+            discover_and_build(app_script=app_script)
             serve(self, port=args.port, host=args.host, open_browser=not args.no_browser)
         else:
             self.run_argparse(doc=doc, name=name, default_command="run")
