@@ -14,9 +14,9 @@ import logging
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from src.agentflow.describable.graph import Graph
-    from src.agentflow.statemachine.topology import StateGraph
-    from src.agentflow.statemachine.vertex import StateVertex
+    from agentflow.describable.graph import Graph
+    from agentflow.statemachine.topology import StateGraph
+    from agentflow.statemachine.vertex import StateVertex
 
 
 @runtime_checkable

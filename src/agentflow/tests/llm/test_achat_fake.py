@@ -6,15 +6,11 @@ All tests are async and use pytest-asyncio (mark.asyncio per-test, no global mod
 from __future__ import annotations
 
 import pytest
-from git_root_to_syspath import agr
 
-agr()
-
-from src.agentflow.agents.ToolAgent import ToolAgent
-from src.agentflow.llm.ChatResponse import ChatResponse
-from src.agentflow.statemachine.testing.fakes import FakeLlmConnector
-from src.agentflow.tools.ToolRegistry import ToolRegistry
-
+from agentflow.agents.ToolAgent import ToolAgent
+from agentflow.llm.ChatResponse import ChatResponse
+from agentflow.statemachine.testing.fakes import FakeLlmConnector
+from agentflow.tools.ToolRegistry import ToolRegistry
 
 # ---------------------------------------------------------------------------
 # FakeLlmConnector.achat — basic behaviour

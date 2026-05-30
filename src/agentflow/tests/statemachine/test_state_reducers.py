@@ -9,7 +9,7 @@ from typing import Annotated
 
 import pytest
 
-from src.agentflow.statemachine import UNSET, apply_patches
+from agentflow.statemachine import UNSET, apply_patches
 
 
 @dataclass(frozen=True)

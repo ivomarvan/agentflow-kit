@@ -9,10 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from git_root_to_syspath import agr
-agr()
-
-from src.agentflow.tools.Tool import ToolBase, param_desc
+from agentflow.tools.Tool import ToolBase, param_desc
 
 logger = logging.getLogger(__name__)
 

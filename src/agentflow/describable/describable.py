@@ -57,7 +57,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.agentflow.describable.graph import Graph, Vertex
+    from agentflow.describable.graph import Graph, Vertex
 
 
 class Describable:
@@ -216,7 +216,7 @@ class Describable:
         Returns:
             ``Graph`` with a root ``Vertex`` and an empty edge list.
         """
-        from src.agentflow.describable.graph import Graph  # lazy import — keeps module standalone
+        from agentflow.describable.graph import Graph  # lazy import — keeps module standalone
         root = self._build_vertex(type(self).__name__)
         return Graph(root=root)
 
@@ -226,7 +226,7 @@ class Describable:
         Returns:
             Multi-line DOT source string.
         """
-        from src.agentflow.describable.graph_renderer import GraphRenderer
+        from agentflow.describable.graph_renderer import GraphRenderer
         return GraphRenderer.to_dot(self.get_graph())
 
     def get_graph_svg(self) -> str:
@@ -242,7 +242,7 @@ class Describable:
         Raises:
             ImportError: If the ``graphviz`` Python package is not installed.
         """
-        from src.agentflow.describable.graph_renderer import GraphRenderer
+        from agentflow.describable.graph_renderer import GraphRenderer
         return GraphRenderer.to_svg(self.get_graph())
 
     def get_graph_interactive_svg(self) -> str:
@@ -259,7 +259,7 @@ class Describable:
         Raises:
             ImportError: If the ``graphviz`` Python package is not installed.
         """
-        from src.agentflow.describable.graph_renderer import GraphRenderer
+        from agentflow.describable.graph_renderer import GraphRenderer
         return GraphRenderer.to_interactive_svg(self.get_graph())
 
     def get_graph_png(self, path: Path | None = None) -> Path:
@@ -274,7 +274,7 @@ class Describable:
         Raises:
             ImportError: If the ``graphviz`` Python package is not installed.
         """
-        from src.agentflow.describable.graph_renderer import GraphRenderer
+        from agentflow.describable.graph_renderer import GraphRenderer
         return GraphRenderer.to_png(self.get_graph(), path=path)
 
     def get_graph_html(self, title: str = "", title_tooltip: str = "") -> str:
@@ -290,7 +290,7 @@ class Describable:
         Raises:
             ImportError: If the ``graphviz`` Python package is not installed.
         """
-        from src.agentflow.describable.graph_renderer import GraphRenderer
+        from agentflow.describable.graph_renderer import GraphRenderer
         return GraphRenderer.to_html(
             self.get_graph(), title=title or self.name, title_tooltip=title_tooltip
         )
@@ -302,7 +302,7 @@ class Describable:
             title: Forwarded to ``get_graph_html()``.
             title_tooltip: Forwarded to ``get_graph_html()``.
         """
-        from src.agentflow.describable.graph_renderer import GraphRenderer
+        from agentflow.describable.graph_renderer import GraphRenderer
         GraphRenderer.open_browser(
             self.get_graph(), title=title or self.name, title_tooltip=title_tooltip
         )
@@ -488,7 +488,7 @@ class Describable:
             ``Vertex`` with description from ``get_description_item_dict()``
             and children built from public ``Describable`` attributes.
         """
-        from src.agentflow.describable.graph import Vertex  # lazy import — keeps module standalone
+        from agentflow.describable.graph import Vertex  # lazy import — keeps module standalone
         children: list[Vertex] = []
         for key, value in vars(self).items():
             if key.startswith("_"):

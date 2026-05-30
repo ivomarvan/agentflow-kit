@@ -14,7 +14,7 @@ Override with the ``OLLAMA_BASE_URL`` environment variable.
 
 Usage example::
 
-    from src.agentflow.llm.OllamaManager import OllamaManager
+    from agentflow.llm.OllamaManager import OllamaManager
 
     mgr = OllamaManager()
     if not mgr.is_running():
@@ -33,9 +33,6 @@ import subprocess
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-
-from git_root_to_syspath import agr
-agr()
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +244,7 @@ class OllamaManager:
 if __name__ == "__main__":
     import sys
 
-    from src.agentflow.cli import make_arg_parser, setup_logging
+    from agentflow.cli import make_arg_parser, setup_logging
 
     setup_logging()
     parser = make_arg_parser(__doc__)

@@ -24,12 +24,9 @@ import logging
 from abc import abstractmethod
 from typing import Any
 
-from git_root_to_syspath import agr  # locate project root and add it to sys.path
-agr()
-
-from src.agentflow.describable.describable import Describable
-from src.agentflow.llm.ChatResponse import ChatResponse
-from src.agentflow.llm.LlmConfig import LlmConfig, OPENAI_COMPATIBLE_BACKENDS
+from agentflow.describable.describable import Describable
+from agentflow.llm.ChatResponse import ChatResponse
+from agentflow.llm.LlmConfig import OPENAI_COMPATIBLE_BACKENDS, LlmConfig
 
 logger = logging.getLogger(__name__)
 
@@ -144,10 +141,10 @@ class LlmConnector(Describable):
             ValueError: If the backend in ``config`` is not supported.
         """
         if config.backend in OPENAI_COMPATIBLE_BACKENDS:
-            from src.agentflow.llm.connectors.OpenAiConnector import OpenAiConnector
+            from agentflow.llm.connectors.OpenAiConnector import OpenAiConnector
             return OpenAiConnector(config)
         if config.backend == "anthropic":
-            from src.agentflow.llm.connectors.AnthropicConnector import AnthropicConnector
+            from agentflow.llm.connectors.AnthropicConnector import AnthropicConnector
             return AnthropicConnector(config)
         raise ValueError(
             f"No connector implemented for backend={config.backend!r}. "

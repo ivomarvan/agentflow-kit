@@ -10,10 +10,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
-from src.agentflow.statemachine.signal import StdSignal
+from agentflow.statemachine.signal import StdSignal
 
 if TYPE_CHECKING:
-    from src.agentflow.statemachine.context import Context
+    from agentflow.statemachine.context import Context
 
 
 class StateVertex(ABC):

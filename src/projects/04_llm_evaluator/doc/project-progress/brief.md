@@ -3,7 +3,7 @@
 ## Kontext
 Vyvinuli jste nového AI voicebota pro call centrum, který řeší reklamace. Potřebujete automatizovaně měřit kvalitu komunikace, aniž byste museli číst tisíce transkriptů ručně. Využijete silnější LLM (GPT-4o, Claude 3.5+ Sonnet) jako "porotce" (Judge), který hodnotí výstupy vašeho bota podle definovaných kritérií.
 
-Tohle je přesně to, co Mama AI dělá - *"iterative improvements based on deep analysis of user traffic"*.
+Tohle je běžný workflow pro iterativní zlepšování konverzačních systémů — *"iterative improvements based on deep analysis of user traffic"*.
 
 ## Cíl
 Evaluační skript, který:
@@ -42,7 +42,7 @@ Byly bot odpovědi vhodné pro TTS / poslech?
 - **3:** občas dlouhé souvětí nebo technický jargon, ale srozumitelné.
 - **1:** dlouhé výčty, URL, číselné kódy, odrážky - nesrozumitelné když se přečtou nahlas.
 
-Tato metrika je **specifická pro Telmu** - jejich produkt je voicebot, takže "vhodnost pro hlas" je kritická.
+Tato metrika je **specifická pro voiceboty** — produkt je hlasový kanál, takže "vhodnost pro hlas" je kritická.
 
 ### 4. Bonus: Czech grammar quality
 Volitelná čtvrtá metrika - kvalita češtiny (správné skloňování, žádné kostrbaté překlady, žádné anglicizmy).

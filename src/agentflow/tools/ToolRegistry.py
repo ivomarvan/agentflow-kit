@@ -16,11 +16,8 @@ import json
 import logging
 from typing import Any
 
-from git_root_to_syspath import agr
-agr()
-
-from src.agentflow.describable.describable import Describable
-from src.agentflow.tools.Tool import ToolBase
+from agentflow.describable.describable import Describable
+from agentflow.tools.Tool import ToolBase
 
 logger = logging.getLogger(__name__)
 

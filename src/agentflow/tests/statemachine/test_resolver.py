@@ -5,10 +5,10 @@ from typing import Any
 
 import pytest
 
-from src.agentflow.statemachine.context import Context
-from src.agentflow.statemachine.resolver import VertexResolver
-from src.agentflow.statemachine.signal import StdSignal
-from src.agentflow.statemachine.vertex import StateVertex
+from agentflow.statemachine.context import Context
+from agentflow.statemachine.resolver import VertexResolver
+from agentflow.statemachine.signal import StdSignal
+from agentflow.statemachine.vertex import StateVertex
 
 
 class _SimpleVertex(StateVertex):

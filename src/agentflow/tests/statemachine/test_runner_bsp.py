@@ -11,11 +11,11 @@ from typing import Any
 
 import pytest
 
-from src.agentflow.statemachine.runner import StateGraphRunner
-from src.agentflow.statemachine.signal import StdSignal
-from src.agentflow.statemachine.testing import FakeVertex, make_fake_context
-from src.agentflow.statemachine.topology import Parallel, StateGraph, Transition
-from src.agentflow.statemachine.vertex import StateVertex, StdEnd, _EmptyPatch
+from agentflow.statemachine.runner import StateGraphRunner
+from agentflow.statemachine.signal import StdSignal
+from agentflow.statemachine.testing import FakeVertex, make_fake_context
+from agentflow.statemachine.topology import Parallel, StateGraph, Transition
+from agentflow.statemachine.vertex import StateVertex, StdEnd, _EmptyPatch
 
 
 @dataclasses.dataclass(frozen=True)

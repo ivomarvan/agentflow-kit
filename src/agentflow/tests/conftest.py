@@ -20,12 +20,9 @@ from __future__ import annotations
 import os
 
 import pytest
-from git_root_to_syspath import agr
 
-agr()
-
-from src.agentflow.llm.LlmConfig import LlmConfig
-from src.agentflow.llm.LlmConnector import LlmConnector
+from agentflow.llm.LlmConfig import LlmConfig
+from agentflow.llm.LlmConnector import LlmConnector
 
 # ---------------------------------------------------------------------------
 # Integration test model defaults

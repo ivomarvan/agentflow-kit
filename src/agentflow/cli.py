@@ -5,7 +5,7 @@ These helpers ensure a consistent logging format and argparse style across all o
 
 Usage in a script's ``if __name__ == "__main__"`` block::
 
-    from src.agentflow.cli import setup_logging, make_arg_parser
+    from agentflow.cli import setup_logging, make_arg_parser
 
     setup_logging()
     parser = make_arg_parser(__doc__)

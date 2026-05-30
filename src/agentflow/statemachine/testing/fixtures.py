@@ -1,7 +1,7 @@
 """pytest fixtures for agentflow.statemachine tests.
 
 Import in conftest.py or directly in test modules:
-    from src.agentflow.statemachine.testing.fixtures import (
+    from agentflow.statemachine.testing.fixtures import (
         fake_ctx,
         make_state_graph,
         recorded_runner,
@@ -15,11 +15,11 @@ from typing import Any
 
 import pytest
 
-from src.agentflow.statemachine.context import Context
-from src.agentflow.statemachine.hooks import RecorderHooks
-from src.agentflow.statemachine.runner import StateGraphRunner
-from src.agentflow.statemachine.testing.fakes import make_fake_context
-from src.agentflow.statemachine.topology import StateGraph, Transition
+from agentflow.statemachine.context import Context
+from agentflow.statemachine.hooks import RecorderHooks
+from agentflow.statemachine.runner import StateGraphRunner
+from agentflow.statemachine.testing.fakes import make_fake_context
+from agentflow.statemachine.topology import StateGraph, Transition
 
 
 @pytest.fixture  # type: ignore[untyped-decorator]

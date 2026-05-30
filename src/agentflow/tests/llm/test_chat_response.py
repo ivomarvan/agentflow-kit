@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from git_root_to_syspath import agr
 
-agr()
-
-from src.agentflow.llm.ChatResponse import ChatResponse, ToolCallFunction, ToolCallInfo, UsageInfo
-
+from agentflow.llm.ChatResponse import ChatResponse, ToolCallFunction, ToolCallInfo, UsageInfo
 
 # ---------------------------------------------------------------------------
 # UsageInfo

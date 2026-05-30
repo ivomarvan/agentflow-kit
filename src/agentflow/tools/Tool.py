@@ -7,7 +7,7 @@ human-readable parameter descriptions without touching the function signature.
 
 Typical usage::
 
-    from src.agentflow.tools.Tool import ToolBase, param_desc
+    from agentflow.tools.Tool import ToolBase, param_desc
 
     class GetWeather(ToolBase):
         \"\"\"Return current weather for a city.\"\"\"
@@ -33,10 +33,7 @@ from abc import abstractmethod
 from collections.abc import Callable
 from typing import Any, get_type_hints
 
-from git_root_to_syspath import agr
-agr()
-
-from src.agentflow.describable.describable import Describable
+from agentflow.describable.describable import Describable
 
 logger = logging.getLogger(__name__)
 

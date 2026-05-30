@@ -29,7 +29,7 @@ src/agentflow/
 ## Quick Start
 
 ```python
-from src.agentflow import LlmConfig, LlmConnector
+from agentflow import LlmConfig, LlmConnector
 
 config = LlmConfig.from_env()
 connector = LlmConnector.create(config)
@@ -61,7 +61,7 @@ print(response.usage)
 ## Writing Tools
 
 ```python
-from src.agentflow import ToolBase, ToolRegistry, param_desc
+from agentflow import ToolBase, ToolRegistry, param_desc
 
 class GetWeather(ToolBase):
     """Return current weather for a city."""  # <- sent to LLM as description
@@ -99,8 +99,8 @@ The JSON schema is derived entirely from:
 configuration is passed in the constructor.
 
 ```python
-from src.agentflow import LlmConfig, LlmConnector, ToolAgent
-from src.agentflow.tools.common_tools.Calculator import Calculator
+from agentflow import LlmConfig, LlmConnector, ToolAgent
+from agentflow.tools.common_tools.Calculator import Calculator
 
 agent = ToolAgent(
     connector=LlmConnector.create(LlmConfig.from_env()),
@@ -143,11 +143,11 @@ transitions; the runner executes parallel super-steps with automatic patch mergi
 
 ```python
 from dataclasses import dataclass
-from src.agentflow.statemachine import (
+from agentflow.statemachine import (
     Context, StateGraph, StateGraphRunner, StateVertex,
     StdEnd, StdSignal, Transition,
 )
-from src.agentflow.statemachine.testing import FakeLlmConnector
+from agentflow.statemachine.testing import FakeLlmConnector
 
 @dataclass(frozen=True)
 class S:
@@ -244,3 +244,23 @@ If this library is ever extracted as a standalone package:
 uv sync          # or: pip install -e ".[dev]"
 cp .env.example .env   # fill in API keys
 ```
+
+## Comparison with LangGraph and CrewAI
+
+| Feature | **agentflow** | LangGraph | CrewAI |
+|---------|--------------|-----------|--------|
+| Execution model | BSP (deterministic super-steps) | Event-driven DAG | Role-based multi-agent |
+| State management | Frozen dataclasses + typed reducers | TypedDict (mutable) | Pydantic models |
+| Parallel execution | `Parallel(A, B)` with barrier sync | `Send()` API | Agent delegation |
+| Graph visualization | Built-in SVG/HTML/DOT (`Describable`) | LangSmith (external service) | — |
+| Checkpointing | Protocol-based (memory/file/DB) | PostgresSaver, RedisSaver | — |
+| Pause / resume | `run_until()` + `resume()` | `interrupt_before/after` | — |
+| Type safety | `mypy --strict`, frozen state | Partial | Partial |
+| LLM agnostic | Yes (connector protocol) | Yes (LangChain) | Yes |
+| Streaming tokens | ❌ not yet | ✅ | ✅ |
+| Distributed execution | ❌ not yet | ❌ | ✅ (agents as services) |
+| Production maturity | 🔬 educational | ✅ production-ready | ✅ production-ready |
+
+agentflow prioritizes transparency and correctness over features. It is designed for learning
+and prototyping. For production workloads requiring streaming or distributed execution, consider
+LangGraph.

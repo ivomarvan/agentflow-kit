@@ -11,11 +11,11 @@ from typing import Any
 
 import pytest
 
-from src.agentflow.describable.describable import Describable
-from src.agentflow.describable.graph import Graph
-from src.agentflow.statemachine.context import Context
-from src.agentflow.statemachine.topology import Parallel, StateGraph, Transition
-from src.agentflow.statemachine.vertex import StateVertex
+from agentflow.describable.describable import Describable
+from agentflow.describable.graph import Graph
+from agentflow.statemachine.context import Context
+from agentflow.statemachine.topology import StateGraph, Transition
+from agentflow.statemachine.vertex import StateVertex
 
 
 class _A(StateVertex):

@@ -4,7 +4,7 @@ from __future__ import annotations
 import inspect
 import logging
 
-from src.agentflow.statemachine.vertex import StateVertex
+from agentflow.statemachine.vertex import StateVertex
 
 logger = logging.getLogger(__name__)
 

@@ -26,15 +26,13 @@ import logging
 import os
 from datetime import date as _date
 
-from git_root_to_syspath import agr
-agr()
 
-from src.agentflow.agents.ToolAgent import ToolAgent
-from src.agentflow.llm.LlmConfig import LlmConfig
-from src.agentflow.llm.LlmConnector import LlmConnector
-from src.agentflow.tools.Tool import ToolBase, param_desc
-from src.agentflow.tools.ToolRegistry import ToolRegistry
-from src.agentflow.tools.common_tools.Calculator import Calculator
+from agentflow.agents.ToolAgent import ToolAgent
+from agentflow.llm.LlmConfig import LlmConfig
+from agentflow.llm.LlmConnector import LlmConnector
+from agentflow.tools.Tool import ToolBase, param_desc
+from agentflow.tools.ToolRegistry import ToolRegistry
+from agentflow.tools.common_tools.Calculator import Calculator
 
 logger = logging.getLogger(__name__)
 

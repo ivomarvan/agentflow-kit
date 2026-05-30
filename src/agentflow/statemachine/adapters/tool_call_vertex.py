@@ -12,12 +12,12 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from src.agentflow.statemachine.signal import StdSignal
-from src.agentflow.statemachine.vertex import StateVertex
-from src.agentflow.tools.Tool import ToolBase
+from agentflow.statemachine.signal import StdSignal
+from agentflow.statemachine.vertex import StateVertex
+from agentflow.tools.Tool import ToolBase
 
 if TYPE_CHECKING:
-    from src.agentflow.statemachine.context import Context
+    from agentflow.statemachine.context import Context
 
 logger = logging.getLogger(__name__)
 

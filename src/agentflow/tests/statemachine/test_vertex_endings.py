@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 import pytest
 import pytest_asyncio  # noqa: F401 — ensures asyncio plugin is active
 
-from src.agentflow.statemachine.signal import StdSignal
-from src.agentflow.statemachine.vertex import End, StateVertex, StdEnd
+from agentflow.statemachine.signal import StdSignal
+from agentflow.statemachine.vertex import End, StateVertex, StdEnd
 
 
 @pytest.mark.unit

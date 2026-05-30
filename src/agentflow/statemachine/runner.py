@@ -17,12 +17,12 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from src.agentflow.statemachine.checkpoint import CheckpointRecord, CheckpointStore
-from src.agentflow.statemachine.context import Context
-from src.agentflow.statemachine.hooks import NoOpHooks, RunnerHooks
-from src.agentflow.statemachine.signal import StdSignal
-from src.agentflow.statemachine.topology import StateGraph
-from src.agentflow.statemachine.vertex import End, StateVertex
+from agentflow.statemachine.checkpoint import CheckpointRecord, CheckpointStore
+from agentflow.statemachine.context import Context
+from agentflow.statemachine.hooks import NoOpHooks, RunnerHooks
+from agentflow.statemachine.signal import StdSignal
+from agentflow.statemachine.topology import StateGraph
+from agentflow.statemachine.vertex import End, StateVertex
 
 _logger = logging.getLogger(__name__)
 
@@ -311,6 +311,6 @@ class StateGraphRunner:
                 type(exc).__name__,
             )
             await self.hooks.on_vertex_error(node, exc)
-            from src.agentflow.statemachine.vertex import _EmptyPatch  # noqa: PLC0415
+            from agentflow.statemachine.vertex import _EmptyPatch  # noqa: PLC0415
 
             return StdSignal.fail, _EmptyPatch()

@@ -12,16 +12,14 @@ Run with:
     python src/examples/statemachine_demos/05_human_in_the_loop_demo.py
 """
 
-from git_root_to_syspath import agr  # locate project root and add it to sys.path
 
-PROJECT_ROOT = agr()
 
 import asyncio  # noqa: E402
 import dataclasses  # noqa: E402
 from dataclasses import dataclass  # noqa: E402
 from typing import Any  # noqa: E402
 
-from src.agentflow.statemachine import (  # noqa: E402
+from agentflow.statemachine import (  # noqa: E402
     CheckpointRecord,
     InMemoryCheckpointStore,
     StateGraph,
@@ -31,8 +29,8 @@ from src.agentflow.statemachine import (  # noqa: E402
     StdSignal,
     Transition,
 )
-from src.agentflow.statemachine.context import Context  # noqa: E402
-from src.agentflow.statemachine.testing import make_fake_context  # noqa: E402
+from agentflow.statemachine.context import Context  # noqa: E402
+from agentflow.statemachine.testing import make_fake_context  # noqa: E402
 
 
 @dataclass(frozen=True)

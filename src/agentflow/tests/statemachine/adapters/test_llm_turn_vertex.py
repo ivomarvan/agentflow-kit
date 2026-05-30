@@ -12,11 +12,10 @@ from typing import Any
 
 import pytest
 
-from src.agentflow.llm.ChatResponse import ChatResponse
-from src.agentflow.statemachine.adapters.llm_turn_vertex import LlmTurnVertex
-from src.agentflow.statemachine.signal import StdSignal
-from src.agentflow.statemachine.testing.fakes import FakeLlmConnector, make_fake_context
-
+from agentflow.llm.ChatResponse import ChatResponse
+from agentflow.statemachine.adapters.llm_turn_vertex import LlmTurnVertex
+from agentflow.statemachine.signal import StdSignal
+from agentflow.statemachine.testing.fakes import FakeLlmConnector, make_fake_context
 
 # ---------------------------------------------------------------------------
 # Test state dataclass

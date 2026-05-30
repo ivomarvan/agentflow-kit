@@ -9,12 +9,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from src.agentflow.agents.ToolAgent import ToolAgent
-from src.agentflow.statemachine.signal import StdSignal
-from src.agentflow.statemachine.vertex import StateVertex
+from agentflow.agents.ToolAgent import ToolAgent
+from agentflow.statemachine.signal import StdSignal
+from agentflow.statemachine.vertex import StateVertex
 
 if TYPE_CHECKING:
-    from src.agentflow.statemachine.context import Context
+    from agentflow.statemachine.context import Context
 
 
 class ToolAgentVertex(StateVertex):  # type: ignore[misc]

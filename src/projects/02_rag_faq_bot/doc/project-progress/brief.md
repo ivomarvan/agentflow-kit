@@ -11,7 +11,7 @@ Python aplikace, která načte textový dokument, rozseká ho na chunky, spočí
 ### 1. Žádné halucinace
 Pokud je dotaz mimo dokument (např. "Jaký je plat ředitele?", "Jaké bude počasí?"), bot **musí** odpovědět: *"Omlouvám se, tuto informaci v zaměstnanecké příručce nevidím."*
 
-### 2. Voice constraints (NEW - Telma-relevantní!)
+### 2. Voice constraints
 Asistent má dva režimy a generuje odpovědi v různém stylu:
 - **Chat mód:** strukturovaná odpověď, odrážky, citace, max 5 vět.
 - **Voice mód (TTS):** **max 2 věty**, žádné odrážky, žádné URL, žádná čísla v závorkách, krátká souvětí. Odpověď musí být příjemná na poslech.
@@ -54,7 +54,7 @@ Jeden statický `index.html` s:
 ### Proč Web Speech API?
 - Funguje out-of-the-box v Chrome (`webkitSpeechRecognition`).
 - Žádný extra setup (Whisper, Coqui, IBM Watson).
-- Pro učení a prototyp ideální. Pro produkci by Telma použila vlastní ASR/TTS, ale tohle stačí pro pochopení voice constraints.
+- Pro učení a prototyp ideální. Pro produkci by se použilo dedikované ASR/TTS, ale tohle stačí pro pochopení voice constraints.
 
 ## Technické požadavky
 * Nepoužívejte LangChain a podobné frameworky - napište RAG "od nuly" s OpenAI/Anthropic SDK, abyste rozuměl, co se děje.
