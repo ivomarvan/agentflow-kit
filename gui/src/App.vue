@@ -4,21 +4,21 @@
       <h1>{{ appInfo?.name ?? 'agentflow GUI' }}</h1>
       <span class="app-description">{{ appInfo?.description ?? '' }}</span>
     </div>
-    <Tabs value="chat">
+    <Tabs v-model:value="activeTab">
       <TabList>
         <Tab value="chat">💬 Chat</Tab>
-        <Tab value="settings" disabled>⚙️ Settings</Tab>
-        <Tab value="structure" disabled>🔗 Structure</Tab>
+        <Tab value="settings">⚙️ Settings</Tab>
+        <Tab value="structure">🔗 Structure</Tab>
       </TabList>
       <TabPanels>
         <TabPanel value="chat">
           <ChatView />
         </TabPanel>
         <TabPanel value="settings">
-          <p class="coming-soon">Settings — coming in E099</p>
+          <SettingsView />
         </TabPanel>
         <TabPanel value="structure">
-          <p class="coming-soon">Structure — coming in E099</p>
+          <StructureView @nodeClick="onNodeClick" />
         </TabPanel>
       </TabPanels>
     </Tabs>
@@ -29,9 +29,12 @@
 import { ref, onMounted } from 'vue'
 import { Tabs, TabList, Tab, TabPanels, TabPanel } from 'primevue'
 import ChatView from '@/components/chat/ChatView.vue'
+import SettingsView from '@/components/settings/SettingsView.vue'
+import StructureView from '@/components/structure/StructureView.vue'
 import { api } from '@/services/api'
 
 const appInfo = ref<{ name: string; description: string } | null>(null)
+const activeTab = ref('chat')
 
 onMounted(async () => {
   try {
@@ -40,6 +43,11 @@ onMounted(async () => {
     // server not available yet
   }
 })
+
+/** Switch to Settings tab so the user can inspect parameters for the clicked node. */
+function onNodeClick(_nodeId: string) {
+  activeTab.value = 'settings'
+}
 </script>
 
 <style scoped>
@@ -62,10 +70,5 @@ onMounted(async () => {
 .app-description {
   color: var(--p-text-muted-color, #666);
   font-size: 0.9rem;
-}
-.coming-soon {
-  padding: 2rem;
-  text-align: center;
-  color: var(--p-text-muted-color, #999);
 }
 </style>
