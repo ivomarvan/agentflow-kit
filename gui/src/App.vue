@@ -7,12 +7,16 @@
     <Tabs v-model:value="activeTab">
       <TabList>
         <Tab value="chat">💬 Chat</Tab>
+        <Tab value="voicebot">🎤 VoiceBot</Tab>
         <Tab value="settings">⚙️ Settings</Tab>
         <Tab value="structure">🔗 Structure</Tab>
       </TabList>
       <TabPanels>
         <TabPanel value="chat">
           <ChatView />
+        </TabPanel>
+        <TabPanel value="voicebot">
+          <VoiceBotView />
         </TabPanel>
         <TabPanel value="settings">
           <SettingsView />
@@ -29,6 +33,7 @@
 import { ref, onMounted } from 'vue'
 import { Tabs, TabList, Tab, TabPanels, TabPanel } from 'primevue'
 import ChatView from '@/components/chat/ChatView.vue'
+import VoiceBotView from '@/components/voicebot/VoiceBotView.vue'
 import SettingsView from '@/components/settings/SettingsView.vue'
 import StructureView from '@/components/structure/StructureView.vue'
 import { api } from '@/services/api'
