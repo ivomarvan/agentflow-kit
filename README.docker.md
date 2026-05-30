@@ -50,10 +50,10 @@ uv pip install -e ".[postgres,redis-backend]"
 uv run pytest -m integration
 
 # PostgreSQL tests only
-uv run pytest src/agentflow/tests/statemachine/backends/test_postgres_checkpoint_store.py -m integration
+uv run pytest tests/agentflow/statemachine/backends/test_postgres_checkpoint_store.py -m integration
 
 # Redis tests only
-uv run pytest src/agentflow/tests/statemachine/backends/test_redis_checkpoint_store.py -m integration
+uv run pytest tests/agentflow/statemachine/backends/test_redis_checkpoint_store.py -m integration
 ```
 
 ## Connection strings

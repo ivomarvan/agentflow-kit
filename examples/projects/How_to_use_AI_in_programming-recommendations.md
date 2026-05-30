@@ -1,7 +1,7 @@
 # Jak používat AI při kódování těchto cvičných projektů
 
 ## Účel dokumentu
-Doporučení, do jaké míry využívat AI agenty (Cursor Composer, Codex, jiné) při řešení projektů v `src/projects/`. Cíl těchto projektů je **učení**, ne dodání produktu — proto je optimální poměr "AI vs. ruční práce" jiný než v běžných pracovních projektech.
+Doporučení, do jaké míry využívat AI agenty (Cursor Composer, Codex, jiné) při řešení projektů v `examples/projects/`. Cíl těchto projektů je **učení**, ne dodání produktu — proto je optimální poměr "AI vs. ruční práce" jiný než v běžných pracovních projektech.
 
 ## Klíčové napětí
 

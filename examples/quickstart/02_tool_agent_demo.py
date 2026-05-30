@@ -9,7 +9,7 @@ Graph topology:
 FakeLlmConnector is used so no real API key is needed.
 
 Run with:
-    python src/examples/statemachine_demos/02_tool_agent_demo.py
+    python examples/quickstart/02_tool_agent_demo.py
 """
 
 

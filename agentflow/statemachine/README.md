@@ -224,10 +224,10 @@ All demos use `FakeLlmConnector` — no API keys required.
 
 | Demo | Description | Command |
 |------|-------------|---------|
-| `01_brief_example.py` | Full §2.5 graph: parallel write + review loop | `python src/examples/statemachine_demos/01_brief_example.py` |
-| `02_tool_agent_demo.py` | Wrap existing `ToolAgent` as a single vertex | `python src/examples/statemachine_demos/02_tool_agent_demo.py` |
-| `03_live_graph_demo.py` | LiveGraphHooks → DOT snapshot per super-step | `python src/examples/statemachine_demos/03_live_graph_demo.py` |
-| `04_parallel_research_loop.py` | Parallel fan-out, fan-in, cycle, custom signals | `python src/examples/statemachine_demos/04_parallel_research_loop.py` |
+| `01_brief_example.py` | Full §2.5 graph: parallel write + review loop | `python examples/quickstart/01_brief_example.py` |
+| `02_tool_agent_demo.py` | Wrap existing `ToolAgent` as a single vertex | `python examples/quickstart/02_tool_agent_demo.py` |
+| `03_live_graph_demo.py` | LiveGraphHooks → DOT snapshot per super-step | `python examples/quickstart/03_live_graph_demo.py` |
+| `04_parallel_research_loop.py` | Parallel fan-out, fan-in, cycle, custom signals | `python examples/quickstart/04_parallel_research_loop.py` |
 
 See also [statemachine_tutorial.md](../doc/guides/statemachine_tutorial.md) for a
 step-by-step walkthrough from Hello World to a parallel research agent.

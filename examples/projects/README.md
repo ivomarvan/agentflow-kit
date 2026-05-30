@@ -123,7 +123,7 @@ Pro tyto projekty potřebujete LLM se solidním **tool callingem** a **structure
 
 ### Lokální modely (offline experimenty bez nákladů, přes Ollama)
 
-Vhodné pro `LLM_BACKEND=ollama` v `src/examples/agent_patterns/orig/llm_client.py`. Předpoklad: notebook bez dedikované GPU.
+Vhodné pro `LLM_BACKEND=ollama` v `examples/frameworks/llm_client.py`. Předpoklad: notebook bez dedikované GPU.
 
 | Model | RAM (Q4) | Tok/s na CPU | Tool calling | Pro koho |
 |---|---|---|---|---|

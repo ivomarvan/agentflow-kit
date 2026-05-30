@@ -9,10 +9,10 @@ Agent design pattern examples implemented twice:
 
 ```bash
 # agentflow version
-uv run python src/examples/agent_patterns/my/02_tool_calling_demo.py
+uv run python examples/patterns/02_tool_calling_demo.py
 
 # LangGraph version (requires langgraph extra)
-# uv run python src/examples/agent_patterns/orig/05a_langgraph_react_agent.py
+# uv run python examples/frameworks/05a_langgraph_react_agent.py
 ```
 
 ## Pattern overview

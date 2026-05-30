@@ -6,7 +6,7 @@ DeepSeek (OpenAI-compatible API) and Anthropic (native API).
 ## Directory layout
 
 ```
-src/agentflow/
+agentflow/
 ├── cli.py                          shared CLI helpers (logging, argparse)
 ├── __init__.py                     public re-exports — import from here
 ├── agents/
@@ -172,9 +172,9 @@ See [statemachine/README.md](statemachine/README.md) for the full reference.
 Models are stored in `~/.ollama/models/` — shared system-wide across all projects and venvs.
 
 ```bash
-python src/agentflow/llm/OllamaManager.py status
-python src/agentflow/llm/OllamaManager.py ensure qwen2.5:1.5b
-python src/agentflow/llm/OllamaManager.py list
+python agentflow/llm/OllamaManager.py status
+python agentflow/llm/OllamaManager.py ensure qwen2.5:1.5b
+python agentflow/llm/OllamaManager.py list
 ```
 
 ## Logging
@@ -191,28 +191,28 @@ logging.basicConfig(level=logging.DEBUG)
 Every module can be run directly for manual testing:
 
 ```bash
-python src/agentflow/llm/LlmConfig.py --help
-python src/agentflow/llm/LlmConfig.py show
-python src/agentflow/llm/LlmConfig.py backends
-python src/agentflow/llm/LlmConfig.py infer gpt-4o
+python agentflow/llm/LlmConfig.py --help
+python agentflow/llm/LlmConfig.py show
+python agentflow/llm/LlmConfig.py backends
+python agentflow/llm/LlmConfig.py infer gpt-4o
 
-python src/agentflow/llm/LlmConnector.py show
-python src/agentflow/llm/LlmConnector.py ping
+python agentflow/llm/LlmConnector.py show
+python agentflow/llm/LlmConnector.py ping
 
-python src/agentflow/llm/OllamaManager.py status
-python src/agentflow/llm/OllamaManager.py list
+python agentflow/llm/OllamaManager.py status
+python agentflow/llm/OllamaManager.py list
 ```
 
 ## Testing
 
-Tests live in `src/agentflow/tests/` and travel with the library when it is split
+Tests live in `agentflow/tests/` and travel with the library when it is split
 into its own repository.
 
 ### Unit tests — no network, no API key required
 
 ```bash
 pytest                            # from project root — runs unit tests only (default)
-pytest src/agentflow/tests/             # lib tests only
+pytest agentflow/tests/             # lib tests only
 pytest -m unit                    # explicit marker
 ```
 

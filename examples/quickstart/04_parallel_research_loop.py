@@ -9,7 +9,7 @@ Demonstrates all major statemachine features in a single script:
   - Loop termination  : auto-approve after _MAX_REVISIONS Research iterations
 
 Run with:
-    python src/examples/statemachine_demos/04_parallel_research_loop.py
+    python examples/quickstart/04_parallel_research_loop.py
 """
 
 

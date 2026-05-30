@@ -1,8 +1,5 @@
-"""Project-level pytest fixtures.
+"""Root pytest configuration.
 
-This file is intentionally minimal — it covers the whole ``tests/`` tree
-(project-level tests: examples, end-to-end scenarios, etc.).
-
-Library-specific fixtures live in ``src/lib/tests/conftest.py`` so that the
-library can be separated into its own repository without losing test coverage.
+Integration test fixtures (integration_config, integration_connector) are in
+tests/agentflow/conftest.py so they are co-located with the library tests.
 """

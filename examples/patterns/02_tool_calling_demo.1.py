@@ -21,11 +21,11 @@ Tools:
 Run (requires a running LLM backend, e.g. Ollama):
     cd <repo-root>
     ollama pull qwen3:8b
-    uv run python src/examples/agent_patterns/my/02_tool_calling_demo.1.py
+    uv run python examples/patterns/02_tool_calling_demo.1.py
 
 Switch backend:
-    LLM_BACKEND=openai uv run python src/examples/.../02_tool_calling_demo.1.py
-    LLM_MODEL=qwen3:8b uv run python src/examples/.../02_tool_calling_demo.1.py
+    LLM_BACKEND=openai uv run python examples/patterns/02_tool_calling_demo.1.py
+    LLM_MODEL=qwen3:8b uv run python examples/patterns/02_tool_calling_demo.1.py
 """
 
 

@@ -92,17 +92,17 @@ LangGraph.
 
 | Example | Description |
 |---------|-------------|
-| `src/examples/statemachine_demos/01_brief_example.py` | Basic graph: research → parallel write → review |
-| `src/examples/statemachine_demos/04_parallel_research_loop.py` | Parallel nodes + feedback loop |
-| `src/examples/statemachine_demos/05_human_in_the_loop_demo.py` | Pause/resume with checkpointing |
-| `src/examples/agent_patterns/my/02_tool_calling_demo.py` | Tool-calling agent with agentflow |
-| `src/examples/agent_patterns/my/04_react_agent_statemachine.py` | ReAct agent using StateGraph |
+| `examples/quickstart/01_brief_example.py` | Basic graph: research → parallel write → review |
+| `examples/quickstart/04_parallel_research_loop.py` | Parallel nodes + feedback loop |
+| `examples/quickstart/05_human_in_the_loop_demo.py` | Pause/resume with checkpointing |
+| `examples/patterns/02_tool_calling_demo.py` | Tool-calling agent with agentflow |
+| `examples/patterns/04_react_agent_statemachine.py` | ReAct agent using StateGraph |
 
 ## Documentation
 
-- [`src/agentflow/README.md`](src/agentflow/README.md) — library overview + API reference
-- [`src/agentflow/statemachine/README.md`](src/agentflow/statemachine/README.md) — StateGraph quick-start
-- [`src/agentflow/doc/guides/statemachine_tutorial.md`](src/agentflow/doc/guides/statemachine_tutorial.md) — step-by-step tutorial
+- [`agentflow/README.md`](agentflow/README.md) — library overview + API reference
+- [`agentflow/statemachine/README.md`](agentflow/statemachine/README.md) — StateGraph quick-start
+- [`docs/guides/statemachine_tutorial.md`](docs/guides/statemachine_tutorial.md) — step-by-step tutorial
 
 ## Testing
 
@@ -118,7 +118,7 @@ uv run pytest -m integration
 
 Early-stage educational library. Core framework (E010–E080) is stable.
 Currently adding production backends (PostgreSQL/Redis checkpoints).
-See [roadmap](src/agentflow/doc/project-progress/roadmap.md).
+See [roadmap](docs/project-progress/roadmap.md).
 
 ## Configuration
 

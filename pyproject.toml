@@ -30,7 +30,7 @@ redis-backend = [
     # Async Redis client for RedisCheckpointStore
     "redis[asyncio]>=5.0",
 ]
-# Extra deps used only in src/examples/ — not required for src/agentflow/
+# Extra deps used only in examples/ — not required for agentflow/
 examples = [
     "python-dateutil>=2.8",
     # crewai and langgraph are large; install only when working with those examples
@@ -53,19 +53,18 @@ target-version = "py310"
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["agentflow*"]
 
 [tool.mypy]
 python_version = "3.10"
 strict = true
-mypy_path = "src"
+mypy_path = "."
 
 [tool.pytest.ini_options]
 # Package is installed as editable (`uv pip install -e .`), so agentflow is importable directly.
 pythonpath = ["."]
-# Both directories are collected on every run.
-# src/agentflow/tests/ travels with the library if it is ever split into its own repo.
-testpaths = ["tests", "src/agentflow/tests"]
+testpaths = ["tests"]
 
 # Integration tests (marked @pytest.mark.integration) are EXCLUDED by default
 # because they make real LLM API calls and cost money.

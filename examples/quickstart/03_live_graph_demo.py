@@ -5,7 +5,7 @@ using FakeVertex subclasses, runs it with LiveGraphHooks, and saves one DOT
 snapshot per super-step to nogit_data/graphs/step_N.dot.
 
 Run with:
-    python src/examples/statemachine_demos/03_live_graph_demo.py
+    python examples/quickstart/03_live_graph_demo.py
 """
 
 from pathlib import Path

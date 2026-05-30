@@ -15,7 +15,7 @@ def test_brief_example_runs_to_completion() -> None:
     """
     import importlib
 
-    mod = importlib.import_module("src.examples.statemachine_demos.01_brief_example")
+    mod = importlib.import_module("examples.quickstart.01_brief_example")
 
     final_state = mod.run_demo()
 
@@ -36,7 +36,7 @@ def test_brief_example_message_count_matches_cycles() -> None:
     """
     import importlib
 
-    mod = importlib.import_module("src.examples.statemachine_demos.01_brief_example")
+    mod = importlib.import_module("examples.quickstart.01_brief_example")
 
     final_state = mod.run_demo()
 
@@ -59,7 +59,7 @@ def test_brief_example_build_graph_returns_state_graph() -> None:
 
     from agentflow.statemachine import StateGraph
 
-    mod = importlib.import_module("src.examples.statemachine_demos.01_brief_example")
+    mod = importlib.import_module("examples.quickstart.01_brief_example")
 
     graph = mod.build_graph()
     assert isinstance(graph, StateGraph)

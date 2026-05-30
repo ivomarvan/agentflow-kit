@@ -9,7 +9,7 @@ the checkpoint store.  resume() then picks up from that checkpoint and
 completes the workflow.
 
 Run with:
-    python src/examples/statemachine_demos/05_human_in_the_loop_demo.py
+    python examples/quickstart/05_human_in_the_loop_demo.py
 """
 
 
