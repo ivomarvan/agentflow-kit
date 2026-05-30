@@ -7,15 +7,11 @@ observability, visualization, and checkpointing.
 ## 1. Setup and Prerequisites
 
 The library lives inside the `ai_agents_education` repository. Install dependencies
-with `uv sync` from the project root. Every script starts with `git_root_to_syspath`
-so imports work regardless of the working directory. You need Python 3.11+.
+with `uv sync` and then `uv pip install -e .` from the project root. You need Python 3.11+.
 
 ```python
-from git_root_to_syspath import agr
-PROJECT_ROOT = agr()
-
-from src.agentflow.statemachine import StateGraph, StateGraphRunner, Context
-from src.agentflow.statemachine.testing import FakeLlmConnector
+from agentflow.statemachine import StateGraph, StateGraphRunner, Context
+from agentflow.statemachine.testing import FakeLlmConnector
 ```
 
 For development and tests, use `FakeLlmConnector` — it queues canned responses and
@@ -30,7 +26,7 @@ Wire two nodes linearly and run with `StateGraphRunner`.
 
 ```python
 from dataclasses import dataclass
-from src.agentflow.statemachine import (
+from agentflow.statemachine import (
     Context, StateGraph, StateGraphRunner, StateVertex,
     StdEnd, StdSignal, Transition,
 )
@@ -119,7 +115,7 @@ super-step. Each branch runs independently; patches merge via reducers. Both bra
 route to the same join vertex — fan-in is implicit (set-based join).
 
 ```python
-from src.agentflow.statemachine import Parallel
+from agentflow.statemachine import Parallel
 
 graph = StateGraph(
     start=Research,
@@ -165,8 +161,8 @@ Adapter vertices wrap existing agentflow components as graph nodes — no subcla
 **ToolCallVertex** — execute one tool call per super-step:
 
 ```python
-from src.agentflow.statemachine import ToolCallVertex
-from src.agentflow.tools.common_tools.Calculator import Calculator
+from agentflow.statemachine import ToolCallVertex
+from agentflow.tools.common_tools.Calculator import Calculator
 
 calc_vertex = ToolCallVertex(
     tool=Calculator(),
@@ -178,7 +174,7 @@ calc_vertex = ToolCallVertex(
 **LlmTurnVertex** — one LLM chat turn (no built-in ReAct loop):
 
 ```python
-from src.agentflow.statemachine import LlmTurnVertex
+from agentflow.statemachine import LlmTurnVertex
 
 llm_vertex = LlmTurnVertex(
     messages_from_state=lambda s: [{"role": "user", "content": s.prompt}],
@@ -189,7 +185,7 @@ llm_vertex = LlmTurnVertex(
 **ToolAgentVertex** — wrap a full `ToolAgent` ReAct loop as a single atomic step:
 
 ```python
-from src.agentflow.statemachine import ToolAgentVertex
+from agentflow.statemachine import ToolAgentVertex
 
 agent_vertex = ToolAgentVertex(
     agent=my_tool_agent,
@@ -204,7 +200,7 @@ Pass hooks to `StateGraphRunner` to observe execution. `RecorderHooks` captures 
 full history of every super-step — useful for test assertions.
 
 ```python
-from src.agentflow.statemachine import RecorderHooks
+from agentflow.statemachine import RecorderHooks
 
 recorder = RecorderHooks()
 runner = StateGraphRunner(graph, ctx, hooks=recorder)
@@ -247,7 +243,7 @@ a human-review vertex). `resume()` loads a saved checkpoint and continues.
 
 ```python
 import asyncio
-from src.agentflow.statemachine.checkpoint import InMemoryCheckpointStore
+from agentflow.statemachine.checkpoint import InMemoryCheckpointStore
 
 store = InMemoryCheckpointStore()
 runner = StateGraphRunner(graph, ctx)

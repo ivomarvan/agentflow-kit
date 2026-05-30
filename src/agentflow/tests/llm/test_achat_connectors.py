@@ -12,14 +12,10 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from git_root_to_syspath import agr
 
-agr()
-
-from src.agentflow.llm.LlmConfig import LlmConfig
-from src.agentflow.llm.connectors.AnthropicConnector import AnthropicConnector
-from src.agentflow.llm.connectors.OpenAiConnector import OpenAiConnector
-
+from agentflow.llm.connectors.AnthropicConnector import AnthropicConnector
+from agentflow.llm.connectors.OpenAiConnector import OpenAiConnector
+from agentflow.llm.LlmConfig import LlmConfig
 
 # ---------------------------------------------------------------------------
 # OpenAiConnector.achat

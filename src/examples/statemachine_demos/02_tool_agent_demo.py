@@ -12,15 +12,13 @@ Run with:
     python src/examples/statemachine_demos/02_tool_agent_demo.py
 """
 
-from git_root_to_syspath import agr  # locate project root and add it to sys.path
 
-PROJECT_ROOT = agr()
 
 import dataclasses  # noqa: E402
 from typing import cast  # noqa: E402
 
-from src.agentflow.agents.ToolAgent import ToolAgent  # noqa: E402
-from src.agentflow.statemachine import (  # noqa: E402
+from agentflow.agents.ToolAgent import ToolAgent  # noqa: E402
+from agentflow.statemachine import (  # noqa: E402
     Context,
     StateGraph,
     StateGraphRunner,
@@ -29,7 +27,7 @@ from src.agentflow.statemachine import (  # noqa: E402
     ToolAgentVertex,
     Transition,
 )
-from src.agentflow.statemachine.testing import FakeLlmConnector  # noqa: E402
+from agentflow.statemachine.testing import FakeLlmConnector  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # State and patch dataclasses

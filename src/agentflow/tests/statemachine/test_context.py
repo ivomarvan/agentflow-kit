@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 import pytest_asyncio  # noqa: F401 — ensures asyncio plugin is active
 
-from src.agentflow.statemachine.context import Context
+from agentflow.statemachine.context import Context
 
 
 def _make_context() -> Context:

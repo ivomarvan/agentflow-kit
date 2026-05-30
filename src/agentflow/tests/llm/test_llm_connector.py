@@ -13,15 +13,11 @@ Skip in CI environments without an API key by using:
 from __future__ import annotations
 
 import pytest
-from git_root_to_syspath import agr
 
-agr()
-
-from src.agentflow.llm.ChatResponse import ChatResponse
-from src.agentflow.llm.LlmConnector import LlmConnector
-from src.agentflow.tools.ToolRegistry import ToolRegistry
-from src.agentflow.tools.common_tools.Calculator import Calculator
-
+from agentflow.llm.ChatResponse import ChatResponse
+from agentflow.llm.LlmConnector import LlmConnector
+from agentflow.tools.common_tools.Calculator import Calculator
+from agentflow.tools.ToolRegistry import ToolRegistry
 
 # ---------------------------------------------------------------------------
 # Basic ping — single text response

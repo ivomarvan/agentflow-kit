@@ -8,14 +8,14 @@ from typing import Any
 
 import pytest
 
-from src.agentflow.describable.graph import Graph, Vertex
-from src.agentflow.describable.graph_renderer import GraphRenderer
-from src.agentflow.statemachine.context import Context
-from src.agentflow.statemachine.hooks import LiveGraphHooks
-from src.agentflow.statemachine.runner import StateGraphRunner
-from src.agentflow.statemachine.testing.fakes import make_fake_context
-from src.agentflow.statemachine.topology import StateGraph, Transition
-from src.agentflow.statemachine.vertex import StateVertex, StdEnd
+from agentflow.describable.graph import Graph, Vertex
+from agentflow.describable.graph_renderer import GraphRenderer
+from agentflow.statemachine.context import Context
+from agentflow.statemachine.hooks import LiveGraphHooks
+from agentflow.statemachine.runner import StateGraphRunner
+from agentflow.statemachine.testing.fakes import make_fake_context
+from agentflow.statemachine.topology import StateGraph, Transition
+from agentflow.statemachine.vertex import StateVertex, StdEnd
 
 
 @dataclass(frozen=True)

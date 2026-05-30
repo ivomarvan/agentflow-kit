@@ -6,7 +6,7 @@ import dataclasses
 
 import pytest
 
-from src.agentflow.statemachine.checkpoint import (
+from agentflow.statemachine.checkpoint import (
     CheckpointRecord,
     CheckpointStore,
     InMemoryCheckpointStore,

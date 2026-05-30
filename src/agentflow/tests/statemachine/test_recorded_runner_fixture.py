@@ -15,12 +15,12 @@ from typing import Annotated
 
 import pytest
 
-from src.agentflow.statemachine.hooks import RecorderHooks
-from src.agentflow.statemachine.runner import StateGraphRunner
-from src.agentflow.statemachine.signal import StdSignal
-from src.agentflow.statemachine.testing import FakeVertex
-from src.agentflow.statemachine.topology import StateGraph, Transition
-from src.agentflow.statemachine.vertex import StdEnd, _EmptyPatch
+from agentflow.statemachine.hooks import RecorderHooks
+from agentflow.statemachine.runner import StateGraphRunner
+from agentflow.statemachine.signal import StdSignal
+from agentflow.statemachine.testing import FakeVertex
+from agentflow.statemachine.topology import StateGraph, Transition
+from agentflow.statemachine.vertex import StdEnd, _EmptyPatch
 
 
 @dataclasses.dataclass(frozen=True)

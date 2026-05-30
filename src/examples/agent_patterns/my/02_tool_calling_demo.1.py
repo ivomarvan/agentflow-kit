@@ -21,16 +21,14 @@ Tools:
 Run (requires a running LLM backend, e.g. Ollama):
     cd <repo-root>
     ollama pull qwen3:8b
-    uv run python src/examples/self_education/Agentni_systemy/my/02_tool_calling_demo.1.py
+    uv run python src/examples/agent_patterns/my/02_tool_calling_demo.1.py
 
 Switch backend:
     LLM_BACKEND=openai uv run python src/examples/.../02_tool_calling_demo.1.py
     LLM_MODEL=qwen3:8b uv run python src/examples/.../02_tool_calling_demo.1.py
 """
 
-from git_root_to_syspath import agr  # locate project root and add it to sys.path
 
-PROJECT_ROOT = agr()
 
 import json  # noqa: E402
 import logging  # noqa: E402
@@ -39,10 +37,10 @@ from dataclasses import dataclass  # noqa: E402
 from enum import auto  # noqa: E402
 from typing import Annotated, Any, cast  # noqa: E402
 
-from src.agentflow.llm.ChatResponse import ToolCallInfo  # noqa: E402
-from src.agentflow.llm.LlmConfig import LlmConfig  # noqa: E402
-from src.agentflow.llm.LlmConnector import LlmConnector  # noqa: E402
-from src.agentflow.statemachine import (  # noqa: E402
+from agentflow.llm.ChatResponse import ToolCallInfo  # noqa: E402
+from agentflow.llm.LlmConfig import LlmConfig  # noqa: E402
+from agentflow.llm.LlmConnector import LlmConnector  # noqa: E402
+from agentflow.statemachine import (  # noqa: E402
     Context,
     End,
     EnumSignal,
@@ -52,9 +50,9 @@ from src.agentflow.statemachine import (  # noqa: E402
     StdSignal,
     Transition,
 )
-from src.agentflow.statemachine.hooks import LoggingHooks  # noqa: E402
-from src.agentflow.tools.common_tools.Calculator import Calculator  # noqa: E402
-from src.agentflow.tools.Tool import ToolBase, param_desc  # noqa: E402
+from agentflow.statemachine.hooks import LoggingHooks  # noqa: E402
+from agentflow.tools.common_tools.Calculator import Calculator  # noqa: E402
+from agentflow.tools.Tool import ToolBase, param_desc  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

@@ -12,15 +12,13 @@ Run with:
     python src/examples/statemachine_demos/04_parallel_research_loop.py
 """
 
-from git_root_to_syspath import agr  # locate project root and add it to sys.path
 
-PROJECT_ROOT = agr()
 
 from dataclasses import dataclass  # noqa: E402
 from enum import Enum  # noqa: E402
 from typing import Any, cast  # noqa: E402
 
-from src.agentflow.statemachine import (  # noqa: E402
+from agentflow.statemachine import (  # noqa: E402
     Context,
     Parallel,
     StateGraph,
@@ -30,8 +28,8 @@ from src.agentflow.statemachine import (  # noqa: E402
     StdSignal,
     Transition,
 )
-from src.agentflow.statemachine.hooks import LoggingHooks  # noqa: E402
-from src.agentflow.statemachine.testing import FakeLlmConnector  # noqa: E402
+from agentflow.statemachine.hooks import LoggingHooks  # noqa: E402
+from agentflow.statemachine.testing import FakeLlmConnector  # noqa: E402
 
 # Minimum number of Review cycles before auto-approval.
 _MAX_REVISIONS: int = 2

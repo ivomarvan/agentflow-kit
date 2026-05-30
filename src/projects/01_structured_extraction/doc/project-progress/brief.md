@@ -22,7 +22,7 @@ LLM musí z textu extrahovat následující pole:
 ### B) Chatová zpráva (krátká, neformální)
 *"Kde je moje objednávka #8833?? Měla tu být už v úterý. Karel"*
 
-### C) Přepis hovoru z ASR (Telma-relevantní!)
+### C) Přepis hovoru z ASR (voice-relevantní!)
 Realistický přepis řeči obsahuje:
 - **diktovaná čísla slovy:** *"devět devět osm dvě stě třicet čtyři jedenáct"*
 - **vycpávková slova:** *"ehm", "no", "jako", "prostě"*
@@ -38,7 +38,7 @@ Příklad:
   * tool calling s Pydantic schématem (Anthropic Claude).
 * Robustní ošetření chyb (LLM vrátí špatný formát → retry nebo fallback).
 * Napište alespoň 3 `pytest` testy - po jednom pro každý typ vstupu (A/B/C). Klíčový je test C - správná normalizace čísla diktovaného slovy.
-* **Bonus:** porovnejte úspěšnost stejného promptu na vstupech A vs. C (kolik % polí extrahováno správně). Tohle je přesně ten typ analýzy, kterou Mama AI dělá nad reálným provozem.
+* **Bonus:** porovnejte úspěšnost stejného promptu na vstupech A vs. C (kolik % polí extrahováno správně). Tohle je typ analýzy, kterou provozní týmy dělají nad reálným provozem voicebotů.
 
 ## Webové UX
 **Není potřeba.** Tento projekt je čistě batch processing - vstupem je text, výstupem JSON. Soustřeďte se na kvalitu extrakce, ne na UI.

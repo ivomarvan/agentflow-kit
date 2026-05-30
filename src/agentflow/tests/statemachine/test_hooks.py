@@ -7,7 +7,7 @@ import logging
 
 import pytest
 
-from src.agentflow.statemachine.hooks import LoggingHooks, NoOpHooks, RunnerHooks
+from agentflow.statemachine.hooks import LoggingHooks, NoOpHooks, RunnerHooks
 
 
 @pytest.mark.unit

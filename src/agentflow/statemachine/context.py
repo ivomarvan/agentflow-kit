@@ -15,8 +15,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.agentflow.llm.LlmConnector import LlmConnector
-from src.agentflow.tools.ToolRegistry import ToolRegistry
+from agentflow.llm.LlmConnector import LlmConnector
+from agentflow.tools.ToolRegistry import ToolRegistry
 
 
 @dataclass

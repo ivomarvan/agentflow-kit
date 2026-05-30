@@ -13,20 +13,18 @@ Quick start::
 
 # Ensure the repository root is in sys.path so that ``src.*`` imports work
 # when the library (or its tests) is loaded from any working directory.
-from git_root_to_syspath import agr
-agr()
 
-from src.agentflow.llm.ChatResponse import ChatResponse, ToolCallFunction, ToolCallInfo, UsageInfo
-from src.agentflow.llm.LlmConfig import LlmConfig, SUPPORTED_BACKENDS, OPENAI_COMPATIBLE_BACKENDS
-from src.agentflow.llm.LlmConnector import LlmConnector
-from src.agentflow.llm.connectors.OpenAiConnector import OpenAiConnector
-from src.agentflow.llm.connectors.AnthropicConnector import AnthropicConnector
-from src.agentflow.llm.OllamaManager import OllamaManager, OllamaModelInfo
-from src.agentflow.tools.Tool import ToolBase, param_desc, build_parameters_schema
-from src.agentflow.tools.ToolRegistry import ToolRegistry
-from src.agentflow.agents.ToolAgent import ToolAgent
-from src.agentflow.describable import Describable, Graph, Vertex, Edge, GraphRenderer
-from src.agentflow.statemachine import EnumSignal, StdSignal
+from agentflow.agents.ToolAgent import ToolAgent
+from agentflow.describable import Describable, Edge, Graph, GraphRenderer, Vertex
+from agentflow.llm.ChatResponse import ChatResponse, ToolCallFunction, ToolCallInfo, UsageInfo
+from agentflow.llm.connectors.AnthropicConnector import AnthropicConnector
+from agentflow.llm.connectors.OpenAiConnector import OpenAiConnector
+from agentflow.llm.LlmConfig import OPENAI_COMPATIBLE_BACKENDS, SUPPORTED_BACKENDS, LlmConfig
+from agentflow.llm.LlmConnector import LlmConnector
+from agentflow.llm.OllamaManager import OllamaManager, OllamaModelInfo
+from agentflow.statemachine import EnumSignal, StdSignal
+from agentflow.tools.Tool import ToolBase, build_parameters_schema, param_desc
+from agentflow.tools.ToolRegistry import ToolRegistry
 
 __all__ = [
     # Config & connectors

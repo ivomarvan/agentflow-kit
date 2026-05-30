@@ -1,13 +1,9 @@
-# AI Example Projects - příprava na Mama AI / Telma technické kolo
+# AI Example Projects
 
 ## Účel
-Sada cvičných projektů pokrývající typické úkoly, které se v technickém pohovoru / take-home pro pozici **AI Agent Developer** v Mama AI / Telma očekávají. Každý projekt je navržen tak, aby procvičil jednu konkrétní dovednost a dohromady tvořily ucelenou přípravu.
+Sada cvičných projektů pokrývající typické úkoly v oblasti AI agentů a konverzačních systémů. Každý projekt procvičí jednu konkrétní dovednost a dohromady tvoří ucelenou učební sestavu.
 
-**Kontext:**
-- Mama AI = mateřská technologická skupina (bývalá IBM Watson R&D), specializace na konverzační AI v češtině.
-- Telma = jejich produktová značka pro voiceboty/chatboty (omnichannel platforma, REST API integrace).
-- Nejznámější produkt: virtuální recruiter **Adéla** (vyhrála AI Awards 2024 v kategorii AI for Government).
-- Klíčové domény: speech recognition, NLP/NLU, dialog systems, voice + chat, čeština.
+**Domény:** speech recognition, NLP/NLU, dialog systems, voice + chat, čeština.
 
 ## Přehled projektů
 
@@ -16,16 +12,16 @@ Sada cvičných projektů pokrývající typické úkoly, které se v technické
 **Cíl:** Extrahovat z nestrukturovaného textu (e-mail, chat, **přepis hlasového hovoru**) strukturovaný JSON pomocí LLM + Pydantic.  
 **Klíčové dovednosti:** structured outputs, Pydantic schémata, ošetření chyb, normalizace dat z ASR (čísla diktovaná slovy).  
 **Webové UX:** ne (čistě batch processing).  
-**Telma relevance:** ⭐⭐⭐ - typický first-step v každém voicebotu (porozumění tomu, co uživatel chce).
+**Voice relevance:** ⭐⭐⭐ — typický first-step v každém voicebotu (porozumění tomu, co uživatel chce).
 
 ---
 
 ### 02 - RAG FAQ Bot
 **Adresář:** [`02_rag_faq_bot/`](./02_rag_faq_bot/)  
-**Cíl:** Interní HR asistent nad zaměstnaneckou příručkou. Žádné halucinace, dual mode (chat + voice).  
+**Cíl:** Interní HR asistent nad příručkou. Žádné halucinace, dual mode (chat + voice).  
 **Klíčové dovednosti:** RAG pipeline (chunking, embedding, retrieval), prompt engineering proti halucinacím, voice constraints (krátké odpovědi pro TTS).  
-**Webové UX:** doporučeno - FastAPI + vanilla HTML/JS s Web Speech API (`webkitSpeechRecognition` pro STT, `speechSynthesis` pro TTS, oba s `lang = 'cs-CZ'`).  
-**Telma relevance:** ⭐⭐⭐ - klasický RAG use case, "must-have" 2025/26.
+**Webové UX:** doporučeno — FastAPI + vanilla HTML/JS s Web Speech API (`webkitSpeechRecognition` pro STT, `speechSynthesis` pro TTS, oba s `lang = 'cs-CZ'`).  
+**Voice relevance:** ⭐⭐⭐ — klasický RAG use case pro konverzační systémy.
 
 ---
 
@@ -33,8 +29,8 @@ Sada cvičných projektů pokrývající typické úkoly, které se v technické
 **Adresář:** [`03_tool_calling_agent/`](./03_tool_calling_agent/)  
 **Cíl:** Konverzační agent pro rezervaci stolů v restauraci, voice-aware s repair strategií a confirmation patterns.  
 **Klíčové dovednosti:** Function Calling / Tool Calling, state management (LangGraph nebo čistý cyklus), repair patterns pro ASR errory, confirmation pattern před destruktivní akcí.  
-**Webové UX:** doporučeno - FastAPI + JS s push-to-talk Web Speech API + debug panel s tool calls.  
-**Telma relevance:** ⭐⭐⭐⭐⭐ - jádro role "AI Agent Developer". **Toto je nejpravděpodobnější základ take-home úkolu.**
+**Webové UX:** doporučeno — FastAPI + JS s push-to-talk Web Speech API + debug panel s tool calls.  
+**Voice relevance:** ⭐⭐⭐⭐⭐ — jádro role AI Agent Developer.
 
 ---
 
@@ -43,16 +39,16 @@ Sada cvičných projektů pokrývající typické úkoly, které se v technické
 **Cíl:** Automatická evaluace voicebot konverzací silnějším LLM podle metrik (politeness, efficiency, **voice suitability**).  
 **Klíčové dovednosti:** prompt engineering pro konzistentní hodnocení, Pydantic pro strukturované evaluační výstupy, agregace přes dávku, self-consistency / few-shot.  
 **Webové UX:** ne (batch evaluace), volitelně HTML report.  
-**Telma relevance:** ⭐⭐⭐⭐ - Mama AI explicitně dělá *"iterative improvements based on deep analysis of user traffic"*. Tohle je ono.
+**Voice relevance:** ⭐⭐⭐⭐ — iterativní zlepšování na základě analýzy konverzačního provozu.
 
 ---
 
-### 05 - Voicebot HR Screening (Adéla-style) - **CAPSTONE**
+### 05 - Voicebot HR Screening — **CAPSTONE**
 **Adresář:** [`05_voicebot_hr_screening/`](./05_voicebot_hr_screening/)  
-**Cíl:** Outbound voicebot pro předkvalifikační HR rozhovor. Inspirace: Adéla od Telmy.  
+**Cíl:** Outbound voicebot pro předkvalifikační HR rozhovor.  
 **Klíčové dovednosti:** **conversation design jako disciplína**, state machine (LangGraph), confirmation pattern, voice constraints, **Czech-specific** (skloňování, čísla pro TTS, vykání/tykání), end-to-end voice-first UX.  
-**Webové UX:** povinně - FastAPI + JS s push-to-talk, barge-in (`speechSynthesis.cancel()`), live transkript, výsledný `KandidateProfile`.  
-**Telma relevance:** ⭐⭐⭐⭐⭐ - **přesně to, co Telma dělá**. Pokud projdete tímto projektem byť na 70 %, budete mít konkrétní portfolio ukázku, kterou můžete u technického interview otevřít.
+**Webové UX:** povinně — FastAPI + JS s push-to-talk, barge-in (`speechSynthesis.cancel()`), live transkript, výsledný `KandidateProfile`.  
+**Voice relevance:** ⭐⭐⭐⭐⭐ — capstone projekt spojující všechny předchozí dovednosti.
 
 ---
 
@@ -61,12 +57,12 @@ Sada cvičných projektů pokrývající typické úkoly, které se v technické
 ### Pro učení (čas neomezen)
 **#03 → #02 → #05 → #01 → #04**
 
-Začněte tool callingem (jádro role), pak RAG (běžná interview otázka), pak capstone, pak doplňkové dovednosti.
+Začněte tool callingem (jádro role), pak RAG, pak capstone, pak doplňkové dovednosti.
 
-### Pro rychlou přípravu (omezený čas, ~2 dny)
+### Pro rychlou ukázku (omezený čas)
 **#03 → #05** (zkrácená verze)
 
-Tool calling + capstone voicebot jsou nejpravděpodobnější jádro skutečného take-home.
+Tool calling + capstone voicebot jsou nejpraktičtější jádro demonstrace.
 
 ### Pokud chcete cvičit do hloubky
 Pro každý projekt udělejte i sekci **co bych dělal jinak při retry** v `report.md`. Nutí to k retrospektivě.
@@ -75,17 +71,17 @@ Pro každý projekt udělejte i sekci **co bych dělal jinak při retry** v `rep
 
 ### Backend
 - Python 3.11+
-- `openai` (nebo `anthropic`) - LLM klient
-- `pydantic` - strukturované výstupy
-- `fastapi` + `uvicorn` - webové API (pro projekty s UX)
-- `pytest` - testy
-- (volitelně) `langgraph` - state machines pro agenty
-- (volitelně) `chromadb` nebo `faiss` - vector DB pro RAG
+- `openai` (nebo `anthropic`) — LLM klient
+- `pydantic` — strukturované výstupy
+- `fastapi` + `uvicorn` — webové API (pro projekty s UX)
+- `pytest` — testy
+- (volitelně) `langgraph` — state machines pro agenty
+- (volitelně) `chromadb` nebo `faiss` — vector DB pro RAG
 
 ### Frontend (kde relevantní)
 - Vanilla HTML + JS (žádný framework, žádný build).
 - **Web Speech API** v Chrome:
-  - `webkitSpeechRecognition` (STT) - vyžaduje `webkit` prefix.
+  - `webkitSpeechRecognition` (STT) — vyžaduje `webkit` prefix.
   - `speechSynthesis` + `SpeechSynthesisUtterance` (TTS).
   - Oba podporují `lang = 'cs-CZ'`, ale kvalita českého TTS hlasu závisí na OS (Windows/Mac obvykle lepší než Linux).
 
@@ -119,7 +115,7 @@ Pro tyto projekty potřebujete LLM se solidním **tool callingem** a **structure
 |---|---|---|---|---|
 | `gpt-4o-mini` | OpenAI | 0.15 / 0.60 | ⭐⭐⭐⭐ | Nejlevnější rozumný model. Strict structured outputs. |
 | `gemini-3.5-flash` | Google | 1.50 / 9.00 | ⭐⭐⭐⭐⭐ | **Nově (19.5.2026).** 1M context, multimodal, free tier. Výrazně lepší tool calling než GPT-4o-mini. |
-| `claude-haiku-4.5` | Anthropic | 1.00 / 5.00 | ⭐⭐⭐⭐ | XML tagy, tone-sensitive. Dobrý pro Telmu (Anthropic patterny). |
+| `claude-haiku-4.5` | Anthropic | 1.00 / 5.00 | ⭐⭐⭐⭐ | XML tagy, tone-sensitive. Dobrý pro konverzační agenty. |
 | `gpt-4o` / `gpt-5.5` | OpenAI | 2.50 / 10 | ⭐⭐⭐⭐⭐ | Pro LLM-as-Judge v projektu #04. |
 | `claude-sonnet-4.6` | Anthropic | 3.00 / 15 | ⭐⭐⭐⭐⭐ | Alternativa k GPT-5.5 jako judge. |
 
@@ -127,7 +123,7 @@ Pro tyto projekty potřebujete LLM se solidním **tool callingem** a **structure
 
 ### Lokální modely (offline experimenty bez nákladů, přes Ollama)
 
-Vhodné pro `LLM_BACKEND=ollama` v `Agentni_systemy/examples/llm_client.py`. Předpoklad: notebook bez dedikované GPU.
+Vhodné pro `LLM_BACKEND=ollama` v `src/examples/agent_patterns/orig/llm_client.py`. Předpoklad: notebook bez dedikované GPU.
 
 | Model | RAM (Q4) | Tok/s na CPU | Tool calling | Pro koho |
 |---|---|---|---|---|
@@ -171,18 +167,9 @@ Viz samostatný dokument [`How_to_use_AI_in_programming-recommendations.md`](./H
 
 **Stručně:** návrh architektury, prompty, agent loop a Pydantic schémata pište ručně (RED zone). Boilerplate (FastAPI, frontend, konfigurace) můžete delegovat na AI (GREEN zone). Implementaci core logiky pair-programujte s AI (YELLOW zone).
 
-## Reálný take-home u Mama AI / Telma
-- Trvání: údajně ~4 hodiny (s rezervou očekávejte 6-8).
-- AI tools pravděpodobně povolené (oni sami AI firma).
-- Bude následovat technický interview, kde budete kód **obhajovat live**.
-- Pravděpodobné jádro úkolu: **mix #03 a #05** - voicebot agent s tooly v češtině.
-- Klíčové: nepište nic, čemu nerozumíte. Zpomalí vás to při obhajobě.
+## Související materiály
 
-## Související materiály v `self_education/`
-
-- [`Agentni_systemy/`](../Agentni_systemy/) - LangGraph, tool calling teorie a tutoriály.
-- [`Claude_a_agenti/`](../Claude_a_agenti/) - Anthropic-specific agent patterns.
-- [`Promptovani/`](../Promptovani/) - prompt engineering základy.
+- [`agent_patterns/`](../examples/agent_patterns/) — LangGraph, tool calling teorie a tutoriály (agentflow vs. reference implementace).
 
 ## Pozn. ke zdroji briefů
-Briefy v jednotlivých projektech (`brief.md`) byly iniciálně vygenerovány Gemini 3.5 Pro, následně revidovány a doplněny o **Telma-specifické voice constraints, ASR error handling, confirmation patterns a Czech-specific challenges**.
+Briefy v jednotlivých projektech (`brief.md`) byly iniciálně vygenerovány Gemini 3.5 Pro, následně revidovány a doplněny o **voice constraints, ASR error handling, confirmation patterns a Czech-specific challenges**.

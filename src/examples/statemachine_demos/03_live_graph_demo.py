@@ -10,17 +10,15 @@ Run with:
 
 from pathlib import Path
 
-from git_root_to_syspath import agr  # locate project root and add it to sys.path
 
-PROJECT_ROOT = Path(agr())
 
 import operator  # noqa: E402
 from dataclasses import dataclass  # noqa: E402
 from enum import Enum, auto  # noqa: E402
 from typing import Annotated, Any  # noqa: E402
 
-from src.agentflow.describable.graph_renderer import GraphRenderer  # noqa: E402
-from src.agentflow.statemachine import (  # noqa: E402
+from agentflow.describable.graph_renderer import GraphRenderer  # noqa: E402
+from agentflow.statemachine import (  # noqa: E402
     Context,
     LiveGraphHooks,
     Parallel,
@@ -31,7 +29,7 @@ from src.agentflow.statemachine import (  # noqa: E402
     StdSignal,
     Transition,
 )
-from src.agentflow.statemachine.testing.fakes import FakeLlmConnector  # noqa: E402
+from agentflow.statemachine.testing.fakes import FakeLlmConnector  # noqa: E402
 
 
 @dataclass(frozen=True)

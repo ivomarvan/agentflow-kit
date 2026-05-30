@@ -1,7 +1,7 @@
-# Zadání: Outbound voicebot pro HR screening (Adéla-style)
+# Zadání: Outbound voicebot pro HR screening
 
 ## Kontext
-Tohle je **capstone projekt** spojující všechny předchozí dovednosti - extrakce, RAG, tool calling, voice constraints - do jednoho realistického produktu. Inspirace: virtuální recruiter **Adéla** od Telmy/Mama AI, která vyhrála AI Awards 2024 v kategorii AI for Government.
+Tohle je **capstone projekt** spojující všechny předchozí dovednosti — extrakce, RAG, tool calling, voice constraints — do jednoho realistického produktu.
 
 Voicebot zavolá kandidátovi, který reagoval na inzerát, a provede s ním krátký předkvalifikační rozhovor. Cílem je odsít zjevně nevhodné kandidáty a předat lidskému recruiterovi strukturovaný profil těch nadějných.
 
@@ -28,7 +28,7 @@ Voicebot musí zjistit:
 ## Povinné požadavky
 
 ### 1. Konverzační design (CORE)
-Tohle je **klíčová dovednost**, kterou Mama AI hledá. Vytvořte v dokumentu `doc/conversation_design.md` návrh konverzace:
+Tohle je **klíčová dovednost** pro voicebot projekty. Vytvořte v dokumentu `doc/conversation_design.md` návrh konverzace:
 - **Opening:** přesné znění úvodu (5-10 sec).
 - **Pro každý "info slot":** jak se otázka přirozeně zeptá, jak se zachová bot při různých odpovědích (jasná / nejednoznačná / mimo téma).
 - **Closing:** jak se rozloučit v různých scénářích (pokračovat / nepokračovat / hraniční).
@@ -52,7 +52,7 @@ Diktované údaje (jméno, telefon, mzdové očekávání) **vždy** zopakovat:
 - Empatický, ale profesionální tón.
 - Tykání NEBO vykání - rozhodnout v conversation designu a držet konzistentně.
 
-### 5. Czech-specific (KRITICKÉ pro Telmu)
+### 5. Czech-specific (KRITICKÉ pro české voiceboty)
 - Správné **skloňování** v generovaných větách: *"Děkuji, paní Nováková"* vs *"Děkuji, pane Novák"*. Nejjednodušší řešení: pokud LLM neumí spolehlivě, ptejte se kandidáta v 5. pádu od začátku ("Jak vám mám říkat?").
 - Při čtení čísel přes TTS: *"sedm set sedmdesát sedm"* je přijatelné, ale *"7-7-7"* nebo *"7 7 7"* TTS čte špatně. Při generaci odpovědi LLM by měl psát čísla **slovy**, pokud je má bot vyslovit nahlas.
 
@@ -100,7 +100,7 @@ class KandidateProfile(BaseModel):
 
 ## Technické požadavky
 * Reset session - aby se dalo testovat opakovaně bez restartu serveru.
-* Logování každého turn-u (timestamp, user input, bot output, vybraný stav, volané tooly) - to bude užitečné při post-mortem analýze (přesně Mama AI workflow).
+* Logování každého turn-u (timestamp, user input, bot output, vybraný stav, volané tooly) - to bude užitečné při post-mortem analýze konverzací.
 * `pytest` test alespoň jedné kompletní konverzace - mock LLM odpovědí, ověřit, že stavový automat projde celým flow správně.
 
 ## Tools (volitelně, pro pokročilejší verzi)
@@ -126,5 +126,5 @@ Pokud bot na konci doporučí "pokracovat", může nabídnout naplánování dal
 4. **End-to-end voicebot** od mikrofonu po strukturovaný výstup pro lidského operátora.
 5. **Czech-specific challenges** - skloňování, čtení čísel, formality.
 
-## Reálnost / poznámka
-Ano, tohle je hodně věcí na 4 hodiny domácího úkolu. Ale **přesně tohle dělá Telma**, a pokud projdete tímto projektem byť jen na 70 %, budete mít **konkrétní portfolio** ukázku, kterou můžete u technického interview otevřít a říct: *"Tohle jsem si postavil pro pochopení vaší domény. Můžeme se na to spolu podívat?"* - to je extrémně silný signál.
+## Rozsah projektu
+Toto je komplexní capstone — pokud projdete tímto projektem byť jen na 70 %, budete mít **konkrétní portfolio ukázku** end-to-end voicebotu v češtině.

@@ -1,7 +1,7 @@
 # Zadání: Konverzační agent pro rezervaci stolů (Tool Calling, voice-aware)
 
 ## Kontext
-Restaurace "U Zlatého LLM" chce nasadit AI asistenta, který přijímá rezervace **přes telefonní hovor i přes web chat**. Agent musí umět komunikovat se zákazníkem, zjistit potřebné údaje, ověřit kapacitu a vytvořit rezervaci přes interní API. Telma-relevantní: tohle je voicebot, takže odpovědi musí být **krátké, vhodné pro TTS**, a musí umět zvládnout **chyby z ASR**.
+Restaurace "U Zlatého LLM" chce nasadit AI asistenta, který přijímá rezervace **přes telefonní hovor i přes web chat**. Agent musí umět komunikovat se zákazníkem, zjistit potřebné údaje, ověřit kapacitu a vytvořit rezervaci přes interní API. Jde o voicebot, takže odpovědi musí být **krátké, vhodné pro TTS**, a musí umět zvládnout **chyby z ASR**.
 
 ## Cíl
 Konverzační agent využívající **Function Calling / Tool Calling** k interakci s (mockovaným) backendem. Implementace buď čistým cyklem v Pythonu, nebo `LangGraph` jako stavový automat.

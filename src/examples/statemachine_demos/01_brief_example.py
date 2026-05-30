@@ -10,16 +10,14 @@ The graph cycles until Review approves — after APPROVE_AFTER rejections.
 FakeLlmConnector is used so no real LLM calls are made.
 """
 
-from git_root_to_syspath import agr  # locate project root and add it to sys.path
 
-PROJECT_ROOT = agr()
 
 import operator  # noqa: E402
 from dataclasses import dataclass  # noqa: E402
 from enum import Enum, auto  # noqa: E402
 from typing import Annotated, Any, cast  # noqa: E402
 
-from src.agentflow.statemachine import (  # noqa: E402
+from agentflow.statemachine import (  # noqa: E402
     Context,
     Parallel,
     StateGraph,
@@ -29,8 +27,8 @@ from src.agentflow.statemachine import (  # noqa: E402
     StdSignal,
     Transition,
 )
-from src.agentflow.statemachine.hooks import LoggingHooks  # noqa: E402
-from src.agentflow.statemachine.testing import FakeLlmConnector  # noqa: E402
+from agentflow.statemachine.hooks import LoggingHooks  # noqa: E402
+from agentflow.statemachine.testing import FakeLlmConnector  # noqa: E402
 
 # How many review rejections must occur before the graph terminates.
 _APPROVE_AFTER: int = 2

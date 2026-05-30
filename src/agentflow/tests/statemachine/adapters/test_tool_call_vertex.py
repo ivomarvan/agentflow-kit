@@ -12,11 +12,10 @@ from typing import Any
 
 import pytest
 
-from src.agentflow.statemachine.adapters.tool_call_vertex import ToolCallVertex
-from src.agentflow.statemachine.signal import StdSignal
-from src.agentflow.statemachine.testing.fakes import make_fake_context
-from src.agentflow.tools.Tool import ToolBase
-
+from agentflow.statemachine.adapters.tool_call_vertex import ToolCallVertex
+from agentflow.statemachine.signal import StdSignal
+from agentflow.statemachine.testing.fakes import make_fake_context
+from agentflow.tools.Tool import ToolBase
 
 # ---------------------------------------------------------------------------
 # Minimal ToolBase implementations for tests

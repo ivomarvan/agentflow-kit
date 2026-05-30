@@ -7,10 +7,10 @@ from typing import Any
 
 import pytest
 
-from src.agentflow.statemachine.context import Context
-from src.agentflow.statemachine.resolver import VertexResolver
-from src.agentflow.statemachine.topology import Parallel, StateGraph, Transition
-from src.agentflow.statemachine.vertex import StateVertex
+from agentflow.statemachine.context import Context
+from agentflow.statemachine.resolver import VertexResolver
+from agentflow.statemachine.topology import Parallel, StateGraph, Transition
+from agentflow.statemachine.vertex import StateVertex
 
 # ---------------------------------------------------------------------------
 # Minimal concrete vertices for testing — FakeVertex (T070) not yet available.

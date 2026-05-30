@@ -57,7 +57,7 @@ def test_brief_example_build_graph_returns_state_graph() -> None:
     """
     import importlib
 
-    from src.agentflow.statemachine import StateGraph
+    from agentflow.statemachine import StateGraph
 
     mod = importlib.import_module("src.examples.statemachine_demos.01_brief_example")
 

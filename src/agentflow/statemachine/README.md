@@ -12,11 +12,11 @@ and fan-in predictable without manual locking.
 
 ```python
 from dataclasses import dataclass
-from src.agentflow.statemachine import (
+from agentflow.statemachine import (
     Context, StateGraph, StateGraphRunner, StateVertex,
     StdEnd, StdSignal, Transition,
 )
-from src.agentflow.statemachine.testing import FakeLlmConnector
+from agentflow.statemachine.testing import FakeLlmConnector
 
 @dataclass(frozen=True)
 class HelloState:
@@ -195,7 +195,7 @@ Save execution state after each super-step using a `CheckpointStore`. Use
 then `resume(store, run_id, from_step)` to continue (human-in-the-loop workflows).
 
 ```python
-from src.agentflow.statemachine.checkpoint import InMemoryCheckpointStore
+from agentflow.statemachine.checkpoint import InMemoryCheckpointStore
 
 store = InMemoryCheckpointStore()
 paused = await runner.run_until(
@@ -231,3 +231,44 @@ All demos use `FakeLlmConnector` — no API keys required.
 
 See also [statemachine_tutorial.md](../doc/guides/statemachine_tutorial.md) for a
 step-by-step walkthrough from Hello World to a parallel research agent.
+
+## Checkpoint Backends
+
+The `CheckpointStore` protocol supports pluggable backends for different persistence needs:
+
+| Backend | Package | Use case |
+|---------|---------|---------|
+| `InMemoryCheckpointStore` | built-in | Tests, short-lived workflows |
+| `JsonFileCheckpointStore` | built-in | Single-process persistence, dev/debug |
+| `PostgresCheckpointStore` | `.[postgres]` | Production, multi-process, durable |
+| `RedisCheckpointStore` | `.[redis-backend]` | Fast ephemeral, session-scoped workflows |
+
+### Installing backend extras
+
+```bash
+uv pip install -e ".[postgres]"        # PostgreSQL via asyncpg
+uv pip install -e ".[redis-backend]"   # Redis via redis[asyncio]
+```
+
+### Quick example (PostgreSQL)
+
+```python
+import asyncio
+from agentflow.statemachine import PostgresCheckpointStore, StateGraphRunner
+
+async def main() -> None:
+    DSN = "postgresql://agentflow:agentflow@localhost:5432/agentflow"
+    async with PostgresCheckpointStore(DSN) as store:
+        runner = StateGraphRunner(graph, ctx)
+        # Run until a human-approval vertex is reached
+        state = await runner.run_until(
+            initial_state,
+            lambda step, s, active: any(v.__class__.__name__ == "HumanApproval" for v in active),
+            store=store,
+            run_id="workflow-001",
+        )
+        # ... human reviews state ...
+        final = await runner.resume(store, "workflow-001", from_step=2)
+```
+
+See [README.docker.md](../../../README.docker.md) for Docker setup and integration test instructions.

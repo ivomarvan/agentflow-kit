@@ -1,133 +1,136 @@
-# ai_agents_education
+# agentflow — Declarative AI Agent Orchestration
 
-Vzdělávací projekt pro pochopení agentic AI vzorů od základů.
-Cílem je vlastní čistý framework — bez magie hotových knihoven — který odhaluje,
-jak věci skutečně fungují pod kapotou.
+> A lightweight, educational framework for building LLM agent workflows using a declarative
+> state graph with deterministic Bulk Synchronous Parallel (BSP) execution.
 
-## Struktura projektu
+## Why agentflow?
 
-```
-src/
-├── lib/          vlastní LLM abstrakční knihovna
-│   ├── llm/      konfigurace, konektory, Ollama
-│   └── tools/    nástroje pro tool-calling
-├── examples/     ukázkové skripty a experimenty
-└── projects/     konkrétní projekty využívající knihovnu
-```
+agentflow lets you define agent workflows as explicit state graphs: frozen dataclass state,
+typed reducers for parallel writes, and a BSP runner that executes super-steps as
+Compute → Barrier → Apply & Route. Built-in visualization (`Describable`), checkpoint/resume,
+and pluggable storage backends make the execution model inspectable end to end. The framework
+is designed to be transparent and educational — no magic, all explicit.
 
-## Nastavení prostředí
+## Features
 
-### Předpoklady
+- **Declarative graph topology** — define agents as `StateVertex` subclasses, wire with `Transition` and `Parallel`
+- **BSP execution model** — deterministic super-steps: Compute → Barrier → Apply & Route
+- **Immutable state** — frozen dataclasses with typed reducers, no accidental mutation
+- **Built-in visualization** — SVG/HTML/DOT graph rendering via `Describable`
+- **Checkpointing** — pluggable backends (Memory, JSON file, PostgreSQL, Redis)
+- **Pause & resume** — `run_until(predicate)` + `resume(store, run_id, step)` for human-in-the-loop
+- **LLM agnostic** — works with OpenAI, Anthropic, Ollama, Gemini, DeepSeek
+- **mypy strict** — fully typed, zero-compromise type safety
 
-- Python 3.10+
-- [`uv`](https://docs.astral.sh/uv/) — doporučený správce prostředí (rychlý, moderní)
-
-### Instalace `uv` (jednorázově)
-
-```bash
-pip install uv
-```
-
-### Vytvoření a naplnění prostředí
+## Quick Install
 
 ```bash
-# vytvoří .venv a nainstaluje všechny závislosti z pyproject.toml
+git clone <repo-url>
+cd <repo>
 uv sync
+uv pip install -e .
 ```
 
-Příkaz `uv sync` je idempotentní — pokud `.venv` existuje a je aktuální, nedělá nic.
-Spusť ho vždy po `git pull` nebo při prvním klonování repozitáře.
+## Hello World (15 lines)
 
-### Aktivace prostředí
+```python
+from dataclasses import dataclass
+from agentflow.statemachine import (
+    Context, StateGraph, StateGraphRunner, StateVertex,
+    StdEnd, StdSignal, Transition,
+)
+from agentflow.statemachine.testing import FakeLlmConnector
+
+@dataclass(frozen=True)
+class AppState:
+    text: str = ""
+
+@dataclass
+class AppPatch:
+    text: str | None = None
+
+class Uppercase(StateVertex):
+    async def run(self, state, ctx):
+        return StdSignal.ok, AppPatch(text=state.text.upper())
+
+class Done(StateVertex):
+    async def run(self, state, ctx):
+        return StdSignal.done, AppPatch()
+
+graph = StateGraph(
+    start=Uppercase,
+    transitions=[
+        Transition(Uppercase, StdSignal.ok, Done),
+        Transition(Done, StdSignal.done, StdEnd),
+    ],
+)
+final = StateGraphRunner(graph, Context(FakeLlmConnector())).run_sync(AppState(text="hello"))
+print(final.text)  # HELLO
+```
+
+## Comparison with similar frameworks
+
+| Feature | **agentflow** | LangGraph | CrewAI |
+|---------|--------------|-----------|--------|
+| Execution model | BSP (deterministic super-steps) | Event-driven DAG | Role-based multi-agent |
+| State management | Frozen dataclasses + typed reducers | TypedDict (mutable) | Pydantic models |
+| Parallel execution | `Parallel(A, B)` with barrier sync | `Send()` API | Agent delegation |
+| Graph visualization | Built-in SVG/HTML/DOT (`Describable`) | LangSmith (external service) | — |
+| Checkpointing | Protocol-based (memory/file/DB) | PostgresSaver, RedisSaver | — |
+| Pause / resume | `run_until()` + `resume()` | `interrupt_before/after` | — |
+| Type safety | `mypy --strict`, frozen state | Partial | Partial |
+| LLM agnostic | Yes (connector protocol) | Yes (LangChain) | Yes |
+| Streaming tokens | ❌ not yet | ✅ | ✅ |
+| Distributed execution | ❌ not yet | ❌ | ✅ (agents as services) |
+| Production maturity | 🔬 educational | ✅ production-ready | ✅ production-ready |
+
+agentflow prioritizes transparency and correctness over features. It is designed for learning
+and prototyping. For production workloads requiring streaming or distributed execution, consider
+LangGraph.
+
+## Examples
+
+| Example | Description |
+|---------|-------------|
+| `src/examples/statemachine_demos/01_brief_example.py` | Basic graph: research → parallel write → review |
+| `src/examples/statemachine_demos/04_parallel_research_loop.py` | Parallel nodes + feedback loop |
+| `src/examples/statemachine_demos/05_human_in_the_loop_demo.py` | Pause/resume with checkpointing |
+| `src/examples/agent_patterns/my/02_tool_calling_demo.py` | Tool-calling agent with agentflow |
+| `src/examples/agent_patterns/my/04_react_agent_statemachine.py` | ReAct agent using StateGraph |
+
+## Documentation
+
+- [`src/agentflow/README.md`](src/agentflow/README.md) — library overview + API reference
+- [`src/agentflow/statemachine/README.md`](src/agentflow/statemachine/README.md) — StateGraph quick-start
+- [`src/agentflow/doc/guides/statemachine_tutorial.md`](src/agentflow/doc/guides/statemachine_tutorial.md) — step-by-step tutorial
+
+## Testing
 
 ```bash
-source .venv/bin/activate      # Linux / macOS
-.venv\Scripts\activate         # Windows
+# Unit tests (no API keys required)
+uv run pytest
+
+# Integration tests (requires LLM API key + Docker services for DB backends)
+uv run pytest -m integration
 ```
 
-Nebo spouštěj skripty přímo přes `uv run`:
+## Project Status
 
-```bash
-uv run python src/agentflow/llm/LlmConfig.py show
-```
+Early-stage educational library. Core framework (E010–E080) is stable.
+Currently adding production backends (PostgreSQL/Redis checkpoints).
+See [roadmap](src/agentflow/doc/project-progress/roadmap.md).
 
-### Alternativa: `venv` + `pip` (bez `uv`)
+## Configuration
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-```
-
-## Konfigurace LLM
-
-Zkopíruj `.env.example` do `.env` a doplň API klíče:
+Copy `.env.example` to `.env` and set your LLM API key:
 
 ```bash
 cp .env.example .env
 ```
 
-Klíčové proměnné:
-
-| Proměnná | Popis |
-|---|---|
-| `LLM_BACKEND` | `ollama` / `openai` / `gemini` / `deepseek` / `anthropic` |
-| `LLM_MODEL` | název modelu (backend se auto-detekuje z prefixu) |
-| `OPENAI_API_KEY` | klíč pro OpenAI |
-| `GOOGLE_API_KEY` | klíč pro Gemini |
-| `ANTHROPIC_API_KEY` | klíč pro Claude (Anthropic) |
-| `DEEPSEEK_API_KEY` | klíč pro DeepSeek |
-
-Výchozí backend je **Ollama** (lokální, bez klíče). Doporučený lehký model: `qwen2.5:1.5b`.
-
-## Rychlý start
-
-```bash
-# Ověř konfiguraci
-python src/agentflow/llm/LlmConfig.py show
-
-# Otestuj spojení s LLM (ping)
-python src/agentflow/llm/LlmConnector.py ping
-
-# Správa lokálních Ollama modelů
-python src/agentflow/llm/OllamaManager.py status
-
-# Spusť ukázkový skript (ReAct agent s nástroji)
-python src/examples/self_education/Agentni_systemy/my/02_tool_calling_demo.py
-
-# Zobraz konfiguraci agenta (Markdown / JSON) bez volání LLM
-python src/examples/self_education/Agentni_systemy/my/02_tool_calling_demo.py describe
-python src/examples/self_education/Agentni_systemy/my/02_tool_calling_demo.py json
-```
-
-## Testování
-
-### Unit testy — bez API klíčů, žádné síťové volání
-
-```bash
-pytest                   # výchozí — spustí pouze unit testy
-pytest -m unit           # ekvivalentní explicitní volání
-```
-
-### Integrační testy — živá LLM API volání (platíte tokeny!)
-
-```bash
-pytest -m integration    # výchozí model: gpt-4o-mini (nejlevnější)
-```
-
-Integrační testy jsou **záměrně vynechány** z výchozího běhu (`addopts = "-m 'not integration'"`
-v `pyproject.toml`). Spouštěj je jen ručně nebo v CI s nastaveným API klíčem.
-
-```bash
-# Jiný model/backend pro integrační testy:
-TEST_LLM_BACKEND=gemini TEST_LLM_MODEL=gemini-2.0-flash pytest -m integration
-```
-
-### Struktura testů
-
-```
-tests/                   # projekt-level testy (budoucí e2e, příklady, …)
-src/agentflow/tests/           # testy knihovny (přesunout spolu s lib při oddělení)
-```
-
-Obě složky jsou sbírány automaticky při každém `pytest`.
+| Variable | Description |
+|----------|-------------|
+| `LLM_BACKEND` | `openai` / `anthropic` / `ollama` / `gemini` / `deepseek` |
+| `LLM_MODEL` | Model name (e.g. `gpt-4o-mini`, `claude-3-haiku-20240307`) |
+| `OPENAI_API_KEY` | Required for OpenAI backend |
+| `ANTHROPIC_API_KEY` | Required for Anthropic backend |

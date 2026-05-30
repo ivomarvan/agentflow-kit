@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from git_root_to_syspath import agr
 
-agr()
-
-from src.agentflow.tools.common_tools.Calculator import Calculator
+from agentflow.tools.common_tools.Calculator import Calculator
 
 
 @pytest.fixture

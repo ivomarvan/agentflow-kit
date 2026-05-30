@@ -17,14 +17,14 @@ from collections import deque
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from src.agentflow.describable.describable import Describable
-from src.agentflow.statemachine.resolver import VertexResolver
-from src.agentflow.statemachine.state import apply_patches
-from src.agentflow.statemachine.vertex import End, StateVertex
+from agentflow.describable.describable import Describable
+from agentflow.statemachine.resolver import VertexResolver
+from agentflow.statemachine.state import apply_patches
+from agentflow.statemachine.vertex import End, StateVertex
 
 if TYPE_CHECKING:
-    from src.agentflow.describable.graph import Edge, Graph, Vertex
-    from src.agentflow.statemachine.signal import EnumSignal  # noqa: F401
+    from agentflow.describable.graph import Edge, Graph, Vertex
+    from agentflow.statemachine.signal import EnumSignal  # noqa: F401
 
 _logger = logging.getLogger(__name__)
 
@@ -245,7 +245,7 @@ class StateGraph(Describable):  # type: ignore[misc]
         Returns:
             ``Graph`` whose root children = topology nodes, edges = transitions.
         """
-        from src.agentflow.describable.graph import Graph, Vertex
+        from agentflow.describable.graph import Graph, Vertex
 
         nodes = self._collect_topology_nodes()
         node_ids = self._build_node_ids(nodes)
@@ -342,7 +342,7 @@ class StateGraph(Describable):  # type: ignore[misc]
         Returns:
             ``Vertex`` with topology metadata in ``description`` and ``attributes``.
         """
-        from src.agentflow.describable.graph import Vertex
+        from agentflow.describable.graph import Vertex
 
         cls_name = type(node).__name__
         attributes: dict[str, Any] = {}
@@ -370,7 +370,7 @@ class StateGraph(Describable):  # type: ignore[misc]
         Returns:
             List of ``Edge`` objects for ``Graph.edges``.
         """
-        from src.agentflow.describable.graph import Edge
+        from agentflow.describable.graph import Edge
 
         edges: list[Edge] = []
         for t in self._transitions:

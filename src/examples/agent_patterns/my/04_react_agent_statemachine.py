@@ -14,12 +14,10 @@ Graph topology:
 Run (requires a running LLM backend, e.g. Ollama):
     cd <repo-root>
     ollama pull qwen2.5:7b-instruct
-    uv run python -m src.examples.self_education.Agentni_systemy.my.04_react_agent_statemachine
+    uv run python -m src.examples.agent_patterns.my.04_react_agent_statemachine
 """
 
-from git_root_to_syspath import agr  # locate project root and add it to sys.path
 
-PROJECT_ROOT = agr()
 
 import json  # noqa: E402
 import operator  # noqa: E402
@@ -30,10 +28,10 @@ from typing import Annotated, Any, cast  # noqa: E402
 
 from dateutil import parser as dateutil_parser  # noqa: E402
 
-from src.agentflow.llm.ChatResponse import ToolCallInfo  # noqa: E402
-from src.agentflow.llm.LlmConfig import LlmConfig  # noqa: E402
-from src.agentflow.llm.LlmConnector import LlmConnector  # noqa: E402
-from src.agentflow.statemachine import (  # noqa: E402
+from agentflow.llm.ChatResponse import ToolCallInfo  # noqa: E402
+from agentflow.llm.LlmConfig import LlmConfig  # noqa: E402
+from agentflow.llm.LlmConnector import LlmConnector  # noqa: E402
+from agentflow.statemachine import (  # noqa: E402
     Context,
     End,
     EnumSignal,
@@ -43,8 +41,8 @@ from src.agentflow.statemachine import (  # noqa: E402
     StdSignal,
     Transition,
 )
-from src.agentflow.statemachine.hooks import LoggingHooks  # noqa: E402
-from src.agentflow.tools.Tool import ToolBase, param_desc  # noqa: E402
+from agentflow.statemachine.hooks import LoggingHooks  # noqa: E402
+from agentflow.tools.Tool import ToolBase, param_desc  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Tools — same implementations as in orig/04_react_agent_plain.py,

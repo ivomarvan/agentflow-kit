@@ -15,8 +15,8 @@ The HTML output uses:
 
 Usage::
 
-    from src.agentflow.describable.graph_renderer import GraphRenderer
-    from src.agentflow.describable import Describable  # build your own Describable subclass
+    from agentflow.describable.graph_renderer import GraphRenderer
+    from agentflow.describable import Describable  # build your own Describable subclass
 
     graph = build_demo_agent().get_graph()
     print(GraphRenderer.to_dot(graph))
@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.agentflow.describable.graph import Edge, Graph, Vertex
+    from agentflow.describable.graph import Edge, Graph, Vertex
 
 
 # ---------------------------------------------------------------------------

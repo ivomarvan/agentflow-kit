@@ -12,10 +12,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.agentflow.agents.ToolAgent import ToolAgent
-from src.agentflow.statemachine.adapters.tool_agent_vertex import ToolAgentVertex
-from src.agentflow.statemachine.signal import StdSignal
-from src.agentflow.statemachine.testing.fakes import make_fake_context
+from agentflow.agents.ToolAgent import ToolAgent
+from agentflow.statemachine.adapters.tool_agent_vertex import ToolAgentVertex
+from agentflow.statemachine.signal import StdSignal
+from agentflow.statemachine.testing.fakes import make_fake_context
 
 
 @pytest.mark.asyncio

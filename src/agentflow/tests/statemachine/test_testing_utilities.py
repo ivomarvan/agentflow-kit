@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio  # noqa: F401 — ensures asyncio plugin is active
 
-from src.agentflow.statemachine.signal import StdSignal
-from src.agentflow.statemachine.testing import FakeLlmConnector, FakeVertex, make_fake_context
+from agentflow.statemachine.signal import StdSignal
+from agentflow.statemachine.testing import FakeLlmConnector, FakeVertex, make_fake_context
 
 
 @pytest.mark.unit

@@ -2,15 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
-from git_root_to_syspath import agr
 
-agr()
-
-from src.agentflow.tools.Tool import ToolBase, build_parameters_schema, param_desc
-
+from agentflow.tools.Tool import ToolBase, param_desc
 
 # ---------------------------------------------------------------------------
 # Minimal concrete tool for testing

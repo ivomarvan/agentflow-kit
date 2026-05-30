@@ -29,10 +29,8 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from git_root_to_syspath import agr
-agr()
 
-from src.agentflow.describable.describable import Describable
+from agentflow.describable.describable import Describable
 
 logger = logging.getLogger(__name__)
 
@@ -356,10 +354,7 @@ class LlmConfig(Describable):
 if __name__ == "__main__":
     import sys
 
-    from git_root_to_syspath import agr  # locate project root and add it to sys.path
-    agr()
-
-    from src.agentflow.cli import make_arg_parser, setup_logging
+    from agentflow.cli import make_arg_parser, setup_logging
 
     setup_logging()
     parser = make_arg_parser(__doc__)

@@ -6,7 +6,7 @@ from enum import Enum, auto
 
 import pytest
 
-from src.agentflow.statemachine import EnumSignal, StdSignal
+from agentflow.statemachine import EnumSignal, StdSignal
 
 
 @pytest.mark.unit

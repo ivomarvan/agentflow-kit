@@ -2,15 +2,9 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
-from git_root_to_syspath import agr
 
-agr()
-
-from src.agentflow.llm.LlmConfig import LlmConfig, SUPPORTED_BACKENDS, OPENAI_COMPATIBLE_BACKENDS
-
+from agentflow.llm.LlmConfig import OPENAI_COMPATIBLE_BACKENDS, SUPPORTED_BACKENDS, LlmConfig
 
 # ---------------------------------------------------------------------------
 # _infer_backend

@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 import pytest
-from git_root_to_syspath import agr
 
-agr()
-
-from src.agentflow.tools.Tool import ToolBase, param_desc
-from src.agentflow.tools.ToolRegistry import ToolRegistry
-
+from agentflow.tools.Tool import ToolBase, param_desc
+from agentflow.tools.ToolRegistry import ToolRegistry
 
 # ---------------------------------------------------------------------------
 # Fixture tools
