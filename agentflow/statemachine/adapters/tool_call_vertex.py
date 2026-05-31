@@ -53,6 +53,7 @@ class ToolCallVertex(StateVertex):  # type: ignore[misc]
         ok_signal: Any = StdSignal.ok,
         fail_signal: Any = StdSignal.fail,
     ) -> None:
+        super().__init__()
         self._tool = tool
         self._args_from_state = args_from_state
         self._result_to_patch = result_to_patch

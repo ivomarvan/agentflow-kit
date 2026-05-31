@@ -19,10 +19,9 @@ class _SimpleVertex(StateVertex):
 
 
 class _ParamVertex(StateVertex):
-    """StateVertex subclass that requires a constructor argument without a default."""
+    """StateVertex subclass with a required field — cannot be auto-instantiated."""
 
-    def __init__(self, name: str) -> None:
-        self.name = name
+    name: str  # required field, no default
 
     async def run(self, state: object, ctx: Context) -> tuple[Any, Any]:
         return StdSignal.done, None

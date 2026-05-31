@@ -19,6 +19,7 @@ from git_root_to_syspath import agr  # locate project root and add it to sys.pat
 
 agr()
 
+from agentflow.logging_config import setup_pretty_logging  # noqa: E402
 from agentflow import AgentApp  # noqa: E402
 from agentflow.statemachine import (  # noqa: E402
     Context,
@@ -176,5 +177,5 @@ class HotelBookingApp(AgentApp):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    setup_pretty_logging()
     HotelBookingApp().cli(__doc__, name=__name__)

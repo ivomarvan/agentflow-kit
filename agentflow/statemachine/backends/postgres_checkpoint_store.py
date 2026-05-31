@@ -82,7 +82,7 @@ class PostgresCheckpointStore:
             await self._pool.close()
             self._pool = None
 
-    async def __aenter__(self) -> "PostgresCheckpointStore":
+    async def __aenter__(self) -> PostgresCheckpointStore:
         """Async context manager: connect on enter."""
         await self.connect()
         return self

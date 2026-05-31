@@ -33,10 +33,9 @@ class _CVertex(StateVertex):
 
 
 class _RequiredParamVertex(StateVertex):
-    """Vertex whose constructor requires a positional argument — cannot be auto-instantiated."""
+    """Vertex with a required field — cannot be auto-instantiated."""
 
-    def __init__(self, required: str) -> None:
-        self._required = required
+    required: str  # required field, no default
 
     async def run(self, state: object, ctx: Context) -> tuple[Any, Any]:
         return (object(), object())

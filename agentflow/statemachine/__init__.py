@@ -1,13 +1,16 @@
 """agentflow.statemachine — declarative state graph orchestration for AI agents.
 
 Public API grows incrementally with each Task of Epic E010-E070 (see roadmap.md).
-Current exports (after E091-T020): EnumSignal, StdSignal, apply_patches, UNSET, Context,
-StateVertex, End, StdEnd, RunnerHooks, NoOpHooks, LoggingHooks, RecorderHooks,
+Current exports (after E103-T02): Signal, EnumSignal, StdSignal, apply_patches, UNSET, Context,
+RunStats, StateVertex, End, StdEnd, RunnerHooks, NoOpHooks, LoggingHooks, RecorderHooks,
 SuperStepRecord, LiveGraphHooks, Transition, Parallel, StateGraph, StateGraphRunner,
 VertexResolver, ToolCallVertex, LlmTurnVertex, ToolAgentVertex,
 CheckpointRecord, CheckpointStore, InMemoryCheckpointStore, JsonFileCheckpointStore,
-PostgresCheckpointStore, RedisCheckpointStore.
+PostgresCheckpointStore, RedisCheckpointStore,
+ReActState, ReActPatch, ReActSignal, ToolCallInfo (ReAct variant).
 """
+
+from enum import Enum as Signal  # allow: class MySignal(Signal): ...
 
 from agentflow.statemachine.adapters import LlmTurnVertex, ToolAgentVertex, ToolCallVertex
 from agentflow.statemachine.backends.postgres_checkpoint_store import (
@@ -31,7 +34,9 @@ from agentflow.statemachine.hooks import (
     RunnerHooks,
     SuperStepRecord,
 )
+from agentflow.statemachine.react import ReActPatch, ReActSignal, ReActState, ToolCallInfo
 from agentflow.statemachine.resolver import VertexResolver
+from agentflow.statemachine.run_stats import RunStats
 from agentflow.statemachine.runner import StateGraphRunner
 from agentflow.statemachine.signal import EnumSignal, StdSignal
 from agentflow.statemachine.state import UNSET, apply_patches
@@ -44,6 +49,11 @@ __all__ = [
     "Context",
     "End",
     "EnumSignal",
+    "ReActPatch",
+    "ReActSignal",
+    "ReActState",
+    "Signal",
+    "ToolCallInfo",
     "InMemoryCheckpointStore",
     "JsonFileCheckpointStore",
     "LiveGraphHooks",
@@ -55,6 +65,7 @@ __all__ = [
     "RecorderHooks",
     "RedisCheckpointStore",
     "RunnerHooks",
+    "RunStats",
     "StateGraph",
     "StateGraphRunner",
     "StdEnd",

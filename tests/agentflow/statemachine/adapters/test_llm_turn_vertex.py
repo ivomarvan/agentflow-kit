@@ -63,12 +63,12 @@ async def test_llm_turn_vertex_passes_tools_parameter_to_achat() -> None:
     received_tools: list[Any] = []
 
     class CapturingConnector(FakeLlmConnector):
-        def chat(
+        def _do_chat(
             self,
             messages: list[dict[str, Any]],
-            tools: list[dict[str, Any]] | None = None,
-            temperature: float = 0.2,
-            model_override: str | None = None,
+            tools: list[dict[str, Any]] | None,
+            temperature: float,
+            model_override: str | None,
         ) -> ChatResponse:
             received_tools.append(tools)
             return ChatResponse(

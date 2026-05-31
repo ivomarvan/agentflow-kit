@@ -21,8 +21,8 @@ import os
 
 import pytest
 
+from agentflow.llm.connectors import LlmConnector
 from agentflow.llm.LlmConfig import LlmConfig
-from agentflow.llm.LlmConnector import LlmConnector
 
 # ---------------------------------------------------------------------------
 # Integration test model defaults
@@ -68,4 +68,4 @@ def integration_config() -> LlmConfig:
 @pytest.fixture(scope="session")
 def integration_connector(integration_config: LlmConfig) -> LlmConnector:
     """Session-scoped LlmConnector for integration tests."""
-    return LlmConnector.create(integration_config)
+    return LlmConnector(integration_config)

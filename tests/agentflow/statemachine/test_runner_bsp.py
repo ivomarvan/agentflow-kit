@@ -145,6 +145,7 @@ class _LoopVertex(StateVertex):
     """Vertex that returns StdSignal.ok for max_loops-1 calls, then StdSignal.done."""
 
     def __init__(self, max_loops: int) -> None:
+        super().__init__()
         self._max = max_loops
         self.calls = 0
 

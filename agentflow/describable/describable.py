@@ -30,9 +30,9 @@ Subclassing contract::
 
     class MyClass(Describable):
         def __init__(self, param: str, child: OtherDescribable) -> None:
-            super().__init__()       # sets self.name (class name) and self.description (__doc__)
-            self.param = param       # public scalar  → appears in get_description_item_dict()
-            self.child = child       # Describable    → becomes a child vertex in get_graph()
+            super().__init__()    # sets self.name = type(self).__name__, self.description = __doc__
+            self.param = param    # public scalar  → appears in get_description_item_dict()
+            self.child = child    # Describable    → becomes a child vertex in get_graph()
 
     # Override _get_own_attributes() when scalars are stored privately:
     class MyClass(Describable):
@@ -63,8 +63,8 @@ if TYPE_CHECKING:
 class Describable:
     """Base class for objects that can describe their own structure.
 
-    Sets ``self.name`` (from *name* or the class name) and
-    ``self.description`` (from the class docstring) in ``__init__``.
+    Sets ``self.name`` (from the class name) and ``self.description`` (from
+    the class docstring) in ``__init__``.
 
     Subclasses **must** call ``super().__init__()`` to ensure these attributes
     are always present.
@@ -78,15 +78,26 @@ class Describable:
     them).
     """
 
-    def __init__(self, name: str | None = None) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         """Initialise common identity attributes.
 
+        Sets ``self.name`` to the class name and ``self.description`` to the
+        class docstring.  Subclasses may override ``self.name`` after calling
+        ``super().__init__()``.
+
+        Accepts and forwards ``**kwargs`` to support cooperative multiple
+        inheritance (e.g. when combined with Pydantic ``BaseModel`` — kwargs
+        are forwarded to ``BaseModel.__init__`` for field initialisation).
+
         Args:
-            name: Optional human-readable label.  When omitted, defaults to
-                  the class name (``type(self).__name__``).
+            **kwargs: Forwarded to the next class in the MRO.
         """
-        self.name: str = name if name is not None else type(self).__name__
-        self.description: str = inspect.getdoc(type(self)) or ""
+        # Use object.__setattr__ to bypass Pydantic's __setattr__ when this
+        # class is combined with BaseModel via multiple inheritance — Pydantic
+        # has not yet initialised __pydantic_extra__ at this point in the MRO.
+        object.__setattr__(self, "name", type(self).__name__)
+        object.__setattr__(self, "description", inspect.getdoc(type(self)) or "")
+        super().__init__(**kwargs)
 
     # ------------------------------------------------------------------
     # Hook — override in subclasses to customise which attrs are described
@@ -205,6 +216,129 @@ class Describable:
         body = self._dict_to_html(self.get_description_dict())
         return self._wrap_html_page(body)
 
+    # ------------------------------------------------------------------
+    # Public — runtime configuration (GUI Settings tab)
+    # ------------------------------------------------------------------
+
+    def get_config_schema(self) -> dict[str, Any]:
+        """Return a JSON Schema dict for all scalar configurable parameters.
+
+        For Pydantic BaseModel instances delegates to ``model_json_schema()``
+        and filters to scalar types only.  For non-Pydantic instances builds
+        the schema from ``__init__`` type hints via ``_schema_from_init()``.
+
+        Returns:
+            JSON Schema dict; empty dict if no configurable params found.
+        """
+        from pydantic import BaseModel
+
+        if isinstance(self, BaseModel):
+            schema = self.model_json_schema()
+            props = schema.get("properties", {})
+            scalar_types = {"string", "integer", "number", "boolean"}
+            filtered = {
+                k: v
+                for k, v in props.items()
+                if isinstance(v, dict) and v.get("type") in scalar_types
+            }
+            return {**schema, "properties": filtered}
+        return self._schema_from_init()
+
+    def _schema_from_init(self) -> dict[str, Any]:
+        """Build a minimal JSON Schema from ``__init__`` type hint annotations.
+
+        Inspects the ``__init__`` signature and type hints of this class,
+        mapping Python scalar types to JSON Schema types.  Parameters of
+        complex types (lists, dicts, custom classes) are silently skipped.
+
+        Returns:
+            JSON Schema dict with ``"type": "object"`` and ``"properties"``
+            for each discovered scalar parameter; empty dict if none found.
+        """
+        import inspect
+        from typing import get_args, get_origin, get_type_hints
+
+        from pydantic.fields import FieldInfo
+
+        sig = inspect.signature(type(self).__init__)
+        try:
+            hints = get_type_hints(type(self).__init__, include_extras=True)
+        except Exception:
+            return {}
+
+        type_map: dict[type, str] = {
+            int: "integer",
+            float: "number",
+            str: "string",
+            bool: "boolean",
+        }
+
+        properties: dict[str, Any] = {}
+        for param_name, param in sig.parameters.items():
+            if param_name in ("self", "args", "kwargs"):
+                continue
+            hint = hints.get(param_name)
+            if hint is None:
+                continue
+            origin = get_origin(hint)
+            args = get_args(hint)
+            base_type = args[0] if origin is not None and args else hint
+            json_type = type_map.get(base_type)
+            if json_type is None:
+                continue
+            prop: dict[str, Any] = {"type": json_type}
+            if param.default is not inspect.Parameter.empty:
+                prop["default"] = param.default
+            if origin is not None:
+                for meta in args[1:]:
+                    if isinstance(meta, FieldInfo) and meta.description:
+                        prop["description"] = meta.description
+            properties[param_name] = prop
+
+        if not properties:
+            return {}
+        return {"type": "object", "properties": properties}
+
+    def get_param_values(self) -> dict[str, Any]:
+        """Return current values of all configurable scalar parameters.
+
+        Returns:
+            Dict mapping parameter name to current attribute value.
+        """
+        schema = self.get_config_schema()
+        params = schema.get("properties", {})
+        return {
+            name: getattr(self, name)
+            for name in params
+            if hasattr(self, name)
+        }
+
+    def set_params(self, **kwargs: Any) -> None:
+        """Update configurable scalar parameters at runtime.
+
+        Used by the GUI Settings tab to apply user edits without recreating
+        the object.  Unknown keys are logged as warnings and ignored; valid
+        keys are applied via ``setattr``.
+
+        Args:
+            **kwargs: Parameter names and new values.
+
+        Raises:
+            Nothing — invalid keys are warned, not raised.
+        """
+        import logging
+
+        schema = self.get_config_schema()
+        valid_keys = set(schema.get("properties", {}).keys())
+        _log = logging.getLogger(__name__)
+        for key, value in kwargs.items():
+            if key not in valid_keys:
+                _log.warning(
+                    "set_params: unknown parameter %r (valid: %s)", key, sorted(valid_keys)
+                )
+                continue
+            setattr(self, key, value)
+
     def get_graph(self) -> Graph:
         """Build a composition Graph rooted at this object.
 
@@ -292,7 +426,7 @@ class Describable:
         """
         from agentflow.describable.graph_renderer import GraphRenderer
         return GraphRenderer.to_html(
-            self.get_graph(), title=title or self.name, title_tooltip=title_tooltip
+            self.get_graph(), title=title or type(self).__name__, title_tooltip=title_tooltip
         )
 
     def open_graph_browser(self, title: str = "", title_tooltip: str = "") -> None:
@@ -304,7 +438,7 @@ class Describable:
         """
         from agentflow.describable.graph_renderer import GraphRenderer
         GraphRenderer.open_browser(
-            self.get_graph(), title=title or self.name, title_tooltip=title_tooltip
+            self.get_graph(), title=title or type(self).__name__, title_tooltip=title_tooltip
         )
 
     # ------------------------------------------------------------------
@@ -472,7 +606,7 @@ class Describable:
             else:
                 result = self.run()
             if result is not None:
-                print(result)
+                print(f"\n{result}")
 
     # ------------------------------------------------------------------
     # Private — graph building
@@ -492,6 +626,36 @@ class Describable:
             ``Vertex`` with description from ``get_description_item_dict()``
             and children built from public ``Describable`` attributes.
         """
+    def _extra_describable_children(self) -> dict[str, Describable]:
+        """Return additional Describable children that are not public attributes.
+
+        Override this in subclasses to expose private attributes (e.g. injected
+        dependencies stored under ``self._cache``) as nested boxes in the graph.
+
+        The default implementation returns an empty dict — no extra children.
+
+        Returns:
+            Dict mapping display name → Describable child instance.
+        """
+        return {}
+
+    def _build_vertex(self, vertex_id: str) -> Vertex:
+        """Recursively build a Vertex for this object and all owned Describables.
+
+        Traverses ``vars(self)`` to find public ``Describable`` attributes and
+        lists of ``Describable`` objects, then recurses into each.  Also calls
+        ``_extra_describable_children()`` to include private dependencies that
+        the subclass explicitly wishes to expose.
+
+        Args:
+            vertex_id: Unique identifier for this vertex — a dot-separated
+                       path from the root, e.g. ``"ToolAgent.connector.config"``.
+
+        Returns:
+            ``Vertex`` with description from ``get_description_item_dict()``
+            and children built from public ``Describable`` attributes and
+            any extras returned by ``_extra_describable_children()``.
+        """
         from agentflow.describable.graph import Vertex  # lazy import — keeps module standalone
         children: list[Vertex] = []
         for key, value in vars(self).items():
@@ -503,6 +667,8 @@ class Describable:
                 for i, item in enumerate(value):
                     if isinstance(item, Describable):
                         children.append(item._build_vertex(f"{vertex_id}.{key}[{i}]"))
+        for key, value in self._extra_describable_children().items():
+            children.append(value._build_vertex(f"{vertex_id}.{key}"))
         return Vertex(
             id=vertex_id,
             label=type(self).__name__,

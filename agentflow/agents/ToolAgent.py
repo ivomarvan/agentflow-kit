@@ -39,7 +39,7 @@ Pattern: Strategy (the loop delegates tool dispatch to ToolRegistry).
 from __future__ import annotations
 
 import logging
-from typing import Any, Union
+from typing import Any
 
 from agentflow.describable.describable import Describable
 from agentflow.llm.LlmConnector import LlmConnector
@@ -68,14 +68,16 @@ class ToolAgent(Describable):
     def __init__(
         self,
         connector: LlmConnector,
-        tools: Union[ToolRegistry, list[ToolBase]],
+        tools: ToolRegistry | list[ToolBase],
         system_prompt: str,
         name: str = "",
         description: str = "",
         max_steps: int = 10,
         temperature: float = 0.2,
     ) -> None:
-        super().__init__(name=name or None)
+        super().__init__()
+        if name:
+            self.name = name
         if isinstance(tools, list):
             registry = ToolRegistry(tools=tools)
         else:

@@ -81,11 +81,33 @@ class VertexResolver:
         for name, param in sig.parameters.items():
             if name == "self":
                 continue
+            # VAR_POSITIONAL (*args) and VAR_KEYWORD (**kwargs) never require a value;
+            # Pydantic models expose **extra_data in their generated __init__ signature.
+            if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                continue
             if param.default is inspect.Parameter.empty:
                 raise ValueError(
                     f"Cannot auto-instantiate {cls.__name__}: parameter '{name}' has no "
                     "default value. Add a default or pass an instance directly."
                 )
+
+    def seed(self, instances: list[StateVertex]) -> None:
+        """Pre-populate the resolver cache with pre-instantiated vertex objects.
+
+        When a caller provides ready-made instances (e.g. via StateGraph's
+        ``initialized_vertexes`` parameter), this method registers them so that
+        subsequent resolve() calls for their class return the provided instance
+        instead of creating a new one.
+
+        Args:
+            instances: List of StateVertex instances to register.
+        """
+        for instance in instances:
+            cls = type(instance)
+            self._store[cls] = instance
+            if cls.__name__ not in self._name_index:
+                self._name_index[cls.__name__] = instance
+            logger.debug("Seeded vertex: class=%s id=%s", cls.__name__, id(instance))
 
     def clear(self) -> None:
         """Remove all cached instances — for test isolation.

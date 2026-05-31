@@ -26,15 +26,15 @@ import anthropic
 
 from agentflow.llm.ChatResponse import ChatResponse, UsageInfo
 from agentflow.llm.LlmConfig import LlmConfig
-from agentflow.llm.LlmConnector import LlmConnector
+from agentflow.llm.LlmConnectorBase import LlmConnectorBase
 
 logger = logging.getLogger(__name__)
 
 _MAX_TOKENS_DEFAULT = 4096
 
 
-class AnthropicConnector(LlmConnector):
-    """LlmConnector for the Anthropic (Claude) backend.
+class AnthropicConnector(LlmConnectorBase):
+    """LlmConnectorBase implementation for the Anthropic (Claude) backend.
 
     Uses the native ``anthropic.Anthropic`` SDK.  Adapts the Anthropic
     Messages API response to the shared ``ChatResponse`` value object so
@@ -53,7 +53,7 @@ class AnthropicConnector(LlmConnector):
         super().__init__()
         self._config = config
         self._client = anthropic.Anthropic(api_key=config.api_key)
-        # Lazy-initialised on first achat() call to avoid startup overhead
+        # Lazy-initialised on first _do_achat() call to avoid startup overhead
         # when only the sync path is used.
         self._async_client_cache: anthropic.AsyncAnthropic | None = None
         logger.info(
@@ -77,20 +77,19 @@ class AnthropicConnector(LlmConnector):
         return self._async_client_cache
 
     # ------------------------------------------------------------------
-    # LlmConnector interface
+    # LlmConnectorBase interface
     # ------------------------------------------------------------------
 
     @property
     def config(self) -> LlmConfig:
         return self._config
 
-    def chat(
+    def _do_chat(
         self,
         messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        temperature: float = 0.2,
-        model_override: str | None = None,
-        max_tokens: int = _MAX_TOKENS_DEFAULT,
+        tools: list[dict[str, Any]] | None,
+        temperature: float,
+        model_override: str | None,
     ) -> ChatResponse:
         """Send a chat request to the Anthropic Messages API.
 
@@ -106,8 +105,6 @@ class AnthropicConnector(LlmConnector):
             temperature: Sampling temperature (0.0 – 1.0).
             model_override: Per-call model name override.  Uses ``config.model``
                             when ``None``.
-            max_tokens: Maximum tokens to generate.  Anthropic requires an
-                        explicit value; defaults to ``4096``.
 
         Returns:
             ``ChatResponse`` with role, content, and usage.
@@ -130,7 +127,7 @@ class AnthropicConnector(LlmConnector):
 
         kwargs: dict[str, Any] = {
             "model": model,
-            "max_tokens": max_tokens,
+            "max_tokens": _MAX_TOKENS_DEFAULT,
             "temperature": temperature,
             "messages": user_messages,
         }
@@ -152,18 +149,17 @@ class AnthropicConnector(LlmConnector):
         )
         return response
 
-    async def achat(
+    async def _do_achat(
         self,
         messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        temperature: float = 0.2,
-        model_override: str | None = None,
-        max_tokens: int = _MAX_TOKENS_DEFAULT,
+        tools: list[dict[str, Any]] | None,
+        temperature: float,
+        model_override: str | None,
     ) -> ChatResponse:
-        """Async counterpart to chat() — uses AsyncAnthropic client natively.
+        """Async counterpart to _do_chat() — uses AsyncAnthropic client natively.
 
         Extracts ``system`` role messages and forwards them via the dedicated
-        ``system=`` parameter, matching the behaviour of the sync ``chat()``.
+        ``system=`` parameter, matching the behaviour of the sync ``_do_chat()``.
 
         Args:
             messages: OpenAI-format message list.  ``system`` role entries are
@@ -171,7 +167,6 @@ class AnthropicConnector(LlmConnector):
             tools: Tool definitions (not yet implemented for Anthropic — logged as warning).
             temperature: Sampling temperature (0.0 – 1.0).
             model_override: Per-call model name override.
-            max_tokens: Maximum tokens to generate; Anthropic requires an explicit value.
 
         Returns:
             ``ChatResponse`` with role, content, and usage.
@@ -192,7 +187,7 @@ class AnthropicConnector(LlmConnector):
 
         kwargs: dict[str, Any] = {
             "model": model,
-            "max_tokens": max_tokens,
+            "max_tokens": _MAX_TOKENS_DEFAULT,
             "temperature": temperature,
             "messages": user_messages,
         }

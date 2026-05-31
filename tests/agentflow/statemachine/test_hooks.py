@@ -36,7 +36,7 @@ class TestLoggingHooks:
         hooks = LoggingHooks()
         with caplog.at_level(logging.DEBUG, logger="statemachine.runner"):
             asyncio.run(hooks.on_super_step_start(1, object(), []))
-        assert any("super_step_start" in r.message for r in caplog.records)
+        assert any("step #1 start" in r.message for r in caplog.records)
 
     def test_logging_hooks_logs_vertex_error(self, caplog: pytest.LogCaptureFixture) -> None:
         class _FakeVertex:

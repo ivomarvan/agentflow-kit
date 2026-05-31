@@ -13,13 +13,13 @@ The graph cycles until Review approves — after APPROVE_AFTER rejections.
 FakeLlmConnector is used so no real LLM calls are made.
 """
 
-import logging
 import operator
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 from agentflow import AgentApp
+from agentflow.logging_config import setup_pretty_logging
 from agentflow.statemachine import (
     Context,
     Parallel,
@@ -77,7 +77,7 @@ class CustomSignal(Enum):
 class Research(StateVertex):
     """Simulates a research phase — always succeeds with CustomSignal.ok."""
 
-    async def run(self, state: object, ctx: Context) -> tuple[Any, Any]:
+    async def run(self, state: DemoState, ctx: Context) -> tuple[Any, Any]:
         """Produce a research-completed message and route with ok.
 
         Args:
@@ -87,15 +87,14 @@ class Research(StateVertex):
         Returns:
             Tuple (CustomSignal.ok, DemoPatch with research message).
         """
-        s = cast(DemoState, state)
-        patch = DemoPatch(messages=(f"Research completed (cycle={s.iteration}).",))
+        patch = DemoPatch(messages=(f"Research completed (cycle={state.iteration}).",))
         return CustomSignal.ok, patch
 
 
 class WriteIntro(StateVertex):
     """Simulates writing the introduction section."""
 
-    async def run(self, state: object, ctx: Context) -> tuple[Any, Any]:
+    async def run(self, state: DemoState, ctx: Context) -> tuple[Any, Any]:
         """Append an intro-written message and signal done.
 
         Args:
@@ -112,7 +111,7 @@ class WriteIntro(StateVertex):
 class WriteBody(StateVertex):
     """Simulates writing the body content."""
 
-    async def run(self, state: object, ctx: Context) -> tuple[Any, Any]:
+    async def run(self, state: DemoState, ctx: Context) -> tuple[Any, Any]:
         """Append a body-written message and signal done.
 
         Args:
@@ -133,7 +132,7 @@ class Review(StateVertex):
     otherwise increments iteration and returns rejected to trigger a loop.
     """
 
-    async def run(self, state: object, ctx: Context) -> tuple[Any, Any]:
+    async def run(self, state: DemoState, ctx: Context) -> tuple[Any, Any]:
         """Approve or reject based on how many cycles have occurred.
 
         Args:
@@ -144,12 +143,11 @@ class Review(StateVertex):
             (CustomSignal.approved, patch) when iteration >= _APPROVE_AFTER;
             (CustomSignal.rejected, patch with incremented iteration) otherwise.
         """
-        s = cast(DemoState, state)
-        if s.iteration >= _APPROVE_AFTER:
+        if state.iteration >= _APPROVE_AFTER:
             patch = DemoPatch(messages=("Review: content approved.",))
             return CustomSignal.approved, patch
 
-        new_iter = s.iteration + 1
+        new_iter = state.iteration + 1
         patch = DemoPatch(
             messages=(f"Review: rejected — revision {new_iter} requested.",),
             iteration=new_iter,
@@ -185,15 +183,12 @@ class BriefExampleApp(AgentApp):
 
     async def run_workflow(self) -> str | None:
         """Run the §2.5 demo graph to completion and print the summary."""
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(levelname)s %(name)s — %(message)s",
-        )
+        setup_pretty_logging()
 
         ctx = Context(connector=self.connector)
         hooks = LoggingHooks()
         runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
-        final_state = cast(DemoState, await runner.run(DemoState()))
+        final_state: DemoState = await runner.run(DemoState())  # type: ignore[assignment]
 
         print("\n--- Demo Complete ---")
         print(f"Total cycles:  {final_state.iteration + 1}")

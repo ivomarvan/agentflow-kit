@@ -1,18 +1,14 @@
-"""Public API of the ``src.agentflow`` LLM abstraction library.
+"""Public API of the agentflow LLM agent orchestration library.
 
 Quick start::
 
-    from src.agentflow import LlmConfig, LlmConnector
+    from agentflow import LlmConnector, LlmConfig
+    from agentflow.llm.cache import LlmFileCache
 
-    connector = LlmConnector.create(LlmConfig.from_env())
-    print(connector.describe())
-
+    connector = LlmConnector(cache=LlmFileCache(__file__))
     response = connector.chat([{"role": "user", "content": "Hello!"}])
     print(response.text)
 """
-
-# Ensure the repository root is in sys.path so that ``src.*`` imports work
-# when the library (or its tests) is loaded from any working directory.
 
 from agentflow.agents.ToolAgent import ToolAgent
 from agentflow.app import AgentApp
@@ -28,24 +24,46 @@ from agentflow.events import (
     StepEndEvent,
     StepStartEvent,
 )
+from agentflow.llm.cache import LlmCacheBase, LlmFileCache, LlmMemoryCache
 from agentflow.llm.ChatResponse import ChatResponse, ToolCallFunction, ToolCallInfo, UsageInfo
 from agentflow.llm.connectors.AnthropicConnector import AnthropicConnector
+from agentflow.llm.connectors.FakeLlmConnector import FakeLlmConnector
+from agentflow.llm.connectors.FakeLlmRegexConnector import FakeLlmRegexConnector
+from agentflow.llm.connectors.LlmConnector import LlmConnector
 from agentflow.llm.connectors.OpenAiConnector import OpenAiConnector
 from agentflow.llm.LlmConfig import OPENAI_COMPATIBLE_BACKENDS, SUPPORTED_BACKENDS, LlmConfig
-from agentflow.llm.LlmConnector import LlmConnector
+from agentflow.llm.LlmConnectorBase import LlmConnectorBase
 from agentflow.llm.OllamaManager import OllamaManager, OllamaModelInfo
-from agentflow.statemachine import EnumSignal, StdSignal
+from agentflow.logging_config import PrettyFormatter, setup_pretty_logging
+from agentflow.statemachine import (
+    EnumSignal,
+    ReActPatch,
+    ReActSignal,
+    ReActState,
+    Signal,
+    StdSignal,
+)
 from agentflow.tools.Tool import ToolBase, build_parameters_schema, param_desc
 from agentflow.tools.ToolRegistry import ToolRegistry
 
 __all__ = [
-    # Config & connectors
+    # Config
     "LlmConfig",
-    "LlmConnector",
-    "OpenAiConnector",
-    "AnthropicConnector",
     "SUPPORTED_BACKENDS",
     "OPENAI_COMPATIBLE_BACKENDS",
+    # Connector base & smart connector
+    "LlmConnectorBase",
+    "LlmConnector",
+    # Backend-specific connectors
+    "OpenAiConnector",
+    "AnthropicConnector",
+    # Fake connectors for testing
+    "FakeLlmConnector",
+    "FakeLlmRegexConnector",
+    # Cache
+    "LlmCacheBase",
+    "LlmFileCache",
+    "LlmMemoryCache",
     # Ollama management
     "OllamaManager",
     "OllamaModelInfo",
@@ -64,6 +82,9 @@ __all__ = [
     # Application base class
     "AgentApp",
     "ExampleApp",  # deprecated alias — use AgentApp
+    # Logging utilities
+    "setup_pretty_logging",
+    "PrettyFormatter",
     # Configuration introspection
     "ConfigParam",
     # Domain events
@@ -81,9 +102,13 @@ __all__ = [
     "Vertex",
     "Edge",
     "GraphRenderer",
-    # State machine (Epic E010)
+    # State machine
     "EnumSignal",
     "StdSignal",
+    "Signal",
+    "ReActState",
+    "ReActPatch",
+    "ReActSignal",
 ]
 
 # Backward-compatible alias — use AgentApp in new code

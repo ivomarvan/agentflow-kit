@@ -108,6 +108,7 @@ class StateGraphRunner:
                         next_set.add(vertex)
 
             await self.hooks.on_super_step_end(step, current_state, next_set)
+            self.context.step += 1
             active_nodes = list(next_set)
 
         await self.hooks.on_run_end(current_state)
@@ -192,6 +193,7 @@ class StateGraphRunner:
                         next_set.add(vertex)
 
             await self.hooks.on_super_step_end(step, current_state, next_set)
+            self.context.step += 1
             active_nodes = list(next_set)
 
             await store.save(
@@ -282,6 +284,7 @@ class StateGraphRunner:
                         next_set.add(vertex)
 
             await self.hooks.on_super_step_end(step, current_state, next_set)
+            self.context.step += 1
             active_nodes = list(next_set)
 
         await self.hooks.on_run_end(current_state)
