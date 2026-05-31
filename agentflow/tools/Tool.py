@@ -204,8 +204,9 @@ class ToolBase(Describable):
             name: Optional explicit tool name.  When omitted, derived from the
                   class name via ``_camel_to_snake()``.
         """
-        super().__init__(name=name or _camel_to_snake(type(self).__name__))
-        # self.description is set from __doc__ by Describable.__init__
+        super().__init__()
+        # Override the class-name default with a snake_case tool name for LLM schemas
+        self.name = name or _camel_to_snake(type(self).__name__)
 
     def _get_own_attributes(self) -> dict[str, Any]:
         d = super()._get_own_attributes()

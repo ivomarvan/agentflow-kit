@@ -15,12 +15,12 @@ Run with:
     uv run python examples/quickstart/04_parallel_research_loop.py graph-html   # save HTML graph
 """
 
-import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, cast
+from typing import Any
 
 from agentflow import AgentApp
+from agentflow.logging_config import setup_pretty_logging
 from agentflow.statemachine import (
     Context,
     Parallel,
@@ -93,7 +93,7 @@ class ResearchPatch:
 class Research(StateVertex):
     """Resets draft fields and logs the start of a new research iteration."""
 
-    async def run(self, state: object, ctx: Context) -> tuple[Any, Any]:
+    async def run(self, state: ResearchState, ctx: Context) -> tuple[Any, Any]:
         """Reset intro, body and review_notes, then signal fan-out to parallel writers.
 
         Args:
@@ -103,15 +103,14 @@ class Research(StateVertex):
         Returns:
             (StdSignal.ok, ResearchPatch) that clears draft fields for this cycle.
         """
-        s = cast(ResearchState, state)
-        print(f"Research: iteration {s.revision_count + 1}, topic='{s.topic}'")
+        print(f"Research: iteration {state.revision_count + 1}, topic='{state.topic}'")
         return StdSignal.ok, ResearchPatch(intro="", body="", review_notes="")
 
 
 class WriteIntro(StateVertex):
     """Writes the introduction section of the research report."""
 
-    async def run(self, state: object, ctx: Context) -> tuple[Any, Any]:
+    async def run(self, state: ResearchState, ctx: Context) -> tuple[Any, Any]:
         """Produce a stub introduction and signal completion.
 
         Args:
@@ -121,14 +120,13 @@ class WriteIntro(StateVertex):
         Returns:
             (StdSignal.done, ResearchPatch) with intro populated.
         """
-        s = cast(ResearchState, state)
-        return StdSignal.done, ResearchPatch(intro=f"[Intro for '{s.topic}']")
+        return StdSignal.done, ResearchPatch(intro=f"[Intro for '{state.topic}']")
 
 
 class WriteBody(StateVertex):
     """Writes the body content of the research report."""
 
-    async def run(self, state: object, ctx: Context) -> tuple[Any, Any]:
+    async def run(self, state: ResearchState, ctx: Context) -> tuple[Any, Any]:
         """Produce a stub body and signal completion.
 
         Args:
@@ -138,14 +136,13 @@ class WriteBody(StateVertex):
         Returns:
             (StdSignal.done, ResearchPatch) with body populated.
         """
-        s = cast(ResearchState, state)
-        return StdSignal.done, ResearchPatch(body=f"[Body for '{s.topic}']")
+        return StdSignal.done, ResearchPatch(body=f"[Body for '{state.topic}']")
 
 
 class Review(StateVertex):
     """Reviews the draft and auto-approves after _MAX_REVISIONS iterations."""
 
-    async def run(self, state: object, ctx: Context) -> tuple[Any, Any]:
+    async def run(self, state: ResearchState, ctx: Context) -> tuple[Any, Any]:
         """Approve or request revision based on the current revision_count.
 
         Args:
@@ -156,8 +153,7 @@ class Review(StateVertex):
             (ReviewSignal.approved, patch) when new_count >= _MAX_REVISIONS;
             (ReviewSignal.needs_revision, patch with incremented count) otherwise.
         """
-        s = cast(ResearchState, state)
-        new_count = s.revision_count + 1
+        new_count = state.revision_count + 1
         if new_count >= _MAX_REVISIONS:
             print(f"Review: approving after {new_count} revision(s)")
             return ReviewSignal.approved, ResearchPatch(revision_count=new_count)
@@ -171,7 +167,7 @@ class Review(StateVertex):
 class Publish(StateVertex):
     """Assembles and prints the final report from the approved intro and body."""
 
-    async def run(self, state: object, ctx: Context) -> tuple[Any, Any]:
+    async def run(self, state: ResearchState, ctx: Context) -> tuple[Any, Any]:
         """Combine intro and body into final_report and print it.
 
         Args:
@@ -181,8 +177,7 @@ class Publish(StateVertex):
         Returns:
             (StdSignal.ok, ResearchPatch) with final_report assembled.
         """
-        s = cast(ResearchState, state)
-        report = f"{s.intro}\n{s.body}"
+        report = f"{state.intro}\n{state.body}"
         print(f"\n=== PUBLISHED ===\n{report}\n================")
         return StdSignal.ok, ResearchPatch(final_report=report)
 
@@ -216,19 +211,18 @@ class ParallelResearchLoopApp(AgentApp):
 
     async def run_workflow(self) -> str | None:
         """Run the parallel research loop to completion and print the final state."""
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(levelname)s %(name)s — %(message)s",
-        )
+        setup_pretty_logging()
 
         ctx = Context(connector=self.connector)
         hooks = LoggingHooks()
         runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
-        final_state = cast(ResearchState, await runner.run(ResearchState()))
+        final_state: ResearchState = await runner.run(ResearchState())  # type: ignore[assignment]
 
         print(f"\nFinal revision_count: {final_state.revision_count}")
         print("Done!")
-        return f"Report published: {final_state.final_report[:50]}..." if final_state.final_report else "Completed."
+        if final_state.final_report:
+            return f"Report published: {final_state.final_report[:50]}..."
+        return "Completed."
 
 
 if __name__ == "__main__":

@@ -89,7 +89,7 @@ class RunRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def create_app(agent_app: "AgentApp") -> FastAPI:
+def create_app(agent_app: AgentApp) -> FastAPI:
     """Create and configure a FastAPI application for *agent_app*.
 
     Registers all REST endpoints, the WebSocket endpoint, CORS middleware,
@@ -320,7 +320,7 @@ async def _run_workflow(
     """
     from agentflow.events import RunCompleteEvent, RunErrorEvent
 
-    agent_app: "AgentApp" = app.state.agent_app
+    agent_app: AgentApp = app.state.agent_app
     try:
         result = await agent_app.run_workflow_with_prompt(prompt)
         await agent_app.event_bus.emit(RunCompleteEvent(run_id=run_id, result=result))
@@ -341,7 +341,7 @@ async def _run_workflow(
 
 
 def serve(
-    agent_app: "AgentApp",
+    agent_app: AgentApp,
     *,
     port: int | None = None,
     host: str = "127.0.0.1",
@@ -401,7 +401,7 @@ class GuiServer:
 
     def __init__(
         self,
-        agent_app: "AgentApp",
+        agent_app: AgentApp,
         *,
         port: int | None = None,
         host: str = "127.0.0.1",

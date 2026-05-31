@@ -34,7 +34,7 @@ class WebSocketEventHandler:
         run_state: Shared ``RunState`` held on ``FastAPI.state``.
     """
 
-    def __init__(self, run_id: str, run_state: "RunState") -> None:
+    def __init__(self, run_id: str, run_state: RunState) -> None:
         self._run_id = run_id
         self._run_state = run_state
 

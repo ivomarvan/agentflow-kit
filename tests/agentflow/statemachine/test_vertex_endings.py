@@ -12,10 +12,16 @@ from agentflow.statemachine.vertex import End, StateVertex, StdEnd
 
 
 @pytest.mark.unit
-def test_state_vertex_is_abstract() -> None:
-    """Directly instantiating StateVertex must raise TypeError."""
-    with pytest.raises(TypeError):
-        StateVertex()  # type: ignore[abstract]
+@pytest.mark.asyncio
+async def test_state_vertex_run_raises_not_implemented() -> None:
+    """Calling run() on a StateVertex without overriding run() must raise NotImplementedError."""
+
+    class _BareVertex(StateVertex):
+        pass
+
+    vertex = _BareVertex()
+    with pytest.raises(NotImplementedError):
+        await vertex.run(object(), None)  # type: ignore[arg-type]
 
 
 @pytest.mark.unit

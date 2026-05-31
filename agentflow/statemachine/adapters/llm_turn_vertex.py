@@ -45,6 +45,7 @@ class LlmTurnVertex(StateVertex):  # type: ignore[misc]
         temperature: float = 0.2,
         ok_signal: Any = StdSignal.ok,
     ) -> None:
+        super().__init__()
         self._messages_from_state = messages_from_state
         self._response_to_patch = response_to_patch
         self._tools = tools

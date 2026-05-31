@@ -27,8 +27,8 @@ from __future__ import annotations
 
 import html as _html_stdlib
 import json
+import os
 import re
-import tempfile
 import webbrowser
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -73,7 +73,7 @@ class GraphRenderer:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def to_dot(graph: "Graph") -> str:
+    def to_dot(graph: Graph) -> str:
         """Return the Graphviz DOT source string for *graph*.
 
         Args:
@@ -86,7 +86,7 @@ class GraphRenderer:
         return dot
 
     @staticmethod
-    def to_svg(graph: "Graph") -> str:
+    def to_svg(graph: Graph) -> str:
         """Render *graph* to an SVG string via the Graphviz ``dot`` tool.
 
         Args:
@@ -103,7 +103,7 @@ class GraphRenderer:
         return gv.Source(dot).pipe(format="svg").decode("utf-8")
 
     @staticmethod
-    def to_png(graph: "Graph", path: Path | None = None) -> Path:
+    def to_png(graph: Graph, path: Path | None = None) -> Path:
         """Render *graph* to a PNG file.
 
         Args:
@@ -131,7 +131,7 @@ class GraphRenderer:
         return result
 
     @staticmethod
-    def to_html(graph: "Graph", title: str = "", title_tooltip: str = "") -> str:
+    def to_html(graph: Graph, title: str = "", title_tooltip: str = "") -> str:
         """Return a standalone interactive HTML page for *graph*.
 
         Graphviz generates the SVG layout.  JavaScript overlays rich Markdown
@@ -167,7 +167,7 @@ class GraphRenderer:
         )
 
     @staticmethod
-    def to_interactive_svg(graph: "Graph") -> str:
+    def to_interactive_svg(graph: Graph) -> str:
         """Render *graph* to a self-contained interactive SVG with hover tooltips.
 
         Graphviz generates the layout; the SVG is then post-processed to inject
@@ -194,29 +194,45 @@ class GraphRenderer:
         return GraphRenderer._inject_svg_interactivity(raw_svg, descs)
 
     @staticmethod
-    def open_browser(graph: "Graph", title: str = "", title_tooltip: str = "") -> None:
+    def open_browser(graph: Graph, title: str = "", title_tooltip: str = "") -> None:
         """Render *graph* as HTML and open it in the default web browser.
 
-        Saves a temporary HTML file and passes its ``file://`` URL to the
-        system browser.
+        Saves an HTML file to a user-accessible directory and opens it via
+        ``file://`` URL.  The directory is chosen for maximum compatibility
+        with sandboxed browsers (e.g. Firefox installed as a snap package):
+
+        1. ``$XDG_RUNTIME_DIR/agentflow/graphs/`` — ``/run/user/<UID>/…``,
+           accessible to the snap sandbox without AppArmor restrictions.
+        2. ``$HOME/.local/share/agentflow/graphs/`` — XDG_DATA_HOME fallback.
+
+        The file name is derived from the graph root label and is overwritten
+        on each invocation so no stale files accumulate.
 
         Args:
             graph: The composition graph to render.
             title: Forwarded to ``to_html()``.
             title_tooltip: Forwarded to ``to_html()``.
         """
-        content  = GraphRenderer.to_html(graph, title=title, title_tooltip=title_tooltip)
+        xdg_runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+        if xdg_runtime:
+            cache_dir = Path(xdg_runtime) / "agentflow" / "graphs"
+        else:
+            cache_dir = Path.home() / ".local" / "share" / "agentflow" / "graphs"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        content   = GraphRenderer.to_html(graph, title=title, title_tooltip=title_tooltip)
         safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", graph.root.label)
-        tmp = Path(tempfile.mktemp(suffix=f"_{safe_name}.html"))
-        tmp.write_text(content, encoding="utf-8")
-        webbrowser.open(tmp.as_uri())
+        out = cache_dir / f"{safe_name}.html"
+        out.write_text(content, encoding="utf-8")
+        os.chmod(out, 0o644)
+        webbrowser.open(out.as_uri())
 
     # ------------------------------------------------------------------
     # Private — DOT building
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_dot(graph: "Graph") -> tuple[str, dict[str, str]]:
+    def _build_dot(graph: Graph) -> tuple[str, dict[str, str]]:
         """Build the DOT source and the descriptions dict for tooltip rendering.
 
         Returns:
@@ -241,7 +257,7 @@ class GraphRenderer:
 
     @staticmethod
     def _render_vertex(
-        v: "Vertex",
+        v: Vertex,
         lines: list[str],
         descs: dict[str, str],
         depth: int,
@@ -306,8 +322,12 @@ class GraphRenderer:
         return anchor_id
 
     @staticmethod
-    def _edge_to_dot(edge: "Edge") -> str:
+    def _edge_to_dot(edge: Edge) -> str:
         """Render an explicit edge to a single DOT statement.
+
+        Parallel fan-out edges (``edge.attributes["parallel"] == True``) are
+        rendered as dashed blue arrows to visually distinguish them from plain
+        sequential transitions.
 
         Args:
             edge: The edge to render.
@@ -322,6 +342,8 @@ class GraphRenderer:
             attrs.append(f'label="{edge.label}"')
         if not edge.directed:
             attrs.append("dir=none")
+        if edge.attributes.get("parallel"):
+            attrs.extend(["style=dashed", 'color="#1976d2"', "penwidth=2"])
         attr_str = f" [{', '.join(attrs)}]" if attrs else ""
         arrow    = "->" if edge.directed else "--"
         return f"{from_id} {arrow} {to_id}{attr_str}"
@@ -340,7 +362,7 @@ class GraphRenderer:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _vertex_to_dot_tooltip(v: "Vertex") -> str:
+    def _vertex_to_dot_tooltip(v: Vertex) -> str:
         """Build the ``tooltip`` attribute value for a DOT node or cluster.
 
         Returns a multi-line plain-text summary with nested dicts and lists
@@ -454,7 +476,7 @@ class GraphRenderer:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _vertex_to_md(v: "Vertex") -> str:
+    def _vertex_to_md(v: Vertex) -> str:
         """Convert a vertex to a Markdown string used as the HTML tooltip.
 
         Args:

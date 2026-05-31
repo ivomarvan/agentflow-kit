@@ -66,7 +66,7 @@ class RedisCheckpointStore:
             await self._client.aclose()
             self._client = None
 
-    async def __aenter__(self) -> "RedisCheckpointStore":
+    async def __aenter__(self) -> RedisCheckpointStore:
         """Async context manager: connect on enter."""
         await self.connect()
         return self

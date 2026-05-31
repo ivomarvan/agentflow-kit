@@ -44,6 +44,7 @@ class ToolAgentVertex(StateVertex):  # type: ignore[misc]
         *,
         ok_signal: Any = StdSignal.ok,
     ) -> None:
+        super().__init__()
         self._agent = agent
         self._question_from_state = question_from_state
         self._answer_to_patch = answer_to_patch

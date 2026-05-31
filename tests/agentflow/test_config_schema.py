@@ -4,8 +4,6 @@ from __future__ import annotations
 import pytest
 
 from agentflow import AgentApp, ConfigParam, LlmConfig
-from agentflow.llm.LlmConfig import LlmConfig
-from agentflow.statemachine.testing import FakeLlmConnector
 
 
 class _ConnectorApp(AgentApp):

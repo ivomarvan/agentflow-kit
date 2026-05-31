@@ -129,7 +129,7 @@ class TestFromEnvBackendResolution:
 
 @pytest.mark.unit
 def test_supported_backends_contains_expected() -> None:
-    assert SUPPORTED_BACKENDS >= {"openai", "gemini", "ollama", "deepseek", "anthropic"}
+    assert {"openai", "gemini", "ollama", "deepseek", "anthropic"} <= SUPPORTED_BACKENDS
 
 
 @pytest.mark.unit

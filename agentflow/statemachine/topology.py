@@ -77,6 +77,10 @@ class StateGraph(Describable):  # type: ignore[misc]
     Args:
         start: Starting vertex — a StateVertex instance or subclass.
         transitions: List of Transition edges defining the graph.
+        initialized_vertexes: Optional list of pre-instantiated vertices to
+            use instead of auto-creating new instances. When the class of a
+            vertex in transitions matches an entry here, the provided instance
+            is used rather than calling cls().
 
     Raises:
         ValueError: If any class in start or transitions has required
@@ -87,9 +91,12 @@ class StateGraph(Describable):  # type: ignore[misc]
         self,
         start: type[StateVertex] | StateVertex,
         transitions: Sequence[Transition],
+        initialized_vertexes: list[StateVertex] | None = None,
     ) -> None:
         super().__init__()
         self._resolver = VertexResolver()
+        if initialized_vertexes:
+            self._resolver.seed(initialized_vertexes)
         self._start = self._resolver.resolve(start)
         self._transitions = self._normalize_transitions(transitions)
         self._analyze_asymmetric_joins()
@@ -356,6 +363,9 @@ class StateGraph(Describable):  # type: ignore[misc]
     ) -> Vertex:
         """Create a topology Vertex for a single node.
 
+        The vertex description contains only the class docstring (if any).
+        The class name is already the vertex label and is not repeated.
+
         Args:
             node: The ``StateVertex`` instance to represent.
             node_ids: ID mapping from ``_build_node_ids()``.
@@ -364,6 +374,8 @@ class StateGraph(Describable):  # type: ignore[misc]
         Returns:
             ``Vertex`` with topology metadata in ``description`` and ``attributes``.
         """
+        import inspect
+
         from agentflow.describable.graph import Vertex
 
         cls_name = type(node).__name__
@@ -373,10 +385,15 @@ class StateGraph(Describable):  # type: ignore[misc]
         if isinstance(node, End):
             attributes["is_end"] = True
 
+        doc = inspect.getdoc(type(node)) or ""
+        description: dict[str, Any] = {}
+        if doc:
+            description["description"] = doc
+
         return Vertex(
             id=node_ids[id(node)],
             label=cls_name,
-            description={"class": cls_name},
+            description=description,
             attributes=attributes,
         )
 
@@ -401,7 +418,14 @@ class StateGraph(Describable):  # type: ignore[misc]
 
             if isinstance(t.to_target, Parallel):
                 for branch in t.to_target.expand(self._resolver):
-                    edges.append(Edge(from_id=from_id, to_id=node_ids[id(branch)], label=label))
+                    edges.append(
+                        Edge(
+                            from_id=from_id,
+                            to_id=node_ids[id(branch)],
+                            label=label,
+                            attributes={"parallel": True},
+                        )
+                    )
             else:
                 edges.append(Edge(from_id=from_id, to_id=node_ids[id(t.to_target)], label=label))
 

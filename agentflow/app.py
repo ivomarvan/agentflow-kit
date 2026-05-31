@@ -4,11 +4,21 @@ AgentApp extends Describable so the full application composition
 (LlmConnector, ToolRegistry, StateGraph) is visible as a single composite
 graph via get_graph() / open_graph_browser() / etc.
 
-Usage in an example script::
+Declarative usage (no subclassing)::
+
+    from agentflow import AgentApp
+    from agentflow.statemachine import Context, StateGraph
+
+    result, stats = AgentApp(
+        doc=__doc__,
+        context=Context(connector=...),
+        state_graph=StateGraph(start=..., transitions=[...]),
+    ).run_and_stats("Hello")
+
+Subclass usage::
 
     from agentflow import AgentApp
     from agentflow.statemachine import StateGraph, StateGraphRunner, Context
-    from agentflow.statemachine.testing import FakeLlmConnector
 
     class HelloApp(AgentApp):
         def __init__(self) -> None:
@@ -17,7 +27,6 @@ Usage in an example script::
             self.graph = StateGraph(start=..., transitions=[...])
 
         async def run_workflow(self) -> str | None:
-            # Pass self.event_bus to Context so GUI can receive events
             ctx = Context(connector=self.connector, event_bus=self.event_bus)
             runner = StateGraphRunner(self.graph, ctx)
             final = await runner.run(MyState())
@@ -32,58 +41,220 @@ Pattern: Template Method (GoF) — cli() orchestrates, run_workflow() specialise
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+import time
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from agentflow.describable.describable import Describable
 from agentflow.events import EventBus
+
+if TYPE_CHECKING:
+    from agentflow.describable.graph import Graph
+    from agentflow.statemachine.context import Context
+    from agentflow.statemachine.run_stats import RunStats
+    from agentflow.statemachine.topology import StateGraph
 
 
 class AgentApp(Describable):
     """Base for runnable agentflow applications with full describe/visualize support.
 
-    Subclasses configure all components (connector, registry, graph) as public
-    Describable attributes in __init__ so the full composition tree is visible.
-    The main workflow logic lives in run_workflow(), called by cli().
+    Can be used in two ways:
+
+    1. **Declarative** (no subclassing) — pass ``context`` and ``state_graph`` to the
+       constructor and call ``run_and_stats(question)``::
+
+           result, stats = AgentApp(
+               doc=__doc__,
+               context=Context(connector=..., tools=...),
+               state_graph=StateGraph(start=..., transitions=[...]),
+           ).run_and_stats("Hello")
+
+    2. **Subclass** (Template Method) — override ``run_workflow()`` in a subclass::
+
+           class HelloApp(AgentApp):
+               async def run_workflow(self) -> str | None:
+                   ctx = Context(connector=self.connector, event_bus=self.event_bus)
+                   runner = StateGraphRunner(self.graph, ctx)
+                   return str(await runner.run(MyState()))
 
     GUI integration: pass ``self.event_bus`` to ``Context`` in ``run_workflow()``
-    so that the GUI server can stream events to connected WebSocket clients::
-
-        ctx = Context(connector=self.connector, event_bus=self.event_bus)
+    so that the GUI server can stream events to connected WebSocket clients.
 
     Pattern: Template Method (GoF) — cli() orchestrates, run_workflow() specialises.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        doc: str | None = None,
+        system_prompt: str = "",
+        default_question: str = "",
+        sample_prompts: list[str] | None = None,
+        context: Context | None = None,
+        state_graph: StateGraph | None = None,
+        initial_state_factory: Callable[[str], Any] | None = None,
+    ) -> None:
         super().__init__()
         self.event_bus: EventBus = EventBus()
         """Shared EventBus passed to Context in run_workflow() for GUI streaming."""
         self.current_prompt: str = ""
         """Last prompt set via run_workflow_with_prompt(); readable inside run_workflow()."""
+        self._doc = doc
+        self._system_prompt = system_prompt
+        self._default_question = default_question
+        self._sample_prompts = sample_prompts
+        self._context = context
+        self._state_graph = state_graph
+        self._initial_state_factory = initial_state_factory
+        self._last_ctx: Context | None = None
+        # Expose state_graph as self.graph so get_graph() can find it via vars(self)
+        if state_graph is not None:
+            self.graph = state_graph
+        # Expose context as public attribute so Describable._build_vertex() includes it
+        if context is not None:
+            self.context = context
+
+    def get_graph(self) -> Graph:
+        """Build a composite graph: composition tree augmented with topology edges.
+
+        Overrides ``Describable.get_graph()`` to also collect state-machine
+        transition edges from any ``StateGraph`` attribute so that the full
+        workflow topology is visible when rendering the application graph.
+
+        Parallel fan-out edges are marked with ``attributes={"parallel": True}``
+        by the topology builder; the renderer draws them as dashed blue arrows.
+
+        Returns:
+            ``Graph`` with composition vertices and state-machine transition edges.
+        """
+        from agentflow.describable.graph import Graph
+        from agentflow.statemachine.topology import StateGraph
+
+        base_graph = super().get_graph()
+        extra_edges = []
+        seen_graphs: set[int] = set()
+        for attr_value in vars(self).values():
+            if isinstance(attr_value, StateGraph) and id(attr_value) not in seen_graphs:
+                seen_graphs.add(id(attr_value))
+                extra_edges.extend(attr_value.get_graph().edges)
+        if not extra_edges:
+            return base_graph
+        return Graph(root=base_graph.root, edges=extra_edges)
 
     async def run_workflow(self) -> str | None:
         """Execute the main application workflow.
 
-        Override in subclasses to implement the application logic.
-        Called synchronously by run() and cli(default_command="run").
+        When ``context`` and ``state_graph`` were passed to the constructor this
+        method runs the graph automatically.  Override in subclasses to implement
+        custom workflow logic.
 
         Returns:
             Optional summary string shown in the GUI chat panel as the run result.
-            Return None to display a default 'Completed.' fallback.
+            Returns None to display a default 'Completed.' fallback.
 
         Raises:
-            NotImplementedError: If the subclass does not override this method.
+            NotImplementedError: If neither context+state_graph were supplied nor
+                the method is overridden in a subclass.
         """
-        raise NotImplementedError(f"{type(self).__name__}.run_workflow() not implemented")
+        if self._context is None or self._state_graph is None:
+            raise NotImplementedError(
+                f"{type(self).__name__}.run_workflow(): "
+                "Either provide context and state_graph in the constructor, "
+                "or override run_workflow() in a subclass."
+            )
+        from agentflow.statemachine.context import Context as _Context
+        from agentflow.statemachine.runner import StateGraphRunner
+
+        ctx = _Context(
+            llm_connectors=self._context.llm_connectors,
+            tool_registries=self._context.tool_registries,
+            connector=self._context.connector,
+            tools=self._context.tools,
+            event_bus=self.event_bus,
+        )
+        self._last_ctx = ctx
+        initial_state = self._build_initial_state(self.current_prompt)
+        runner = StateGraphRunner(self._state_graph, ctx)
+        final_state = await runner.run(initial_state)
+        return self._extract_result(final_state)
+
+    def _build_initial_state(self, question: str) -> Any:
+        """Construct the initial state for the graph run.
+
+        Uses ``initial_state_factory`` if provided; otherwise builds a default
+        ``ReActState`` with the system prompt and user question.
+
+        Args:
+            question: User question / prompt for this run.
+
+        Returns:
+            Initial state object passed to ``StateGraphRunner.run()``.
+        """
+        if self._initial_state_factory is not None:
+            return self._initial_state_factory(question)
+        from agentflow.statemachine.react import ReActState
+
+        msgs: list[dict[str, Any]] = []
+        if self._system_prompt:
+            msgs.append({"role": "system", "content": self._system_prompt})
+        if question:
+            msgs.append({"role": "user", "content": question})
+        return ReActState(messages=tuple(msgs))
+
+    def _extract_result(self, final_state: Any) -> str | None:
+        """Extract a result string from the final graph state.
+
+        Tries common field names in priority order; falls back to ``str(final_state)``.
+
+        Args:
+            final_state: State object returned by ``StateGraphRunner.run()``.
+
+        Returns:
+            Result string, or None if final_state is None.
+        """
+        for field_name in ("final_response", "final_answer", "result", "output"):
+            val = getattr(final_state, field_name, None)
+            if val:
+                return str(val)
+        return str(final_state) if final_state is not None else None
+
+    def run_and_stats(self, question: str) -> tuple[str | None, RunStats]:
+        """Run the workflow synchronously and return the result with token/timing stats.
+
+        Convenience method for scripts that need a single-call entry point without
+        setting up a GUI or CLI.  Internally calls ``run_workflow_with_prompt()``
+        via ``asyncio.run()``.
+
+        Args:
+            question: User question / prompt to run the workflow with.
+
+        Returns:
+            Tuple of (result string or None, RunStats with token counts and wall time).
+        """
+        from agentflow.statemachine.run_stats import RunStats as _RunStats
+
+        self._last_ctx = None
+        start = time.monotonic()
+        result = asyncio.run(self.run_workflow_with_prompt(question))
+        elapsed_ms = (time.monotonic() - start) * 1000
+        stats = _RunStats()
+        if self._last_ctx is not None:
+            stats = self._last_ctx.stats
+        stats.wall_time_ms = elapsed_ms
+        return result, stats
 
     @property
     def sample_prompts(self) -> list[str]:
         """Return a list of example prompts shown in the GUI prompt selector.
 
+        Returns prompts passed to the constructor, or an empty list by default.
         Override in subclasses to provide domain-specific example prompts.
 
         Returns:
-            List of prompt strings.  Returns empty list by default.
+            List of prompt strings.
         """
+        if self._sample_prompts is not None:
+            return self._sample_prompts
         return []
 
     async def run_workflow_with_prompt(self, prompt: str) -> str | None:
@@ -127,13 +298,16 @@ class AgentApp(Describable):
             "title": type(self).__name__,
             "properties": {},
         }
-        from agentflow.llm.LlmConnector import LlmConnector
+        from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
 
         for attr_name, attr_value in vars(self).items():
             if attr_name.startswith("_"):
                 continue
             if isinstance(attr_value, LlmConnector):
-                config = attr_value.config
+                try:
+                    config = attr_value.config
+                except NotImplementedError:
+                    continue  # FakeLlmConnector and similar stubs — skip gracefully
                 if isinstance(config, BaseModel):
                     schema["properties"][attr_name] = config.model_json_schema()
         return schema
@@ -155,13 +329,16 @@ class AgentApp(Describable):
         from pydantic import BaseModel
 
         result: dict[str, Any] = {}
-        from agentflow.llm.LlmConnector import LlmConnector
+        from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
 
         for attr_name, attr_value in vars(self).items():
             if attr_name.startswith("_"):
                 continue
             if isinstance(attr_value, LlmConnector):
-                config = attr_value.config
+                try:
+                    config = attr_value.config
+                except NotImplementedError:
+                    continue  # FakeLlmConnector and similar stubs — skip gracefully
                 if isinstance(config, BaseModel):
                     for field_name in type(config).model_fields:
                         result[f"{attr_name}.{field_name}"] = getattr(config, field_name)
@@ -193,7 +370,7 @@ class AgentApp(Describable):
         if child is None:
             raise KeyError(f"No attribute {child_name!r} on {type(self).__name__}")
 
-        from agentflow.llm.LlmConnector import LlmConnector
+        from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
 
         if isinstance(child, LlmConnector):
             config = child.config
@@ -235,10 +412,13 @@ class AgentApp(Describable):
 
         Args:
             doc: Module docstring (__doc__) used as the CLI description.
+                 Falls back to the ``doc`` argument passed to the constructor.
             name: Module name guard — pass __name__ to run only when the
                   script is the direct entry-point (not when imported).
         """
         import sys
+
+        effective_doc = doc or self._doc
 
         if name and name != "__main__":
             return
@@ -247,7 +427,7 @@ class AgentApp(Describable):
             import argparse
 
             parser = argparse.ArgumentParser(
-                description=doc or type(self).__name__,
+                description=effective_doc or type(self).__name__,
                 prog=sys.argv[0],
             )
             parser.add_argument("command", help="gui")
@@ -276,4 +456,9 @@ class AgentApp(Describable):
             discover_and_build(app_script=app_script)
             serve(self, port=args.port, host=args.host, open_browser=not args.no_browser)
         else:
-            self.run_argparse(doc=doc, name=name, default_command="run")
+            self.run_argparse(
+                doc=effective_doc,
+                name=name,
+                default_command="run",
+                title_tooltip=effective_doc or self.description,
+            )

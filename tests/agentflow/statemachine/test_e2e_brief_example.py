@@ -13,7 +13,6 @@ def test_brief_example_runs_to_completion() -> None:
     - iteration equals the expected approval threshold (2 rejections occurred).
     - The final message indicates approval (review accepted the content).
     """
-    import asyncio
     import importlib
     from typing import cast
 

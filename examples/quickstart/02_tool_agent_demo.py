@@ -16,7 +16,6 @@ Run with:
 """
 
 import dataclasses
-from typing import cast
 
 from agentflow import AgentApp
 from agentflow.agents.ToolAgent import ToolAgent
@@ -72,7 +71,7 @@ class ToolAgentDemoApp(AgentApp):
         )
         agent_vertex = ToolAgentVertex(
             agent=self.agent,
-            question_from_state=lambda state: cast(DemoState, state).question,
+            question_from_state=lambda state: state.question,  # type: ignore[union-attr]
             answer_to_patch=lambda ans: DemoPatch(answer=ans),
         )
         self.graph = StateGraph(
@@ -88,7 +87,7 @@ class ToolAgentDemoApp(AgentApp):
         ctx = Context(connector=FakeLlmConnector())
         runner = StateGraphRunner(graph=self.graph, context=ctx)
         initial_state = DemoState(question="What is 42 + 8?")
-        final_state = cast(DemoState, await runner.run(initial_state))
+        final_state: DemoState = await runner.run(initial_state)  # type: ignore[assignment]
         print(f"Question: {final_state.question}")
         print(f"Answer: {final_state.answer}")
         return None

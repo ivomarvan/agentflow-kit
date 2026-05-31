@@ -17,13 +17,13 @@ from openai import AsyncOpenAI, OpenAI
 
 from agentflow.llm.ChatResponse import ChatResponse, ToolCallFunction, ToolCallInfo, UsageInfo
 from agentflow.llm.LlmConfig import LlmConfig
-from agentflow.llm.LlmConnector import LlmConnector
+from agentflow.llm.LlmConnectorBase import LlmConnectorBase
 
 logger = logging.getLogger(__name__)
 
 
-class OpenAiConnector(LlmConnector):
-    """LlmConnector for all OpenAI-compatible backends.
+class OpenAiConnector(LlmConnectorBase):
+    """LlmConnectorBase implementation for all OpenAI-compatible backends.
 
     Builds and owns an ``openai.OpenAI`` client.  Routes chat requests to
     the Chat Completions endpoint and maps the SDK response to ``ChatResponse``.
@@ -38,7 +38,7 @@ class OpenAiConnector(LlmConnector):
         super().__init__()
         self._config = config
         self._client = self._build_client(config)
-        # Lazy-initialised on first achat() call to avoid startup overhead
+        # Lazy-initialised on first _do_achat() call to avoid startup overhead
         # when only the sync path is used.
         self._async_client_cache: AsyncOpenAI | None = None
         logger.info(
@@ -48,7 +48,7 @@ class OpenAiConnector(LlmConnector):
         )
 
     # ------------------------------------------------------------------
-    # LlmConnector interface
+    # LlmConnectorBase interface
     # ------------------------------------------------------------------
 
     @property
@@ -76,12 +76,12 @@ class OpenAiConnector(LlmConnector):
             self._async_client_cache = AsyncOpenAI(**kwargs)
         return self._async_client_cache
 
-    def chat(
+    def _do_chat(
         self,
         messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        temperature: float = 0.2,
-        model_override: str | None = None,
+        tools: list[dict[str, Any]] | None,
+        temperature: float,
+        model_override: str | None,
     ) -> ChatResponse:
         """Send a chat completion request and return a normalised response.
 
@@ -122,14 +122,14 @@ class OpenAiConnector(LlmConnector):
         )
         return response
 
-    async def achat(
+    async def _do_achat(
         self,
         messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        temperature: float = 0.2,
-        model_override: str | None = None,
+        tools: list[dict[str, Any]] | None,
+        temperature: float,
+        model_override: str | None,
     ) -> ChatResponse:
-        """Async counterpart to chat() — uses AsyncOpenAI client natively.
+        """Async counterpart to _do_chat() — uses AsyncOpenAI client natively.
 
         Lazy-initialises ``AsyncOpenAI`` on first call; subsequent calls reuse
         the same client instance.

@@ -180,7 +180,7 @@ class LoggingHooks:
         Args:
             state: Initial state passed to runner.run().
         """
-        self._logger.info("run_start: state_type=%s", type(state).__name__)
+        self._logger.info("run_start: state=%s", type(state).__name__)
 
     async def on_super_step_start(
         self, step: int, state: object, active: list[StateVertex]
@@ -193,7 +193,7 @@ class LoggingHooks:
             active: List of vertices about to be executed.
         """
         node_names = [type(n).__name__ for n in active]
-        self._logger.debug("super_step_start: step=%d active=%s", step, node_names)
+        self._logger.debug("step #%d start  [%s]", step, ", ".join(node_names))
 
     async def on_super_step_results(
         self,
@@ -208,7 +208,7 @@ class LoggingHooks:
         """
         for node, signal, _ in node_results:
             self._logger.debug(
-                "vertex_result: step=%d node=%s signal=%s",
+                "step #%d  %s  →  signal=%s",
                 step,
                 type(node).__name__,
                 signal,
@@ -222,7 +222,7 @@ class LoggingHooks:
             exc: The exception that was raised.
         """
         self._logger.error(
-            "vertex_error: node=%s exc_type=%s exc=%s",
+            "vertex_error: node=%s  %s: %s",
             type(node).__name__,
             type(exc).__name__,
             exc,
@@ -240,7 +240,7 @@ class LoggingHooks:
             next_active: Set of vertices scheduled for the next super-step.
         """
         node_names = [type(n).__name__ for n in next_active]
-        self._logger.info("super_step_end: step=%d next_active=%s", step, node_names)
+        self._logger.info("step #%d end  →  %s", step, node_names)
 
     async def on_run_end(self, state: object) -> None:
         """Called once after the BSP loop completes; logs at INFO level.
@@ -248,7 +248,7 @@ class LoggingHooks:
         Args:
             state: Final state after the last super-step.
         """
-        self._logger.info("run_end: final_state_type=%s", type(state).__name__)
+        self._logger.info("run_end: state=%s", type(state).__name__)
 
 
 @dataclasses.dataclass
