@@ -269,11 +269,21 @@ class GraphRenderer:
         invisible anchor node inside so that explicit edges can connect to
         them (Graphviz edges cannot target a cluster directly).
 
+        Depth-based layout rules (depth = distance from AgentApp root):
+          depth 0  — root cluster (AgentApp); default styling.
+          depth 1  — top-level children (StateGraph, Context); children that are
+                     themselves sub-clusters get invisible ordering edges so that
+                     Graphviz places them left-to-right (matching graph rankdir=LR)
+                     instead of stacking them in a column.
+          depth ≥2 — compact clusters: smaller frame margin and tighter node
+                     margins / font to keep inner boxes visually lean.
+
         Args:
             v: Vertex to render.
             lines: List to append DOT statements to (mutated in place).
             descs: Dict populated with ``{dot_id: markdown}`` for tooltips.
-            depth: Nesting depth — controls indentation and colour palette.
+            depth: Nesting depth — controls indentation, colour palette, and
+                   depth-based layout adjustments.
 
         Returns:
             DOT id of this vertex: leaf node id or the cluster's anchor id.
@@ -285,19 +295,16 @@ class GraphRenderer:
         tooltip = GraphRenderer._vertex_to_dot_tooltip(v)
 
         if not v.children:
+            fill = "#90EE90" if v.attributes.get("active", False) else _LEAF_FILL
+            # Compact leaf nodes deep in the hierarchy: tighter padding and smaller font.
+            compact = ' margin="0.1,0.04" fontsize=10' if depth >= 3 else ""
             node_attrs = (
                 f'label="{v.label}" '
                 f'tooltip="{tooltip}" '
                 f'shape=box style="rounded,filled" '
-                f'fillcolor={_LEAF_FILL} color={_LEAF_BORDER}'
+                f'fillcolor={fill} color={_LEAF_BORDER}'
+                f"{compact}"
             )
-            if v.attributes.get("active", False):
-                node_attrs = (
-                    f'label="{v.label}" '
-                    f'tooltip="{tooltip}" '
-                    f'shape=box style="rounded,filled" '
-                    f'fillcolor="#90EE90" color={_LEAF_BORDER}'
-                )
             lines.append(f"{pad}{safe} [{node_attrs}]")
             descs[safe] = md
             return safe
@@ -312,12 +319,27 @@ class GraphRenderer:
         lines.append(f"{ipad}fillcolor={fill}")
         lines.append(f"{ipad}color={border}")
         lines.append(f'{ipad}tooltip="{tooltip}"')
+        # Compact inner clusters: tighter frame padding (default Graphviz margin is ~8 pt).
+        if depth >= 2:
+            lines.append(f'{ipad}margin="10,5"')
         # Invisible anchor — gives edges a concrete target node.
         lines.append(
             f"{ipad}{anchor_id} [label=\"\" style=invis width=0.01 height=0.01]"
         )
+        child_ids: list[str] = []
         for child in v.children:
-            GraphRenderer._render_vertex(child, lines, descs, depth + 1)
+            child_id = GraphRenderer._render_vertex(child, lines, descs, depth + 1)
+            child_ids.append(child_id)
+
+        # Depth-1 clusters whose children are themselves sub-clusters (i.e. anchor
+        # nodes, identified by the "_a_" prefix) have no explicit edges between them.
+        # Without edges Graphviz stacks them in one column.  Invisible ordering edges
+        # force sequential left-to-right placement matching the graph's rankdir=LR.
+        if depth == 1:
+            cluster_child_ids = [cid for cid in child_ids if cid.startswith("_a_")]
+            for a, b in zip(cluster_child_ids, cluster_child_ids[1:]):
+                lines.append(f"{ipad}{a} -> {b} [style=invis]")
+
         lines.append(f"{pad}}}")
         return anchor_id
 
@@ -325,9 +347,17 @@ class GraphRenderer:
     def _edge_to_dot(edge: Edge) -> str:
         """Render an explicit edge to a single DOT statement.
 
-        Parallel fan-out edges (``edge.attributes["parallel"] == True``) are
-        rendered as dashed blue arrows to visually distinguish them from plain
-        sequential transitions.
+        Three edge flavours are supported:
+
+        * **Parallel fan-out** (``edge.attributes["parallel"] == True``):
+          dashed blue arrow — distinguishes fan-out from sequential transitions.
+        * **Usage** (``edge.attributes["usage"] == True``):
+          dashed purple arrow from a StateVertex to the LlmConnector or ToolRegistry
+          cluster it uses.  Because clusters cannot be direct edge targets in
+          Graphviz, the arrow targets the cluster's invisible anchor node while
+          ``lhead`` makes the arrowhead land visually on the cluster boundary
+          (requires ``compound=true`` in the root digraph).
+        * **Default**: plain grey directed or undirected arrow.
 
         Args:
             edge: The edge to render.
@@ -335,6 +365,21 @@ class GraphRenderer:
         Returns:
             DOT statement string (no trailing newline).
         """
+        if edge.attributes.get("usage"):
+            from_dot = GraphRenderer._safe_id(edge.from_id)
+            to_safe  = GraphRenderer._safe_id(edge.to_id)
+            color    = '"#7b2fa8"' if edge.attributes.get("usage_type") == "llm" else '"#1a7a43"'
+            attrs = [
+                "style=dashed",
+                f"color={color}",
+                "penwidth=1",
+                "arrowsize=0.7",
+                f'lhead="cluster_{to_safe}"',
+            ]
+            if edge.label:
+                attrs.append(f'label="{edge.label}" fontsize=8')
+            return f"{from_dot} -> _a_{to_safe} [{', '.join(attrs)}]"
+
         from_id = GraphRenderer._safe_id(edge.from_id)
         to_id   = GraphRenderer._safe_id(edge.to_id)
         attrs: list[str] = []

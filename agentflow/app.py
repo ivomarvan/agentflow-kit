@@ -124,8 +124,14 @@ class AgentApp(Describable):
         Parallel fan-out edges are marked with ``attributes={"parallel": True}``
         by the topology builder; the renderer draws them as dashed blue arrows.
 
+        Usage edges (``attributes={"usage": True}``) are added when a StateVertex
+        declares ``connector`` or ``tools`` fields whose values match keys in the
+        bound ``Context``.  The renderer draws them as dashed purple arrows pointing
+        from the vertex to the corresponding LlmConnector / ToolRegistry cluster.
+
         Returns:
-            ``Graph`` with composition vertices and state-machine transition edges.
+            ``Graph`` with composition vertices, state-machine transition edges,
+            and vertex→resource usage edges.
         """
         from agentflow.describable.graph import Graph
         from agentflow.statemachine.topology import StateGraph
@@ -137,9 +143,71 @@ class AgentApp(Describable):
             if isinstance(attr_value, StateGraph) and id(attr_value) not in seen_graphs:
                 seen_graphs.add(id(attr_value))
                 extra_edges.extend(attr_value.get_graph().edges)
+        extra_edges.extend(self._build_usage_edges())
         if not extra_edges:
             return base_graph
         return Graph(root=base_graph.root, edges=extra_edges)
+
+    def _build_usage_edges(self) -> list:
+        """Build dashed 'usage' edges from StateVertices to their LLM connector / tool registry.
+
+        Inspects each non-terminal StateVertex for ``connector`` and ``tools`` fields
+        (the standard Pydantic field names for Context lookup keys).  When the field
+        value is a valid key in the bound Context's ``llm_connectors`` or
+        ``tool_registries`` dict, a directed edge is added from the vertex node to the
+        corresponding Context child cluster.
+
+        The target vertex ID mirrors the path produced by
+        ``Context._extra_describable_children()``:
+          - LLM connector  → ``<root>.context.<key>``
+          - Tool registry  → ``<root>.context.tools`` (default) or
+                             ``<root>.context.tools_<key>`` (non-default)
+
+        Returns:
+            List of ``Edge`` objects with ``attributes={"usage": True}``.
+        """
+        if self._context is None or self._state_graph is None:
+            return []
+
+        from agentflow.describable.graph import Edge
+        from agentflow.statemachine.vertex import End
+
+        edges: list[Edge] = []
+        nodes = self._state_graph._collect_topology_nodes()
+        node_ids = self._state_graph._build_node_ids(nodes)
+
+        root_id = type(self).__name__
+        context_prefix = f"{root_id}.context"
+
+        llm_keys: set[str] = set(self._context.llm_connectors.keys())
+        reg_keys: set[str] = set(self._context.tool_registries.keys())
+
+        for node in nodes:
+            if isinstance(node, End):
+                continue
+            node_vertex_id = node_ids[id(node)]
+
+            connector_val = getattr(node, "connector", None)
+            if isinstance(connector_val, str) and connector_val in llm_keys:
+                edges.append(Edge(
+                    from_id=node_vertex_id,
+                    to_id=f"{context_prefix}.{connector_val}",
+                    label="",
+                    attributes={"usage": True, "usage_type": "llm"},
+                ))
+
+            tools_val = getattr(node, "tools", None)
+            if isinstance(tools_val, str) and tools_val in reg_keys:
+                # Mirrors Context._extra_describable_children naming
+                display = "tools" if tools_val == "default" else f"tools_{tools_val}"
+                edges.append(Edge(
+                    from_id=node_vertex_id,
+                    to_id=f"{context_prefix}.{display}",
+                    label="",
+                    attributes={"usage": True, "usage_type": "tools"},
+                ))
+
+        return edges
 
     async def run_workflow(self) -> str | None:
         """Execute the main application workflow.
