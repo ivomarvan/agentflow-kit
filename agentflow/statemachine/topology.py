@@ -101,6 +101,37 @@ class StateGraph(Describable):  # type: ignore[misc]
         self._transitions = self._normalize_transitions(transitions)
         self._analyze_asymmetric_joins()
 
+    @staticmethod
+    def _can_reach(
+        src: StateVertex,
+        dst: StateVertex,
+        successors: dict[StateVertex, list[StateVertex]],
+    ) -> bool:
+        """Return True if *dst* is reachable from *src* via forward successor edges.
+
+        Uses a visited set so cycles terminate. *src* itself does not count as
+        reaching *dst* unless there is an actual edge path of length >= 1.
+
+        Args:
+            src: Start vertex for forward traversal.
+            dst: Target vertex to reach.
+            successors: Adjacency map from normalized transitions.
+
+        Returns:
+            True when a forward path from *src* to *dst* exists.
+        """
+        stack = list(successors.get(src, []))
+        visited: set[StateVertex] = set()
+        while stack:
+            cur = stack.pop()
+            if cur is dst:
+                return True
+            if cur in visited:
+                continue
+            visited.add(cur)
+            stack.extend(successors.get(cur, []))
+        return False
+
     def _analyze_asymmetric_joins(self) -> None:
         """Warn about nodes with incoming edges from branches of different depth.
 
@@ -147,10 +178,13 @@ class StateGraph(Describable):  # type: ignore[misc]
                     distances[neighbor] = distances[current] + 1
                     bfs_queue.append(neighbor)
 
-        # Warn whenever a join node's predecessors have unequal depths.
+        # Warn only when forward (non-back-edge) predecessors have unequal depths.
         for node in join_nodes:
             preds = in_edges[node]
-            depths = [distances.get(p, -1) for p in preds]
+            forward_preds = [p for p in preds if not self._can_reach(node, p, successors)]
+            if len(forward_preds) < 2:
+                continue
+            depths = [distances.get(p, -1) for p in forward_preds]
             if len(set(depths)) > 1:
                 _logger.warning(
                     "Node %r has %d incoming transitions from branches of different depths "
@@ -158,10 +192,10 @@ class StateGraph(Describable):  # type: ignore[misc]
                     "needed, ensure branch symmetry or use an explicit Join (not yet "
                     "implemented).",
                     node.__class__.__name__,
-                    len(preds),
+                    len(forward_preds),
                     ", ".join(
                         f"{p.__class__.__name__}=depth{d}"
-                        for p, d in zip(preds, depths, strict=False)
+                        for p, d in zip(forward_preds, depths, strict=False)
                     ),
                 )
 
@@ -200,9 +234,7 @@ class StateGraph(Describable):  # type: ignore[misc]
         """
         return self._start
 
-    def get_targets(
-        self, node: StateVertex, signal: object
-    ) -> list[StateVertex | Parallel]:
+    def get_targets(self, node: StateVertex, signal: object) -> list[StateVertex | Parallel]:
         """Return all targets reachable from node via signal.
 
         Uses identity comparison (``is``) for both node and signal so that
@@ -217,9 +249,7 @@ class StateGraph(Describable):  # type: ignore[misc]
             transitions. Empty list if no matching transition found.
         """
         return [
-            t.to_target
-            for t in self._transitions
-            if t.from_node is node and t.signal is signal
+            t.to_target for t in self._transitions if t.from_node is node and t.signal is signal
         ]
 
     def expand_target(self, target: StateVertex | Parallel) -> list[StateVertex]:
@@ -257,10 +287,7 @@ class StateGraph(Describable):  # type: ignore[misc]
         nodes = self._collect_topology_nodes()
         node_ids = self._build_node_ids(nodes)
 
-        vertices = [
-            self._make_node_vertex(n, node_ids, is_start=(n is self._start))
-            for n in nodes
-        ]
+        vertices = [self._make_node_vertex(n, node_ids, is_start=(n is self._start)) for n in nodes]
         edges = self._make_topology_edges(node_ids)
 
         root = Vertex(
@@ -286,6 +313,7 @@ class StateGraph(Describable):  # type: ignore[misc]
         """
         from agentflow.describable.describable import Describable
         from agentflow.describable.graph import Vertex  # noqa: F811 — local import avoids circular
+
         topology = self.get_graph()
         source_file, source_line = Describable._class_source_location(type(self))
         return Vertex(

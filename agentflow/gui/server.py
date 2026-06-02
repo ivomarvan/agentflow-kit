@@ -4,13 +4,13 @@ Exposes a REST + WebSocket API that wraps a single ``AgentApp`` instance:
 
     REST endpoints:
         GET  /health        — liveness probe
-        GET  /api/info      — app name and class
+        GET  /api/info      — script title and module doc (tooltip)
         GET  /api/schema    — JSON Schema of configurable parameters
         GET  /api/config    — current config values (dot-path dict)
         POST /api/config    — set a single config value
         POST /api/run       — start a workflow run (returns run_id)
         GET  /api/samples   — list of example prompts
-        GET  /api/graph     — raw SVG of the agent composition graph
+        GET  /api/graph     — interactive HTML graph (same as ``graph --browser``)
 
     WebSocket endpoint:
         WS   /ws/{run_id}   — event stream for a specific run
@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -145,15 +146,16 @@ def create_app(agent_app: AgentApp) -> FastAPI:
 
     @app.get("/api/info")
     async def info() -> dict[str, str]:
-        """Return the agent app's name and class.
+        """Return GUI header title and module docstring for the title tooltip.
 
         Returns:
-            Dict with ``name`` (description) and ``description`` (class name).
+            Dict with ``name`` (script stem when launched via CLI, else class name)
+            and ``doc`` (entry-point module docstring, Markdown).
         """
-        return {
-            "name": app.state.agent_app.name,
-            "description": app.state.agent_app.description or type(app.state.agent_app).__name__,
-        }
+        agent = app.state.agent_app
+        name = getattr(agent, "gui_script_name", "") or agent.name
+        doc = getattr(agent, "gui_script_doc", "") or getattr(agent, "_doc", "") or ""
+        return {"name": name, "doc": doc}
 
     @app.get("/api/schema")
     async def schema() -> dict[str, Any]:
@@ -235,22 +237,24 @@ def create_app(agent_app: AgentApp) -> FastAPI:
         return app.state.agent_app.sample_prompts
 
     @app.get("/api/graph")
-    async def graph() -> str:
-        """Return the agent composition graph as a raw SVG string.
+    async def graph() -> HTMLResponse:
+        """Return the agent composition graph as interactive HTML.
+
+        Interactive graph HTML (tooltips); no duplicate page header (``with_title=False``).
 
         Returns:
-            SVG XML string rendered by Graphviz via ``GraphRenderer.to_svg()``.
+            Complete HTML document from ``Describable.get_graph_html()``.
 
         Raises:
             HTTPException 503: If graphviz is not installed.
         """
-        from agentflow.describable.graph_renderer import GraphRenderer
-
+        agent = app.state.agent_app
+        title = getattr(agent, "gui_script_name", "") or agent.name
         try:
-            svg = GraphRenderer.to_svg(app.state.agent_app.get_graph())
+            html = agent.get_graph_html(title=title, with_title=False)
         except ImportError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
-        return svg
+        return HTMLResponse(content=html, media_type="text/html; charset=utf-8")
 
     # ------------------------------------------------------------------
     # WebSocket

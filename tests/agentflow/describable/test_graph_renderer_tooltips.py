@@ -207,3 +207,19 @@ def test_to_html_embeds_label_hyperlink() -> None:
     assert 'target="_blank"' in html
     assert "#svg-wrap svg a text" in html
     assert "file://" not in html.split("const descs =", 1)[1].split(";", 1)[0]
+
+
+def test_to_html_with_title_false_omits_header() -> None:
+    """Embedded GUI graph HTML has no duplicate page header bar."""
+    vertex = Vertex(id="Sample", label="Sample", description={"description": "Hello"})
+    html = GraphRenderer.to_html(Graph(root=vertex), title="Sample", with_title=False)
+    assert 'id="header"' not in html
+    assert "<title>Sample</title>" in html
+
+
+def test_to_html_with_title_true_includes_header() -> None:
+    """CLI/browser graph HTML includes the page header bar by default."""
+    vertex = Vertex(id="Sample", label="Sample", description={"description": "Hello"})
+    html = GraphRenderer.to_html(Graph(root=vertex), title="Sample")
+    assert 'id="header"' in html
+    assert 'id="hdr-title"' in html

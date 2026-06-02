@@ -37,6 +37,14 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from agentflow.describable.graph import Edge, Graph, Vertex
 
+from agentflow.describable.tooltip_timing import HIDE_MS, IDLE_MS, OFFSET_X, OFFSET_Y
+
+_HTML_TIMING_JS = (
+    f"const IDLE_MS = {IDLE_MS}, HIDE_MS = {HIDE_MS}, "
+    f"OFFSET_X = {OFFSET_X}, OFFSET_Y = {OFFSET_Y};"
+)
+_SVG_TIMING_JS = f"var IDLE_MS = {IDLE_MS}, HIDE_MS = {HIDE_MS};"
+
 
 # ---------------------------------------------------------------------------
 # Colour palette for cluster depth levels (fillcolor, border_color)
@@ -69,7 +77,7 @@ class GraphRenderer:
         GraphRenderer.to_interactive_svg(graph)       # str  — SVG with embedded JS hover tooltips
         GraphRenderer.to_png(graph, path=None)        # Path — saved PNG file
         GraphRenderer.to_html(graph, title="")        # str  — standalone HTML page with tooltips
-        GraphRenderer.open_browser(graph, title="")   # None — opens browser
+        GraphRenderer.open_browser(graph, title="")   # None — opens browser (with_title=True)
     """
 
     # ------------------------------------------------------------------
@@ -135,21 +143,73 @@ class GraphRenderer:
         return result
 
     @staticmethod
-    def to_html(graph: Graph, title: str = "", title_tooltip: str = "") -> str:
+    def _assemble_interactive_html(
+        *,
+        page_title: str,
+        svg: str,
+        descs: dict[str, str],
+        edge_descs: dict[str, str],
+        title_tooltip: str,
+        with_title: bool,
+    ) -> str:
+        """Fill ``_HTML_TEMPLATE`` placeholders for one interactive graph page.
+
+        Args:
+            page_title: Document ``<title>`` and optional header ``<h1>`` text.
+            svg: Inline SVG from Graphviz.
+            descs: Vertex/cluster tooltip Markdown map.
+            edge_descs: Usage-edge tooltip Markdown map.
+            title_tooltip: Header hover Markdown (only when ``with_title``).
+            with_title: Include the visible page header bar.
+
+        Returns:
+            Complete HTML document string.
+        """
+        escaped_title = _html_stdlib.escape(page_title)
+        header = (
+            f'  <div id="header"><h1 id="hdr-title">{escaped_title}</h1></div>\n'
+            if with_title
+            else ""
+        )
+        title_tt_json = json.dumps(
+            title_tooltip if (with_title and title_tooltip) else None,
+            ensure_ascii=False,
+        )
+        return (
+            _HTML_TEMPLATE
+            .replace("%%TITLE%%", escaped_title)
+            .replace("%%HEADER%%", header)
+            .replace("%%SVG%%", svg)
+            .replace("%%DESCRIPTIONS%%", json.dumps(descs, ensure_ascii=False))
+            .replace("%%EDGE_DESCRIPTIONS%%", json.dumps(edge_descs, ensure_ascii=False))
+            .replace("%%TITLE_TOOLTIP%%", title_tt_json)
+            .replace("%%TIMING_JS%%", _HTML_TIMING_JS)
+        )
+
+    @staticmethod
+    def to_html(
+        graph: Graph,
+        title: str = "",
+        title_tooltip: str = "",
+        *,
+        with_title: bool = True,
+    ) -> str:
         """Return a standalone interactive HTML page for *graph*.
 
         Graphviz generates the SVG layout.  JavaScript overlays rich Markdown
         tooltips on hover using ``marked.js`` from CDN.  Hovering over any
         vertex (leaf or cluster) shows its full attribute description.
-        When ``title_tooltip`` is provided, hovering over the page title shows
-        a rich Markdown tooltip with that content.
+        When ``title_tooltip`` is provided and ``with_title`` is True, hovering
+        over the page header shows a rich Markdown tooltip with that content.
 
         Args:
             graph: The composition graph to render.
-            title: Page title shown in the browser tab and the header bar.
-                   Defaults to the root vertex label.
-            title_tooltip: Markdown shown as a tooltip when hovering the title.
-                           When empty, no header tooltip is attached.
+            title: Page title in ``<title>``; also shown in the header when
+                   ``with_title`` is True.  Defaults to the root vertex label.
+            title_tooltip: Markdown tooltip for the page header (only when
+                           ``with_title`` is True).
+            with_title: When True, include the visible header bar with *title*.
+                        Set False when embedding in another UI (e.g. GUI Structure tab).
 
         Returns:
             Complete self-contained HTML string (no external files needed).
@@ -161,14 +221,13 @@ class GraphRenderer:
         dot, descs, edge_descs = GraphRenderer._build_dot(graph)
         svg = GraphRenderer._render_svg_from_dot(dot)
         page_title = title or graph.root.label
-        title_tt_json = json.dumps(title_tooltip if title_tooltip else None, ensure_ascii=False)
-        return (
-            _HTML_TEMPLATE
-            .replace("%%TITLE%%",          _html_stdlib.escape(page_title))
-            .replace("%%SVG%%",            svg)
-            .replace("%%DESCRIPTIONS%%",   json.dumps(descs, ensure_ascii=False))
-            .replace("%%EDGE_DESCRIPTIONS%%", json.dumps(edge_descs, ensure_ascii=False))
-            .replace("%%TITLE_TOOLTIP%%",  title_tt_json)
+        return GraphRenderer._assemble_interactive_html(
+            page_title=page_title,
+            svg=svg,
+            descs=descs,
+            edge_descs=edge_descs,
+            title_tooltip=title_tooltip,
+            with_title=with_title,
         )
 
     @staticmethod
@@ -179,6 +238,7 @@ class GraphRenderer:
         title_tooltip: str = "",
         descs: dict[str, str] | None = None,
         edge_descs: dict[str, str] | None = None,
+        with_title: bool = True,
     ) -> str:
         """Render an existing DOT source to the same interactive HTML as ``to_html()``.
 
@@ -192,6 +252,7 @@ class GraphRenderer:
             title_tooltip: Optional Markdown tooltip for the page header.
             descs: Vertex/cluster tooltip map; auto-extracted when ``None``.
             edge_descs: Usage-edge tooltip map; auto-extracted when ``None``.
+            with_title: When True, include the visible header bar (CLI/HTML export).
 
         Returns:
             Complete standalone HTML string.
@@ -209,14 +270,13 @@ class GraphRenderer:
         GraphRenderer._require_graphviz()
         svg = GraphRenderer._render_svg_from_dot(dot_source)
         page_title = title or GraphRenderer._default_title_from_dot(dot_source)
-        title_tt_json = json.dumps(title_tooltip if title_tooltip else None, ensure_ascii=False)
-        return (
-            _HTML_TEMPLATE
-            .replace("%%TITLE%%", _html_stdlib.escape(page_title))
-            .replace("%%SVG%%", svg)
-            .replace("%%DESCRIPTIONS%%", json.dumps(descs, ensure_ascii=False))
-            .replace("%%EDGE_DESCRIPTIONS%%", json.dumps(edge_descs, ensure_ascii=False))
-            .replace("%%TITLE_TOOLTIP%%", title_tt_json)
+        return GraphRenderer._assemble_interactive_html(
+            page_title=page_title,
+            svg=svg,
+            descs=descs,
+            edge_descs=edge_descs,
+            title_tooltip=title_tooltip,
+            with_title=with_title,
         )
 
     @staticmethod
@@ -247,7 +307,13 @@ class GraphRenderer:
         return GraphRenderer._inject_svg_interactivity(raw_svg, descs, edge_descs)
 
     @staticmethod
-    def open_browser(graph: Graph, title: str = "", title_tooltip: str = "") -> None:
+    def open_browser(
+        graph: Graph,
+        title: str = "",
+        title_tooltip: str = "",
+        *,
+        with_title: bool = True,
+    ) -> None:
         """Render *graph* as HTML and open it in the default web browser.
 
         Saves an HTML file to a user-accessible directory and opens it via
@@ -265,6 +331,7 @@ class GraphRenderer:
             graph: The composition graph to render.
             title: Forwarded to ``to_html()``.
             title_tooltip: Forwarded to ``to_html()``.
+            with_title: Forwarded to ``to_html()`` (default True for CLI/browser).
         """
         xdg_runtime = os.environ.get("XDG_RUNTIME_DIR", "")
         if xdg_runtime:
@@ -273,7 +340,12 @@ class GraphRenderer:
             cache_dir = Path.home() / ".local" / "share" / "agentflow" / "graphs"
         cache_dir.mkdir(parents=True, exist_ok=True)
 
-        content   = GraphRenderer.to_html(graph, title=title, title_tooltip=title_tooltip)
+        content = GraphRenderer.to_html(
+            graph,
+            title=title,
+            title_tooltip=title_tooltip,
+            with_title=with_title,
+        )
         safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", graph.root.label)
         out = cache_dir / f"{safe_name}.html"
         out.write_text(content, encoding="utf-8")
@@ -1029,6 +1101,7 @@ class GraphRenderer:
             _SVG_INJECTION_TEMPLATE
             .replace("%%DESCRIPTIONS%%", descs_json)
             .replace("%%EDGE_DESCRIPTIONS%%", edge_descs_json)
+            .replace("%%TIMING_JS%%", _SVG_TIMING_JS)
         )
         return svg_str.replace("</svg>", injection + "\n</svg>", 1)
 
@@ -1340,6 +1413,32 @@ _SVG_INJECTION_TEMPLATE = r"""\
   var ttG     = document.getElementById("gv-tt");
   var ttInner = document.getElementById("gv-tt-inner");
 
+  // --- Sticky tooltip --------------------------------------------------
+  // The panel follows the cursor while it moves, then "freezes" after a
+  // short idle so the user can move into it and scroll long content.
+  //   IDLE_MS — cursor must rest this long before the panel freezes.
+  //   HIDE_MS — grace period when leaving a node, so the cursor can cross
+  //             the small offset gap into the panel without it vanishing.
+  %%TIMING_JS%%
+  var ttSource = null;   // element currently described
+  var frozen = false;    // when true the panel stays put and is scrollable
+  var hideTimer = null, idleTimer = null;
+
+  function tipContains(node) {
+    while (node) { if (node === ttG) return true; node = node.parentNode; }
+    return false;
+  }
+  function clearHide() { if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } }
+  function clearIdle() { if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; } }
+  function hideTip() {
+    clearHide(); clearIdle();
+    ttG.setAttribute("display", "none");
+    frozen = false; ttSource = null;
+  }
+  function scheduleHide() { clearHide(); hideTimer = setTimeout(hideTip, HIDE_MS); }
+  function freezeTip() { frozen = true; }
+  function armIdle() { clearIdle(); idleTimer = setTimeout(freezeTip, IDLE_MS); }
+
   // Attach descriptions to <g> elements; remove all <title> elements so the
   // browser shows no native grey tooltip anywhere in the diagram.
   var allGroups = svg.querySelectorAll("g");
@@ -1431,27 +1530,34 @@ _SVG_INJECTION_TEMPLATE = r"""\
   }
 
   svg.addEventListener("mouseover", function (e) {
+    if (tipContains(e.target)) { clearHide(); freezeTip(); return; }
     var el = e.target;
     while (el && el.tagName !== "svg" && el.tagName !== "SVG") {
       if (el._md) {
-        ttInner.innerHTML = renderMd(el._md);
-        ttG.setAttribute("display", "block");
-        positionTooltip(e);
+        if (ttSource !== el) {       // new target — render, reposition, re-arm
+          ttSource = el;
+          ttInner.innerHTML = renderMd(el._md);
+          frozen = false;
+          ttG.setAttribute("display", "block");
+          positionTooltip(e);
+        }
+        clearHide();
+        if (!frozen) armIdle();
         return;
       }
       el = el.parentElement;
     }
-    ttG.setAttribute("display", "none");
+    scheduleHide();
   });
 
   svg.addEventListener("mousemove", function (e) {
-    if (ttG.getAttribute("display") === "none") return;
+    if (ttG.getAttribute("display") === "none" || frozen) return;
+    if (tipContains(e.target)) return;
     positionTooltip(e);
+    armIdle();
   });
 
-  svg.addEventListener("mouseleave", function () {
-    ttG.setAttribute("display", "none");
-  });
+  svg.addEventListener("mouseleave", scheduleHide);
 
   // Attempt to load marked.js from CDN for richer Markdown rendering.
   // Falls back silently to miniMd() if CDN is unreachable.
@@ -1472,7 +1578,8 @@ _SVG_INJECTION_TEMPLATE = r"""\
 # ---------------------------------------------------------------------------
 #
 # Placeholders:
-#   %%TITLE%%         → HTML-escaped page title (used in <title> and <h1>)
+#   %%TITLE%%         → HTML-escaped page title (used in <title>)
+#   %%HEADER%%        → optional header bar with <h1> (empty when with_title=False)
 #   %%SVG%%           → inline SVG string from Graphviz
 #   %%DESCRIPTIONS%%  → JSON {dot_node_or_cluster_id: markdown_string}
 #
@@ -1521,6 +1628,9 @@ _HTML_TEMPLATE = """\
       border-left: 4px solid #1976d2;
       font-size: 13px; line-height: 1.6; pointer-events: none;
     }
+    /* When frozen (cursor idle or hovering the panel) the tooltip becomes
+       interactive so its scrollbar can be used. */
+    #tt.sticky { pointer-events: auto; }
     #tt h1, #tt h2, #tt h3 { font-weight: bold; margin: 0.5em 0 0.2em; color: #1976d2; }
     #tt h1 { font-size: 1.05rem; border-bottom: 1px solid #eee; padding-bottom: 4px; }
     #tt h2 { font-size: 0.95rem; color: #333; }
@@ -1539,13 +1649,63 @@ _HTML_TEMPLATE = """\
   </style>
 </head>
 <body>
-  <div id="header"><h1 id="hdr-title">%%TITLE%%</h1></div>
-  <div id="svg-wrap">%%SVG%%</div>
+%%HEADER%%  <div id="svg-wrap">%%SVG%%</div>
   <div id="tt"></div>
   <script>
     const descs = %%DESCRIPTIONS%%;
     const edgeDescs = %%EDGE_DESCRIPTIONS%%;
     const tt = document.getElementById("tt");
+
+    // --- Sticky tooltip ---------------------------------------------------
+    // The panel follows the cursor while it moves, then "freezes" after a
+    // short idle so the user can move into it and scroll long content.
+    //   IDLE_MS — cursor must rest this long before the panel freezes.
+    //   HIDE_MS — grace period when leaving a node, so the cursor can cross
+    //             the small offset gap into the panel without it vanishing.
+    %%TIMING_JS%%
+    let ttSource = null;   // element (or "title") currently described
+    let frozen = false;    // when true the panel stays put and is scrollable
+    let hideTimer = null, idleTimer = null;
+
+    function renderMd(md) {
+      return (typeof marked !== "undefined")
+        ? marked.parse(md)
+        : "<pre>" + md.replace(/</g, "&lt;") + "</pre>";
+    }
+    function clearHide() { if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } }
+    function clearIdle() { if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; } }
+    function hideTip() {
+      clearHide(); clearIdle();
+      tt.style.display = "none";
+      tt.classList.remove("sticky");
+      frozen = false;
+      ttSource = null;
+    }
+    function scheduleHide() { clearHide(); hideTimer = setTimeout(hideTip, HIDE_MS); }
+    function freezeTip() { frozen = true; tt.classList.add("sticky"); }
+    function armIdle() { clearIdle(); idleTimer = setTimeout(freezeTip, IDLE_MS); }
+    function placeTip(e) {
+      const x = e.clientX + OFFSET_X, y = e.clientY + OFFSET_Y;
+      const w = tt.offsetWidth || 420;
+      tt.style.left = (x + w > window.innerWidth ? e.clientX - w - 4 : x) + "px";
+      tt.style.top  = Math.max(8, y) + "px";
+    }
+    function showTip(md, source, e) {
+      if (ttSource !== source) {     // new target — render, reposition, re-arm
+        ttSource = source;
+        tt.innerHTML = renderMd(md);
+        tt.classList.remove("sticky");
+        frozen = false;
+        tt.style.display = "block";
+        placeTip(e);
+      }
+      clearHide();
+      if (!frozen) armIdle();
+    }
+
+    // Keep the panel alive and frozen while the cursor is inside it.
+    tt.addEventListener("mouseenter", function() { clearHide(); freezeTip(); });
+    tt.addEventListener("mouseleave", hideTip);
 
     function lookupEdgeMd(titleKey) {
       if (edgeDescs[titleKey]) return edgeDescs[titleKey];
@@ -1597,51 +1757,35 @@ _HTML_TEMPLATE = """\
       const hdrEl = document.getElementById("hdr-title");
       if (hdrEl) {
         hdrEl.style.cursor = "help";
-        hdrEl.addEventListener("mouseover", function() {
-          tt.innerHTML = (typeof marked !== "undefined")
-            ? marked.parse(titleTt)
-            : "<pre>" + titleTt.replace(/</g, "&lt;") + "</pre>";
-          tt.style.display = "block";
-        });
+        hdrEl.addEventListener("mouseover", function(e) { showTip(titleTt, "title", e); });
         hdrEl.addEventListener("mousemove", function(e) {
-          const x = e.clientX + 18, y = e.clientY + 8;
-          const w = tt.offsetWidth || 420;
-          tt.style.left = (x + w > window.innerWidth ? e.clientX - w - 4 : x) + "px";
-          tt.style.top  = Math.max(8, y) + "px";
+          if (!frozen) { placeTip(e); armIdle(); }
         });
-        hdrEl.addEventListener("mouseleave", function() {
-          tt.style.display = "none";
-        });
+        hdrEl.addEventListener("mouseleave", scheduleHide);
       }
     }
 
     // On hover: find the innermost group with a description and show tooltip.
-    document.getElementById("svg-wrap").addEventListener("mouseover", function(e) {
+    const svgWrap = document.getElementById("svg-wrap");
+
+    svgWrap.addEventListener("mouseover", function(e) {
       let el = e.target;
       while (el && el.id !== "svg-wrap") {
-        if (el._md) {
-          tt.innerHTML = (typeof marked !== "undefined")
-            ? marked.parse(el._md)
-            : "<pre>" + el._md.replace(/</g, "&lt;") + "</pre>";
-          tt.style.display = "block";
-          return;
-        }
+        if (el._md) { showTip(el._md, el, e); return; }
         el = el.parentElement;
       }
-      tt.style.display = "none";
+      // Not over a described element: hide after a grace period so the cursor
+      // can still reach the panel across the offset gap.
+      scheduleHide();
     });
 
-    document.getElementById("svg-wrap").addEventListener("mousemove", function(e) {
-      if (tt.style.display === "none") return;
-      const x = e.clientX + 18, y = e.clientY + 8;
-      const w = tt.offsetWidth || 420;
-      tt.style.left = (x + w > window.innerWidth ? e.clientX - w - 4 : x) + "px";
-      tt.style.top  = Math.max(8, y) + "px";
+    svgWrap.addEventListener("mousemove", function(e) {
+      if (tt.style.display === "none" || frozen) return;
+      placeTip(e);
+      armIdle();
     });
 
-    document.getElementById("svg-wrap").addEventListener("mouseleave", function() {
-      tt.style.display = "none";
-    });
+    svgWrap.addEventListener("mouseleave", scheduleHide);
   </script>
 </body>
 </html>

@@ -447,12 +447,19 @@ class Describable:
         from agentflow.describable.graph_renderer import GraphRenderer
         return GraphRenderer.to_png(self.get_graph(), path=path)
 
-    def get_graph_html(self, title: str = "", title_tooltip: str = "") -> str:
+    def get_graph_html(
+        self,
+        title: str = "",
+        title_tooltip: str = "",
+        *,
+        with_title: bool = True,
+    ) -> str:
         """Return a standalone interactive HTML page for this object's graph.
 
         Args:
             title: Page title.  Defaults to ``self.name``.
             title_tooltip: Markdown shown as tooltip when hovering the title.
+            with_title: Include the visible page header (False for GUI embed).
 
         Returns:
             Complete self-contained HTML string with hover tooltips.
@@ -462,19 +469,32 @@ class Describable:
         """
         from agentflow.describable.graph_renderer import GraphRenderer
         return GraphRenderer.to_html(
-            self.get_graph(), title=title or type(self).__name__, title_tooltip=title_tooltip
+            self.get_graph(),
+            title=title or type(self).__name__,
+            title_tooltip=title_tooltip,
+            with_title=with_title,
         )
 
-    def open_graph_browser(self, title: str = "", title_tooltip: str = "") -> None:
+    def open_graph_browser(
+        self,
+        title: str = "",
+        title_tooltip: str = "",
+        *,
+        with_title: bool = True,
+    ) -> None:
         """Render this object's graph as HTML and open it in the default browser.
 
         Args:
             title: Forwarded to ``get_graph_html()``.
             title_tooltip: Forwarded to ``get_graph_html()``.
+            with_title: Forwarded to ``get_graph_html()`` (default True).
         """
         from agentflow.describable.graph_renderer import GraphRenderer
         GraphRenderer.open_browser(
-            self.get_graph(), title=title or type(self).__name__, title_tooltip=title_tooltip
+            self.get_graph(),
+            title=title or type(self).__name__,
+            title_tooltip=title_tooltip,
+            with_title=with_title,
         )
 
     # ------------------------------------------------------------------

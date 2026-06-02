@@ -1,8 +1,10 @@
 const BASE = ''  // uses Vite proxy in dev; same origin in production
 
 export interface AppInfo {
+  /** Script stem (e.g. ``06_smart_home_assistant``) or class name fallback. */
   name: string
-  description: string
+  /** Module docstring (Markdown) for the title tooltip. */
+  doc: string
 }
 
 export interface RunResponse {
@@ -17,6 +19,7 @@ export const api = {
   getSamples: (): Promise<string[]> =>
     fetch(`${BASE}/api/samples`).then(r => r.json()),
 
+  /** Interactive graph HTML (same as CLI ``graph --browser``). */
   getGraph: (): Promise<string> =>
     fetch(`${BASE}/api/graph`).then(r => r.text()),
 

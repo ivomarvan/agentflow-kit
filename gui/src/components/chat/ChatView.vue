@@ -1,33 +1,20 @@
 <template>
   <div class="chat-view">
     <!-- Sample prompts -->
-    <div v-if="samples.length" class="sample-prompts">
-      <span class="label">Try:</span>
-      <Button
-        v-for="s in samples"
-        :key="s"
-        :label="s"
-        size="small"
-        severity="secondary"
-        @click="promptInput = s"
+    <div v-if="sampleOptions.length > 1" class="sample-prompts">
+      <label for="sample-select" class="label">Try:</label>
+      <Select
+        id="sample-select"
+        v-model="selectedSample"
+        :options="sampleOptions"
+        option-label="label"
+        option-value="value"
+        placeholder="— type your own —"
+        class="sample-select"
       />
     </div>
 
-    <!-- Conversation history -->
-    <div class="messages" ref="messagesEl">
-      <div
-        v-for="msg in chatStore.messages"
-        :key="msg.id"
-        :class="['message', msg.role]"
-      >
-        <MessageBubble :message="msg" />
-      </div>
-      <div v-if="chatStore.messages.length === 0" class="empty-state">
-        <p>Send a message to start a conversation.</p>
-      </div>
-    </div>
-
-    <!-- Input -->
+    <!-- Input (above conversation history) -->
     <div class="input-area">
       <Textarea
         v-model="promptInput"
@@ -46,21 +33,46 @@
         @click="sendMessage"
       />
     </div>
+
+    <!-- Conversation history -->
+    <div class="messages" ref="messagesEl">
+      <div
+        v-for="msg in chatStore.messages"
+        :key="msg.id"
+        :class="['message', msg.role]"
+      >
+        <MessageBubble :message="msg" />
+      </div>
+      <div v-if="chatStore.messages.length === 0" class="empty-state">
+        <p>Send a message to start a conversation.</p>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue'
-import { Button, Textarea } from 'primevue'
+import { ref, onMounted, nextTick, watch, computed } from 'vue'
+import { Button, Textarea, Select } from 'primevue'
 import MessageBubble from './MessageBubble.vue'
 import { useChatStore } from '@/stores/chat'
 import { api } from '@/services/api'
 import { connectEventStream, type WsMessage } from '@/services/wsClient'
 
+interface SampleOption {
+  label: string
+  value: string
+}
+
 const chatStore = useChatStore()
 const promptInput = ref('')
 const samples = ref<string[]>([])
+const selectedSample = ref('')
 const messagesEl = ref<HTMLElement | null>(null)
+
+const sampleOptions = computed<SampleOption[]>(() => [
+  { label: '— type your own —', value: '' },
+  ...samples.value.map((s) => ({ label: s, value: s })),
+])
 
 onMounted(async () => {
   try {
@@ -68,6 +80,10 @@ onMounted(async () => {
   } catch {
     samples.value = []
   }
+})
+
+watch(selectedSample, (val) => {
+  promptInput.value = val
 })
 
 watch(() => chatStore.messages.length, () => {
@@ -80,6 +96,7 @@ async function sendMessage() {
   const text = promptInput.value.trim()
   if (!text || chatStore.isRunning) return
   promptInput.value = ''
+  selectedSample.value = ''
   chatStore.isRunning = true
   chatStore.addUserMessage(text)
   const response = await api.startRun(text)
@@ -118,13 +135,17 @@ async function sendMessage() {
 }
 .sample-prompts {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.75rem;
   align-items: center;
 }
 .sample-prompts .label {
   font-size: 0.85rem;
   color: var(--p-text-muted-color, #888);
+  flex-shrink: 0;
+}
+.sample-select {
+  flex: 1;
+  min-width: 0;
 }
 .messages {
   flex: 1;

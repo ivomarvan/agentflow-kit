@@ -15,6 +15,7 @@ from agentflow.statemachine.vertex import StateVertex
 
 class _Sig(enum.Enum):
     ok = "ok"
+    retry = "retry"
 
 
 class NodeA(StateVertex):
@@ -101,3 +102,49 @@ def test_single_incoming_no_warning(caplog: pytest.LogCaptureFixture) -> None:
             ],
         )
     assert not any(r.levelno >= logging.WARNING for r in caplog.records)
+
+
+@pytest.mark.unit
+def test_cycle_back_edge_join_no_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """Worker/Judge loop: join with one back-edge must not emit asymmetric-join WARNING.
+
+    NodeB preds {A depth0, C depth2}; B reaches C forward via B->C, so C->B is
+    filtered as a back-edge — only one forward predecessor remains.
+    """
+    with caplog.at_level(logging.WARNING):
+        StateGraph(
+            start=NodeA,
+            transitions=[
+                Transition(NodeA, _Sig.ok, NodeB),
+                Transition(NodeB, _Sig.ok, NodeC),
+                Transition(NodeC, _Sig.ok, NodeB),
+                Transition(NodeC, _Sig.retry, NodeD),
+            ],
+        )
+    assert not any(r.levelno >= logging.WARNING for r in caplog.records)
+
+
+@pytest.mark.unit
+def test_asymmetric_fanin_with_unrelated_cycle_still_warns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Genuine asymmetric Parallel fan-in still warns when an unrelated cycle exists.
+
+    Same asymmetric join as test_asymmetric_join_emits_warning, plus a side loop
+    A -> B -> A that does not make D reach B or E.
+    """
+    with caplog.at_level(logging.WARNING):
+        StateGraph(
+            start=NodeA,
+            transitions=[
+                Transition(NodeA, _Sig.ok, Parallel(NodeB, NodeC)),
+                Transition(NodeB, _Sig.ok, NodeD),
+                Transition(NodeC, _Sig.ok, NodeE),
+                Transition(NodeE, _Sig.ok, NodeD),
+                Transition(NodeA, _Sig.retry, NodeB),
+                Transition(NodeB, _Sig.retry, NodeA),
+            ],
+        )
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warnings) >= 1
+    assert any("NodeD" in r.getMessage() for r in warnings)

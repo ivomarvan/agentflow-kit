@@ -1,8 +1,10 @@
 <template>
   <div class="app-container">
     <div class="app-header">
-      <h1>{{ appInfo?.name ?? 'agentflow GUI' }}</h1>
-      <span class="app-description">{{ appInfo?.description ?? '' }}</span>
+      <StickyMarkdownTooltipTitle
+        :title="appInfo?.name ?? 'agentflow GUI'"
+        :doc="appInfo?.doc ?? ''"
+      />
     </div>
     <Tabs v-model:value="activeTab">
       <TabList>
@@ -22,7 +24,7 @@
           <SettingsView />
         </TabPanel>
         <TabPanel value="structure">
-          <StructureView @nodeClick="onNodeClick" />
+          <StructureView />
         </TabPanel>
       </TabPanels>
     </Tabs>
@@ -36,9 +38,10 @@ import ChatView from '@/components/chat/ChatView.vue'
 import VoiceBotView from '@/components/voicebot/VoiceBotView.vue'
 import SettingsView from '@/components/settings/SettingsView.vue'
 import StructureView from '@/components/structure/StructureView.vue'
+import StickyMarkdownTooltipTitle from '@/components/ui/StickyMarkdownTooltipTitle.vue'
 import { api } from '@/services/api'
 
-const appInfo = ref<{ name: string; description: string } | null>(null)
+const appInfo = ref<{ name: string; doc: string } | null>(null)
 const activeTab = ref('chat')
 
 onMounted(async () => {
@@ -49,10 +52,6 @@ onMounted(async () => {
   }
 })
 
-/** Switch to Settings tab so the user can inspect parameters for the clicked node. */
-function onNodeClick(_nodeId: string) {
-  activeTab.value = 'settings'
-}
 </script>
 
 <style scoped>
@@ -63,17 +62,6 @@ function onNodeClick(_nodeId: string) {
   font-family: system-ui, sans-serif;
 }
 .app-header {
-  display: flex;
-  align-items: baseline;
-  gap: 1rem;
   margin-bottom: 1rem;
-}
-.app-header h1 {
-  margin: 0;
-  font-size: 1.5rem;
-}
-.app-description {
-  color: var(--p-text-muted-color, #666);
-  font-size: 0.9rem;
 }
 </style>

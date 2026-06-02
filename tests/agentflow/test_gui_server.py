@@ -64,16 +64,37 @@ async def test_health_returns_ok(fastapi_app) -> None:  # type: ignore[no-untype
 
 @pytest.mark.asyncio
 async def test_info_contains_name(fastapi_app) -> None:  # type: ignore[no-untyped-def]
-    """GET /api/info returns a dict with a 'name' and 'description' key."""
+    """GET /api/info returns name and doc keys."""
     async with AsyncClient(
         transport=ASGITransport(app=fastapi_app), base_url="http://test"
     ) as client:
         r = await client.get("/api/info")
     assert r.status_code == 200
     data = r.json()
-    assert "name" in data
-    assert "description" in data
     assert data["name"] == "_SimpleTestApp"
+    assert "doc" in data
+    assert isinstance(data["doc"], str)
+
+
+# ---------------------------------------------------------------------------
+# Graph
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_graph_returns_interactive_html(fastapi_app) -> None:  # type: ignore[no-untyped-def]
+    """GET /api/graph returns standalone HTML with tooltip scripts."""
+    async with AsyncClient(
+        transport=ASGITransport(app=fastapi_app), base_url="http://test"
+    ) as client:
+        r = await client.get("/api/graph")
+    assert r.status_code == 200
+    assert "text/html" in r.headers.get("content-type", "")
+    body = r.text
+    assert body.lstrip().startswith("<!DOCTYPE html>")
+    assert "marked" in body
+    assert "svg-wrap" in body
+    assert 'id="header"' not in body
 
 
 # ---------------------------------------------------------------------------

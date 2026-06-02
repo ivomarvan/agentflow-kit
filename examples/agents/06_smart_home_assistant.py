@@ -1,37 +1,36 @@
-"""Smart Home Voice Dispatcher — Worker/Judge pattern with safety validation.
+"""# Smart Home Voice Dispatcher
 
-A user controls their smart home by voice. The system parses the request,
-proposes device actions using a cheap LLM with tools, validates the plan
-through a safety-focused expensive LLM (Judge), and finally formats a natural
-voice response.  The Judge can reject unsafe plans — the Worker then revises.
+Worker/Judge pattern with safety validation.
 
-# Original assignment (Varianta 1: Hlasový dispečink chytré domácnosti)
-# -----------------------------------------------------------------------
-# IntentParser: Přijme textový přepis hlasu. Analyzuje záměr uživatele
-#   a rozhodne, do jaké kategorie požadavek spadá.
-# DeviceWorker (levnější LLM + tools): Navrhne konkrétní akce zařízení.
-# SafetyJudge (dražší LLM): Reviduje plán. Kontroluje nebezpečné operace
-#   (topení na maximum, trouba bez přítomnosti osob, …). Pokud neprojde,
-#   vrací plán zpět DeviceWorkerovi k přepracování.
-# VoiceFormatter: Zformuluje stručnou, přirozenou odpověď pro TTS výstup.
-# -----------------------------------------------------------------------
+## Assignment
 
-Framework features demonstrated:
-  ▸ StateVertex as Pydantic BaseModel — class-level Annotated fields, no __init__
-  ▸ Worker / Judge loop   — SafetyJudge can reject DeviceWorker's plan (max 2 retries)
-  ▸ achat_with_tools      — tool-calling loop hidden inside LlmConnector
-  ▸ Two LLM connectors    — "economy" (gpt-4o-mini) for Worker/Parser/Formatter,
-                            "quality" (gpt-4o) for SafetyJudge
-  ▸ Typed state in run()  — no cast() needed
-  ▸ ctx.stats             — token/timing stats returned after run
-  ▸ Declarative AgentApp  — no subclassing
+A user controls their smart home via a voice transcript. The pipeline:
 
-Run:
-    uv run python examples/agents/06_smart_home_assistant.py run
-    uv run python examples/agents/06_smart_home_assistant.py run "Turn on kitchen lights"
-    uv run python examples/agents/06_smart_home_assistant.py graph --browser
-    uv run python examples/agents/06_smart_home_assistant.py gui
-    uv run python examples/agents/06_smart_home_assistant.py -h
+1. **IntentParser** — classifies the request
+2. **DeviceWorker** — proposes device actions with tools:
+   - `get_current_status` — room temperature, lights, occupancy
+   - `set_temperature` — target temperature in °C
+   - `toggle_device` — lights or stove on/off
+3. **SafetyJudge** — validates the plan (temperature limits, occupancy checks, …)
+4. **VoiceFormatter** — produces a concise TTS-ready reply
+
+If the Judge rejects an unsafe plan, the Worker revises and resubmits (max 2 retries).
+
+## Demonstrates
+
+- Worker/Judge review loop with tool-calling LLMs
+- `StateVertex` as Pydantic BaseModel
+- Two LLM connector tiers (economy vs quality)
+- Typed state without `cast()`, `ctx.stats` after run
+- Declarative `AgentApp` with `run` / `graph` / `gui`
+
+## Run
+
+```bash
+uv run python examples/agents/06_smart_home_assistant.py run
+uv run python examples/agents/06_smart_home_assistant.py graph --browser
+uv run python examples/agents/06_smart_home_assistant.py -h
+```
 """
 
 from __future__ import annotations
@@ -385,7 +384,7 @@ if __name__ == "__main__":
                 # economy: used by IntentParser, DeviceWorker, VoiceFormatter
                 "economy": LlmConnector(model="gpt-4o-mini", cache=LlmFileCache(__file__)),
                 # quality: used by SafetyJudge — higher reasoning needed for safety checks
-                "quality": LlmConnector(model="gpt-4o",      cache=LlmFileCache(__file__)),
+                "quality": LlmConnector(model="gemini-3.5-flash",      cache=LlmFileCache(__file__)),
             },
             tool_registries={
                 "default": ToolRegistry([

@@ -107,6 +107,10 @@ class AgentApp(Describable):
         self._state_graph = state_graph
         self._initial_state_factory = initial_state_factory
         self._last_ctx: Context | None = None
+        self.gui_script_name = ""
+        """Entry-point script stem for GUI header; set in ``_cli_start_gui``."""
+        self.gui_script_doc = ""
+        """Entry-point module docstring for GUI title tooltip; set in ``_cli_start_gui``."""
         # Expose state_graph as self.graph so get_graph() can find it via vars(self)
         if state_graph is not None:
             self.graph = state_graph
@@ -526,6 +530,8 @@ class AgentApp(Describable):
             )
             sys.exit(1)
         app_script = Path(sys.argv[0]).resolve()
+        self.gui_script_name = app_script.stem
+        self.gui_script_doc = self._doc or ""
         discover_and_build(app_script=app_script)
         serve(self, port=port, host=host, open_browser=not no_browser)
 

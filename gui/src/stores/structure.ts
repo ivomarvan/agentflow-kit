@@ -4,14 +4,14 @@ import { ref } from 'vue'
 /**
  * Shared state between StructureView and SettingsView.
  *
- * When the user clicks a graph node in StructureView, `selectedNode` is set
- * here so that SettingsView can react (scroll + highlight).
+ * When the user selects a graph node (future), `selectedNode` can drive
+ * Settings scroll/highlight.
  */
 export const useStructureStore = defineStore('structure', () => {
   /** ID of the currently selected graph node (matches a top-level config key). */
   const selectedNode = ref<string | null>(null)
-  /** Raw SVG string fetched from /api/graph — cached to avoid re-fetching. */
-  const svgContent = ref<string | null>(null)
+  /** Interactive graph HTML from ``GET /api/graph`` (same as ``graph --browser``). */
+  const graphHtml = ref<string | null>(null)
 
   /**
    * Mark a graph node as selected, triggering Settings scroll/highlight.
@@ -22,12 +22,12 @@ export const useStructureStore = defineStore('structure', () => {
   }
 
   /**
-   * Cache the SVG graph content.
-   * @param svg - Raw SVG markup string from the API.
+   * Cache the interactive graph HTML page.
+   * @param html - Full HTML document from the API.
    */
-  function setSvg(svg: string) {
-    svgContent.value = svg
+  function setGraphHtml(html: string) {
+    graphHtml.value = html
   }
 
-  return { selectedNode, svgContent, selectNode, setSvg }
+  return { selectedNode, graphHtml, selectNode, setGraphHtml }
 })
