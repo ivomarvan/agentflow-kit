@@ -205,11 +205,16 @@ elif args.command == "gui":
     serve(self, port=getattr(args, "port", None), host=getattr(args, "host", "127.0.0.1"))
 ```
 
-CLI help:
+CLI help (top-level subcommands on `AgentApp.cli()`):
 ```
-gui [--port PORT] [--host HOST] [--no-browser]
+script.py -h
+script.py run [QUESTION...]
+script.py gui [--host HOST] [--port PORT] [--no-browser]
     Start local GUI server and open in browser.
     Default port: 8765 (override via AGENTFLOW_GUI_PORT env var or --port)
+script.py describe [--format markdown|json|html] [-o FILE]
+script.py graph [--format dot|svg|svg-raw|html|png] [-o FILE]
+script.py graph --browser
 ```
 
 Port priority: default `8765` → `AGENTFLOW_GUI_PORT` env var → `--port` CLI arg.

@@ -7,14 +7,17 @@ Demonstrates **domain events** and a **custom GUI renderer** in agentflow.
 ## Run
 
 ```bash
+# Show help
+uv run python examples/hotel_booking/hotel_booking_app.py -h
+
 # Text workflow (no GUI)
-uv run python examples/hotel_booking/hotel_booking_app.py
+uv run python examples/hotel_booking/hotel_booking_app.py run
 
 # GUI server (auto-discovers renderer, rebuilds, opens browser)
 uv run python examples/hotel_booking/hotel_booking_app.py gui
 
 # Graph visualization
-uv run python examples/hotel_booking/hotel_booking_app.py browser
+uv run python examples/hotel_booking/hotel_booking_app.py graph --browser
 ```
 
 ## Architecture

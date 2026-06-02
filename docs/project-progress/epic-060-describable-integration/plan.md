@@ -154,7 +154,7 @@ In the DOT node-attribute generation: if `vertex.attributes.get("active", False)
 **Demo (`03_live_graph_demo.py`)**:
 - Build the brief §2.5 style graph using bare classes.
 - Run with `LiveGraphHooks`.
-- After run, call `graph.open_graph_browser()` (or save SVG snapshots to `nogit_data/`).
+- After run, use `script.py graph --browser` or `open_graph_browser()` (or save via `graph -o`).
 - Shows the visualization capability end-to-end.
 
 **Tests:**

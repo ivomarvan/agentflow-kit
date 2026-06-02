@@ -256,25 +256,32 @@ final = await runner.resume(store, ctx.run_id, from_step=1)
 
 ### Live Graph Visualization
 
-`StateGraph` inherits `get_graph_html()` from `Describable`. Save the HTML and open it
-in a browser, or use `LiveGraphHooks` + `GraphRenderer.to_dot()` for step-by-step DOT
-snapshots (see demo 03).
+`StateGraph` inherits `get_graph_html()` from `Describable`. From a script entry-point use
+``graph --browser`` or ``graph -o file.html``; in code, save HTML or call
+``open_graph_browser()``. For step-by-step DOT snapshots use `LiveGraphHooks` + `GraphRenderer.to_dot()`
+(see demo 03).
 
 ```python
 html = graph.get_graph_html(title="My Agent Graph")
 Path("graph.html").write_text(html, encoding="utf-8")
 ```
 
+```bash
+uv run python examples/quickstart/03_live_graph_demo.py graph --browser
+uv run python examples/quickstart/03_live_graph_demo.py graph --format dot -o graph.dot
+```
+
 ## Running the Demos
 
-All demos use `FakeLlmConnector` — no API keys required.
+All demos use `FakeLlmConnector` — no API keys required. Each demo script prints help when
+run with no arguments; use the `run` subcommand to execute the workflow.
 
 | Demo | Description | Command |
 |------|-------------|---------|
-| `01_brief_example.py` | Full §2.5 graph: parallel write + review loop | `python examples/quickstart/01_brief_example.py` |
-| `02_tool_agent_demo.py` | Wrap existing `ToolAgent` as a single vertex | `python examples/quickstart/02_tool_agent_demo.py` |
-| `03_live_graph_demo.py` | LiveGraphHooks → DOT snapshot per super-step | `python examples/quickstart/03_live_graph_demo.py` |
-| `04_parallel_research_loop.py` | Parallel fan-out, fan-in, cycle, custom signals | `python examples/quickstart/04_parallel_research_loop.py` |
+| `01_brief_example.py` | Full §2.5 graph: parallel write + review loop | `uv run python examples/quickstart/01_brief_example.py run` |
+| `02_tool_agent_demo.py` | Wrap existing `ToolAgent` as a single vertex | `uv run python examples/quickstart/02_tool_agent_demo.py run` |
+| `03_live_graph_demo.py` | LiveGraphHooks → DOT snapshot per super-step | `uv run python examples/quickstart/03_live_graph_demo.py run` |
+| `04_parallel_research_loop.py` | Parallel fan-out, fan-in, cycle, custom signals | `uv run python examples/quickstart/04_parallel_research_loop.py run` |
 
 See also [statemachine_tutorial.md](../doc/guides/statemachine_tutorial.md) for a
 step-by-step walkthrough from Hello World to a parallel research agent.

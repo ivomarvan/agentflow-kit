@@ -19,10 +19,10 @@ Feature coverage:
   ▸ AgentEvent          — custom ToolCalledEvent (published inside achat_with_tools hook)
 
 Run:
-    uv run python examples/showcase.py              # run with real LLM
-    uv run python examples/showcase.py browser      # open graph in browser
+    uv run python examples/showcase.py -h           # help (full command grammar)
+    uv run python examples/showcase.py run          # run with real LLM
+    uv run python examples/showcase.py graph --browser
     uv run python examples/showcase.py gui          # start local GUI server
-    uv run python examples/showcase.py -h           # show help
 """
 
 from __future__ import annotations
@@ -318,28 +318,14 @@ if __name__ == "__main__":
         ),
     )
 
-    # Graph/GUI commands → delegate to cli(); run command → run_and_stats() with stats output.
-    _GRAPH_CMDS = {
-        "browser", "graph-browser", "graph-html", "graph-svg",
-        "graph-svg-raw", "graph-dot", "graph-png", "gui", "-h", "--help",
-    }
-    if len(sys.argv) > 1 and sys.argv[1] in _GRAPH_CMDS:
-        _app.cli(__doc__)
-    else:
-        result, stats = _app.run_and_stats(_DEFAULT_QUESTION)
-        if result:
-            print(result)
-        print(f"\nTokens used: {stats.total_tokens}  "
-              f"(prompt={stats.prompt_tokens}, completion={stats.completion_tokens})  "
-              f"LLM calls: {stats.llm_calls}  cache hits: {stats.cache_hits}  "
-              f"wall time: {stats.wall_time_ms:.0f} ms")
+    _app.cli(__doc__, name=__name__)
 
 
 # ---------------------------------------------------------------------------
 # Alternative: cli() instead of run_and_stats() for interactive use
 #
-#   AgentApp(...).cli()
-#   # handles -h, run, browser, gui subcommands from argv
+#   AgentApp(...).cli(__doc__, name=__name__)
+#   # handles -h, run, graph, gui subcommands from argv
 # ---------------------------------------------------------------------------
 
 

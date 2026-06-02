@@ -4,10 +4,10 @@ The simplest possible StateGraph — two vertices, no LLM calls, pure state
 transformation. Demonstrates the basic ExampleApp pattern.
 
 Run with:
-    uv run python examples/quickstart/00_hello_world.py              # prints HELLO
-    uv run python examples/quickstart/00_hello_world.py -h           # help
-    uv run python examples/quickstart/00_hello_world.py browser      # graph in browser
-    uv run python examples/quickstart/00_hello_world.py graph-html   # save HTML graph
+    uv run python examples/quickstart/00_hello_world.py -h           # help (all subcommands)
+    uv run python examples/quickstart/00_hello_world.py run          # prints HELLO
+    uv run python examples/quickstart/00_hello_world.py graph --browser
+    uv run python examples/quickstart/00_hello_world.py graph -o graph.html
 """
 
 from __future__ import annotations

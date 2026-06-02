@@ -8,7 +8,7 @@
 - [ ] Linear single-path graph produces no WARNING.
 - [ ] `_analyze_asymmetric_joins` handles cycles without infinite loop (visited set).
 - [ ] `01_brief_example.py` uses bare classes in all topology definitions.
-- [ ] `python src/examples/statemachine_demos/01_brief_example.py` exits 0.
+- [ ] `uv run python examples/quickstart/01_brief_example.py run` exits 0.
 - [ ] All 3 new analysis tests pass: `pytest .../test_topology_analysis.py -v`.
 - [ ] Full regression suite passes: `pytest src/agentflow/tests/statemachine/ -v`.
 - [ ] `ruff check` passes clean on `topology.py`.

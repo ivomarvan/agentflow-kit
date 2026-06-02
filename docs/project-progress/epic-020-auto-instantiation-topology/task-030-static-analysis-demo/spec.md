@@ -103,5 +103,5 @@ class NodeC(StateVertex): ...
 - `ruff check src/agentflow/statemachine/topology.py`
 - `mypy --strict --follow-imports=skip src/agentflow/statemachine/topology.py`
 - `pytest src/agentflow/tests/statemachine/test_topology_analysis.py -v`
-- Run demo: `python src/examples/statemachine_demos/01_brief_example.py` — exits 0.
+- Run demo: `uv run python examples/quickstart/01_brief_example.py run` — exits 0.
 - Full regression: `pytest src/agentflow/tests/statemachine/ -v` — all green.

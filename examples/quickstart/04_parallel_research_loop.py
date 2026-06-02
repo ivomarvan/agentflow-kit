@@ -9,10 +9,10 @@ Demonstrates all major statemachine features in a single script:
   - Loop termination  : auto-approve after _MAX_REVISIONS Research iterations
 
 Run with:
-    uv run python examples/quickstart/04_parallel_research_loop.py              # run workflow
     uv run python examples/quickstart/04_parallel_research_loop.py -h           # help
-    uv run python examples/quickstart/04_parallel_research_loop.py browser      # graph in browser
-    uv run python examples/quickstart/04_parallel_research_loop.py graph-html   # save HTML graph
+    uv run python examples/quickstart/04_parallel_research_loop.py run            # run workflow
+    uv run python examples/quickstart/04_parallel_research_loop.py graph --browser
+    uv run python examples/quickstart/04_parallel_research_loop.py graph -o graph.html
 """
 
 from dataclasses import dataclass

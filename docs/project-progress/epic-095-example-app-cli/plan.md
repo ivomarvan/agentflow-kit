@@ -1,9 +1,13 @@
 # Epic E095 — ExampleApp: Unified CLI + Composite Visualization
 
-**Cíl:** Každý příklad v `examples/` podporuje `python script.py` (run), `-h` (help),
-`graph-browser` (graf v browseru) a ostatní grafické výstupy. Celá aplikace je nakonfigurována
-jako `ExampleApp(Describable)` objekt — vizualizace ukáže `LlmConnector`, `ToolRegistry`
-i `StateGraph` topology jako jeden kompozitní graf.
+> **CLI update (2026):** Implementace používá `AgentApp` a subcommands `run`, `gui`,
+> `describe`, `graph` (`Describable.run_argparse()`). Staré flat příkazy (`graph-html`,
+> `graph-browser`, `browser`, …) byly odstraněny. Bez argumentů skript vypíše help.
+
+**Cíl:** Každý příklad v `examples/` podporuje `python script.py run`, `-h` (help včetně
+plné gramatiky), `graph --browser` a další výstupy přes `describe` / `graph`. Celá aplikace
+je nakonfigurována jako `AgentApp(Describable)` — vizualizace ukáže `LlmConnector`,
+`ToolRegistry` i `StateGraph` topology jako jeden kompozitní graf.
 
 ---
 
@@ -12,7 +16,7 @@ i `StateGraph` topology jako jeden kompozitní graf.
 | Oblast | Co se mění |
 |--------|-----------|
 | `agentflow/app.py` (nový) | `ExampleApp` base class (Describable + async run_workflow + cli()) |
-| `agentflow/cli.py` | Přidat `browser` alias pro `graph-browser` do `run_argparse()` |
+| `agentflow/describable/describable.py` | Unified CLI: `run`, `gui`, `describe`, `graph` |
 | `agentflow/statemachine/topology.py` | Override `StateGraph._build_vertex()` — exponuje topology vrcholy jako děti |
 | `agentflow/__init__.py` | Export `ExampleApp` |
 | `examples/quickstart/01–05` | Refaktoring na `ExampleApp` DI vzor |
@@ -59,21 +63,20 @@ class ExampleApp(Describable):
         return None
 
     def cli(self, doc: str | None = None, *, name: str = "") -> None:
-        """Parse sys.argv and run or visualize this application.
-
-        Default command: run. Commands: run, graph-browser, graph-html,
-        graph-svg, graph-svg-raw, graph-dot, graph-png, browser (alias).
-        """
-        self.run_argparse(doc=doc, name=name, default_command="run")
+        """Parse sys.argv — subcommands: run, gui, describe, graph."""
+        self.run_argparse(doc=doc, name=name, include_gui=True)
 ```
 
-### `agentflow/cli.py` — browser alias
+### CLI grammar (current)
 
-V `Describable.run_argparse()` přidat `browser` jako alias/subparser pro `graph-browser`
-tak aby `script.py browser` fungovalo stejně jako `script.py graph-browser`.
-(Nejjednodušší: before `parser.parse_args()` zkontrolovat `sys.argv` a substituovat.)
-
-Nebo přidat 'browser' jako extra subparser s `nargs='?'` který deleguje na `graph-browser`.
+```text
+script.py -h
+script.py run [QUESTION...]
+script.py gui [--host HOST] [--port PORT] [--no-browser]
+script.py describe [--format markdown|json|html] [-o FILE]
+script.py graph [--format dot|svg|svg-raw|html|png] [-o FILE]
+script.py graph --browser
+```
 
 ### `agentflow/statemachine/topology.py` — `StateGraph._build_vertex()`
 
@@ -189,7 +192,7 @@ if __name__ == "__main__":
 
 Spustit:
 ```bash
-uv run python examples/quickstart/00_hello_world.py graph-svg-raw -o docs/examples/hello_world_graph.svg
+uv run python examples/quickstart/00_hello_world.py graph --format svg-raw -o docs/examples/hello_world_graph.svg
 ```
 
 SVG musí být commitnuté (ne v nogit_data) — zobrazí se přímo v GitHub README.
@@ -210,10 +213,10 @@ Graph topology of this example:
 
 - [ ] `ExampleApp` exportován z `agentflow` jako veřejný symbol
 - [ ] `StateGraph` vnořený v ExampleApp exponuje topology vrcholy ve vizualizaci
-- [ ] `script.py` (no args) — spustí workflow
-- [ ] `script.py -h` — vypíše __doc__ + dostupné příkazy
-- [ ] `script.py graph-browser` — otevře interaktivní graf v browseru
-- [ ] `script.py browser` — stejné (alias)
+- [ ] `script.py` (no args) — vypíše help, nespustí workflow
+- [ ] `script.py -h` — vypíše __doc__ + plnou gramatiku všech subcommands
+- [ ] `script.py run` — spustí workflow
+- [ ] `script.py graph --browser` — otevře interaktivní graf v browseru
 - [ ] Všech 6 příkladů refaktorováno na ExampleApp DI vzor
 - [ ] `docs/examples/hello_world_graph.svg` commitnutý
 - [ ] README.md zobrazuje graph SVG pod Hello World sekcí

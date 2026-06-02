@@ -83,14 +83,8 @@ class LlmConnector(LlmConnectorBase):
         super().__init__(cache=cache)
         if config is None:
             config = LlmConfig.from_env()
-        # Apply keyword overrides on top of the resolved config.
-        overrides: dict[str, Any] = {}
-        if backend is not None:
-            overrides["backend"] = backend
-        if model is not None:
-            overrides["model"] = model
-        if overrides:
-            config = config.model_copy(update=overrides)
+        if backend is not None or model is not None:
+            config = config.with_overrides(backend=backend, model=model)
 
         self._config = config
         self._inner = self._build_inner(config)

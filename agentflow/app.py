@@ -126,8 +126,9 @@ class AgentApp(Describable):
 
         Usage edges (``attributes={"usage": True}``) are added when a StateVertex
         declares ``connector`` or ``tools`` fields whose values match keys in the
-        bound ``Context``.  The renderer draws them as dashed purple arrows pointing
-        from the vertex to the corresponding LlmConnector / ToolRegistry cluster.
+        bound ``Context``.  The renderer draws them as dashed undirected lines to
+        the corresponding LlmConnector / ToolRegistry cluster, labelled
+        ``<Vertex>-<BackendClass>-<model>`` or ``<Vertex>-Tools: <key>``.
 
         Returns:
             ``Graph`` with composition vertices, state-machine transition edges,
@@ -189,10 +190,11 @@ class AgentApp(Describable):
 
             connector_val = getattr(node, "connector", None)
             if isinstance(connector_val, str) and connector_val in llm_keys:
+                llm_connector = self._context.llm_connectors[connector_val]
                 edges.append(Edge(
                     from_id=node_vertex_id,
                     to_id=f"{context_prefix}.{connector_val}",
-                    label="",
+                    label=AgentApp._usage_llm_edge_label(node_vertex_id, llm_connector),
                     attributes={"usage": True, "usage_type": "llm"},
                 ))
 
@@ -203,11 +205,43 @@ class AgentApp(Describable):
                 edges.append(Edge(
                     from_id=node_vertex_id,
                     to_id=f"{context_prefix}.{display}",
-                    label="",
+                    label=AgentApp._usage_tools_edge_label(node_vertex_id, tools_val),
                     attributes={"usage": True, "usage_type": "tools"},
                 ))
 
         return edges
+
+    @staticmethod
+    def _usage_llm_edge_label(vertex_id: str, connector: Any) -> str:
+        """Return the dashed-edge label for a StateVertex → LLM connector link.
+
+        Format: ``<Vertex>-<BackendConnectorClass>-<model>``.
+
+        Args:
+            vertex_id: Topology node identifier (typically the vertex class name).
+            connector: ``LlmConnector`` facade or concrete ``LlmConnectorBase`` instance.
+
+        Returns:
+            Human-readable edge label for graph rendering.
+        """
+        backend = getattr(connector, "_inner", connector)
+        class_name = type(backend).__name__
+        return f"{vertex_id}-{class_name}-{connector.config.model}"
+
+    @staticmethod
+    def _usage_tools_edge_label(vertex_id: str, registry_key: str) -> str:
+        """Return the dashed-edge label for a StateVertex → ToolRegistry link.
+
+        Format: ``<Vertex>-Tools: <registry-key>``.
+
+        Args:
+            vertex_id: Topology node identifier (typically the vertex class name).
+            registry_key: Key into ``Context.tool_registries``.
+
+        Returns:
+            Human-readable edge label for graph rendering.
+        """
+        return f"{vertex_id}-Tools: {registry_key}"
 
     async def run_workflow(self) -> str | None:
         """Execute the main application workflow.
@@ -340,12 +374,17 @@ class AgentApp(Describable):
         self.current_prompt = prompt
         return await self.run_workflow()
 
-    def run(self, *args: Any, **kwargs: Any) -> str | None:
-        """Synchronously execute run_workflow(); called by Describable.run_argparse().
+    def run(self, question: str | None = None, **_kwargs: Any) -> str | None:
+        """Synchronously execute run_workflow(); called by ``run_argparse`` ``run``.
+
+        Args:
+            question: When provided, sets ``current_prompt`` before the workflow runs.
 
         Returns:
             The return value of run_workflow() — a summary string or None.
         """
+        if question is not None:
+            self.current_prompt = question
         return asyncio.run(self.run_workflow())
 
     def get_config_schema(self) -> dict[str, Any]:
@@ -457,26 +496,50 @@ class AgentApp(Describable):
             f"Attribute {child_name!r} on {type(self).__name__} does not support set_config"
         )
 
+    def _cli_start_gui(
+        self,
+        *,
+        host: str = "127.0.0.1",
+        port: int | None = None,
+        no_browser: bool = False,
+    ) -> None:
+        """Start the AgentApp web GUI server (``gui`` subcommand).
+
+        Args:
+            host: Bind address for the HTTP server.
+            port: TCP port; ``None`` uses 8765 or ``AGENTFLOW_GUI_PORT``.
+            no_browser: When ``True``, do not open a browser tab automatically.
+
+        Raises:
+            SystemExit: When the optional ``agentflow[gui]`` extra is not installed.
+        """
+        import sys
+        from pathlib import Path
+
+        try:
+            from agentflow.gui import serve
+            from agentflow.gui.build import discover_and_build
+        except ImportError:
+            print(
+                "GUI not available. Install with: pip install agentflow[gui]",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        app_script = Path(sys.argv[0]).resolve()
+        discover_and_build(app_script=app_script)
+        serve(self, port=port, host=host, open_browser=not no_browser)
+
     def cli(self, doc: str | None = None, *, name: str = "") -> None:
-        """Parse sys.argv and run, visualize, or serve GUI for this application.
+        """Parse ``sys.argv`` and run, visualize, or serve GUI for this application.
 
-        Intercepts the ``gui`` subcommand before delegating to
-        ``run_argparse()``; all other commands are handled by the parent.
+        Top-level commands (see ``Describable.run_argparse``)::
 
-        Default command when no arguments given: run (executes run_workflow).
+            run        [QUESTION...]  Execute ``run_workflow()``
+            gui        [--host HOST] [--port PORT] [--no-browser]
+            describe   [--format markdown|json|html] [-o FILE]
+            graph      [--format …] [-o FILE]  |  graph --browser
 
-        Available commands::
-
-            run              Execute run_workflow() (default)
-            gui              Start local GUI server and open in browser
-                             [--port PORT] [--host HOST] [--no-browser]
-            browser          Open topology graph in the default browser
-            graph-browser    Same as browser
-            graph-html       Print/save standalone interactive HTML graph
-            graph-svg        Print/save interactive SVG graph
-            graph-svg-raw    Print/save raw SVG for embedding
-            graph-dot        Print/save Graphviz DOT source
-            graph-png        Save PNG graph file
+        With no arguments, prints main ``--help`` and does not run the workflow.
 
         Args:
             doc: Module docstring (__doc__) used as the CLI description.
@@ -484,49 +547,12 @@ class AgentApp(Describable):
             name: Module name guard — pass __name__ to run only when the
                   script is the direct entry-point (not when imported).
         """
-        import sys
-
         effective_doc = doc or self._doc
-
-        if name and name != "__main__":
-            return
-
-        if len(sys.argv) > 1 and sys.argv[1] == "gui":
-            import argparse
-
-            parser = argparse.ArgumentParser(
-                description=effective_doc or type(self).__name__,
-                prog=sys.argv[0],
-            )
-            parser.add_argument("command", help="gui")
-            parser.add_argument(
-                "--port",
-                type=int,
-                default=None,
-                help="Port (default: 8765, or AGENTFLOW_GUI_PORT env var)",
-            )
-            parser.add_argument("--host", default="127.0.0.1", help="Bind address")
-            parser.add_argument(
-                "--no-browser", action="store_true", help="Do not open the browser"
-            )
-            args = parser.parse_args()
-            try:
-                from agentflow.gui import serve
-                from agentflow.gui.build import discover_and_build
-            except ImportError:
-                print(
-                    "GUI not available. Install with: pip install agentflow[gui]",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-            from pathlib import Path
-            app_script = Path(sys.argv[0]).resolve()
-            discover_and_build(app_script=app_script)
-            serve(self, port=args.port, host=args.host, open_browser=not args.no_browser)
-        else:
-            self.run_argparse(
-                doc=effective_doc,
-                name=name,
-                default_command="run",
-                title_tooltip=effective_doc or self.description,
-            )
+        default_q = self._default_question or None
+        self.run_argparse(
+            doc=effective_doc,
+            name=name,
+            default_question=default_q,
+            title_tooltip=effective_doc or self.description,
+            include_gui=True,
+        )

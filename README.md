@@ -109,13 +109,23 @@ LangGraph.
 
 ### Running examples
 
+Example and agent scripts use a unified CLI (`AgentApp.cli()` / `Describable.run_argparse()`).
+With no arguments they print help; run the workflow explicitly with the `run` subcommand.
+
 ```bash
+# Help (lists run, gui, describe, graph and all flags)
+uv run python examples/quickstart/01_brief_example.py -h
+
 # No LLM key needed — uses FakeLlmConnector
-uv run python examples/quickstart/01_brief_example.py
+uv run python examples/quickstart/01_brief_example.py run
+
+# Graph in browser / save HTML
+uv run python examples/quickstart/01_brief_example.py graph --browser
+uv run python examples/quickstart/01_brief_example.py graph -o graph.html
 
 # Requires .env with LLM_BACKEND + API key
-uv run python examples/quickstart/04_parallel_research_loop.py
-uv run python examples/patterns/04_react_agent_statemachine.py
+uv run python examples/quickstart/04_parallel_research_loop.py run
+uv run python examples/patterns/04_react_agent_statemachine.py run
 ```
 
 Examples that require a real LLM read `LLM_BACKEND` and the corresponding API key from `.env`.

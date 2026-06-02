@@ -8,9 +8,10 @@ The agent decides which tool to call, reads the result, and iterates until
 it can produce a final answer or hits the step limit.
 
 Run:
-    uv run python examples/agents/01_tool_calling_agent.py
+    uv run python examples/agents/01_tool_calling_agent.py -h
+    uv run python examples/agents/01_tool_calling_agent.py run
     uv run python examples/agents/01_tool_calling_agent.py gui
-    uv run python examples/agents/01_tool_calling_agent.py browser
+    uv run python examples/agents/01_tool_calling_agent.py graph --browser
 """
 
 import json

@@ -99,7 +99,7 @@ Short description of each demo file (01–05) and how to run it.
 ## 8. Observability: RecorderHooks and LiveGraphHooks
    How to inspect history / generate graph snapshots
 ## 9. Graph Visualization
-   graph.get_graph_html() → browser
+   `script.py graph --browser` or `graph.get_graph_html()` saved to file
 ## 10. Checkpointing & Human-in-the-Loop
    Concise example using run_until + resume
 ```

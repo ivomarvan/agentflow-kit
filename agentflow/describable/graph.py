@@ -25,6 +25,8 @@ class Vertex:
         description: Scalar attribute dict from ``get_description_item_dict()``.
         children: Directly owned nested vertices (containment / composition).
         attributes: Reserved for future extensions (state machine info, styling, …).
+        source_file: Absolute path to the Python source file defining this vertex's class.
+        source_line: 1-based line number of the class definition in ``source_file``.
     """
 
     id: str
@@ -32,6 +34,8 @@ class Vertex:
     description: dict[str, Any]
     children: list[Vertex] = field(default_factory=list)
     attributes: dict[str, Any] = field(default_factory=dict)
+    source_file: str = ""
+    source_line: int = 0
 
 
 @dataclass

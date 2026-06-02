@@ -217,8 +217,16 @@ marked — pass it to `GraphRenderer.to_dot()` for visual output.
 
 ## 9. Graph Visualization
 
-`StateGraph` inherits from `Describable` and provides `get_graph_html()`. The returned
-string is a standalone HTML page with an interactive graph — save it and open in a browser.
+`StateGraph` inherits from `Describable` and provides `get_graph_html()`. From an
+`AgentApp` script you can use the unified CLI:
+
+```bash
+uv run python examples/quickstart/03_live_graph_demo.py graph --browser
+uv run python examples/quickstart/03_live_graph_demo.py graph -o topology.html
+uv run python examples/quickstart/03_live_graph_demo.py describe --format markdown
+```
+
+In Python, the returned HTML string is a standalone page with an interactive graph:
 
 ```python
 from pathlib import Path

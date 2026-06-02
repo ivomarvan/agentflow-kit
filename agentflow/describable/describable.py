@@ -18,13 +18,20 @@ Public interface::
     obj.get_graph_interactive_svg()      # str  — SVG with embedded JS hover tooltips
     obj.get_graph_png(path=None)         # Path — PNG file via Graphviz dot tool
     obj.get_graph_html(title="")         # str  — standalone HTML page with hover tooltips
-    obj.open_graph_browser(title="")     # None — renders HTML and opens browser
+    obj.open_graph_browser(title="")     # None — renders HTML and opens browser (API)
     obj.run()                            # str | None — no-op default; override in runnable objects
-    obj.run_argparse(                    # unified CLI entry-point
-        default_command="markdown"       #   "dict" | "markdown" | "html" |
-                                         #   "graph-dot" | "graph-svg" | "graph-svg-raw" |
-                                         #   "graph-html" | "graph-png" | "graph-browser" | "run"
-    )
+    obj.run_argparse(doc=__doc__, name=__name__)   # CLI entry-point (see below)
+
+CLI (``run_argparse`` / ``AgentApp.cli()``)::
+
+    script.py -h
+    script.py run [QUESTION...]
+    script.py gui [--host HOST] [--port PORT] [--no-browser]   # AgentApp only
+    script.py describe [--format markdown|json|html] [-o|--output FILE]
+    script.py graph [--format dot|svg|svg-raw|html|png] [-o|--output FILE]
+    script.py graph --browser
+
+    With no arguments, prints main help and exits (no implicit run).
 
 Subclassing contract::
 
@@ -58,6 +65,35 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agentflow.describable.graph import Graph, Vertex
+
+
+def _patch_subcommand_help_on_error(parser: argparse.ArgumentParser) -> None:
+    """Make *parser* print its full help (not only usage) on argparse errors."""
+
+    def error(message: str) -> None:
+        parser.print_usage(sys.stderr)
+        sys.stderr.write(f"{parser.prog}: error: {message}\n\n")
+        parser.print_help(sys.stderr)
+        raise SystemExit(2)
+
+    parser.error = error  # type: ignore[method-assign]
+
+
+class _SubcommandHelpArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser that prints full help on any parse error."""
+
+    def error(self, message: str) -> None:
+        """Print usage, the error message, and help; exit with code 2."""
+        self.print_usage(sys.stderr)
+        sys.stderr.write(f"{self.prog}: error: {message}\n\n")
+        self.print_help(sys.stderr)
+        raise SystemExit(2)
+
+
+_DESCRIBE_FORMATS: tuple[str, ...] = ("markdown", "json", "html")
+_GRAPH_FORMATS: tuple[str, ...] = ("dot", "svg", "svg-raw", "html", "png")
+
+_CLI_HELP_SECTIONS: tuple[str, ...] = ("positional arguments:", "options:")
 
 
 class Describable:
@@ -456,161 +492,361 @@ class Describable:
         """
         return None
 
+    def _cli_start_gui(
+        self,
+        *,
+        host: str = "127.0.0.1",
+        port: int | None = None,
+        no_browser: bool = False,
+    ) -> None:
+        """Start the local web GUI (stub — override in ``AgentApp``).
+
+        Args:
+            host: Bind address for the HTTP server.
+            port: TCP port; ``None`` uses implementation default / env.
+            no_browser: When ``True``, do not open a browser tab automatically.
+        """
+        _ = (host, port, no_browser)
+        print("GUI is not available for this object.", file=sys.stderr)
+        sys.exit(1)
+
     def run_argparse(
         self,
         doc: str | None = None,
         *,
         name: str = "",
         default_question: str | None = None,
-        default_command: str = "markdown",
         title: str = "",
         title_tooltip: str = "",
+        include_gui: bool = False,
     ) -> None:
-        """Parse ``sys.argv`` and execute the requested output command.
+        """Parse ``sys.argv`` and execute the requested CLI command.
 
-        Built-in commands::
+        Top-level commands::
 
-            dict         [-o FILE]  Print / save JSON from get_description_dict().
-            markdown     [-o FILE]  Print / save Markdown from get_description_markdown().
-            html         [-o FILE]  Print / save HTML from get_description_html().
-            graph-dot    [-o FILE]  Graphviz DOT source.
-            graph-svg    [-o FILE]  Interactive SVG with hover tooltips.
-            graph-svg-raw[-o FILE]  Raw SVG for document embedding.
-            graph-html   [-o FILE]  Standalone interactive HTML page.
-            graph-png    [-o FILE]  PNG file via Graphviz.
-            graph-browser           Open graph diagram in the browser.
-            run          [QUESTION] Call self.run([question]) and print the result.
+            run        [QUESTION...]  Run this object once (no implicit default).
+            gui        [--host HOST] [--port PORT] [--no-browser]
+            describe   [--format markdown|json|html] [-o FILE]
+            graph      [--format dot|svg|svg-raw|html|png] [-o FILE]
+            graph      --browser
 
-        When no command is given, ``default_command`` is used.  Pass
-        ``default_command="run"`` from top-level runnable objects (e.g. ToolAgent).
+        With no arguments, prints main ``--help`` and exits without running anything.
 
-        When ``name`` is provided and differs from ``"__main__"``, the method
-        returns immediately — the script was imported, not executed directly.
-        Pass ``name=__name__`` to enforce this guard.
-
-        When ``default_question`` is provided, the ``run`` subcommand gains an
-        optional positional ``question`` argument that defaults to it.
+        Subclasses may register extra commands via ``_add_argparse_commands(subparsers)``
+        and dispatch them in ``_handle_argparse_command(args)``.
 
         Args:
             doc: Module docstring (``__doc__``) used as the CLI description.
             name: Module name guard.  Pass ``__name__`` to run only when the
                   script is the entry-point; omit or pass ``""`` to always run.
-            default_question: Default question for the ``run`` command.  When
-                              set, the ``run`` subcommand forwards it to
-                              ``self.run(question)``.
-            default_command: Command used when none is provided on the CLI.
-                             One of ``"dict"``, ``"markdown"``, ``"html"``, ``"run"``.
-            title: Title shown in the graph HTML header.  Defaults to
-                   ``self.name`` when empty.
-            title_tooltip: Markdown shown as a tooltip when hovering the title
-                           in the HTML/browser graph output.
+            default_question: When set, ``run`` with no ``QUESTION`` uses this value.
+            title: Title shown in graph HTML output.  Defaults to ``self.name``.
+            title_tooltip: Markdown tooltip for the graph HTML title.
+            include_gui: When ``True``, register the ``gui`` subcommand.
         """
         if name and name != "__main__":
             return
 
-        parser = argparse.ArgumentParser(
+        root_prog = Path(sys.argv[0]).name
+        command_entries: list[tuple[str, str, argparse.ArgumentParser]] = []
+
+        parser = _SubcommandHelpArgumentParser(
+            prog=root_prog,
             description=doc,
             formatter_class=argparse.RawDescriptionHelpFormatter,
-            parents=[self._output_file_parser()],
         )
         subparsers = parser.add_subparsers(dest="command")
 
-        for cmd_name in ("dict", "markdown", "html"):
-            subparsers.add_parser(
-                cmd_name,
-                parents=[self._output_file_parser()],
-                help=f"Output {cmd_name} description.",
-            )
+        p_run = subparsers.add_parser(
+            "run",
+            help="Run this object once from the command line.",
+        )
+        p_run.prog = f"{root_prog} run"
+        p_run.add_argument(
+            "question",
+            nargs="*",
+            metavar="QUESTION",
+            help="Optional prompt passed to run() (words joined with spaces).",
+        )
+        command_entries.append((
+            "run",
+            "Run this object once from the command line.",
+            p_run,
+        ))
 
-        subparsers.add_parser(
-            "graph-dot",
-            parents=[self._output_file_parser()],
-            help="Render composition graph to Graphviz DOT source.",
-        )
-        subparsers.add_parser(
-            "graph-svg",
-            parents=[self._output_file_parser()],
-            help="Render composition graph to interactive SVG (open in browser).",
-        )
-        subparsers.add_parser(
-            "graph-svg-raw",
-            parents=[self._output_file_parser()],
-            help="Render composition graph to raw SVG (for embedding in documents).",
-        )
-        subparsers.add_parser(
-            "graph-html",
-            parents=[self._output_file_parser()],
-            help="Render composition graph to standalone interactive HTML page.",
-        )
-
-        subparsers.add_parser(
-            "graph-png",
-            parents=[self._output_file_parser()],
-            help="Render composition graph to PNG file.",
-        )
-        subparsers.add_parser(
-            "graph-browser",
-            help="Open interactive graph diagram in the default browser.",
-        )
-        subparsers.add_parser(
-            "browser",
-            help="Alias for graph-browser: open interactive graph diagram in the default browser.",
-        )
-        if default_question is not None:
-            p_run = subparsers.add_parser("run", help="Run this object with a question.")
-            p_run.add_argument(
-                "question",
-                nargs="?",
-                default=default_question,
-                help=f"Question to answer (default: {default_question!r}).",
+        if include_gui:
+            p_gui = subparsers.add_parser(
+                "gui",
+                help="Start the local web GUI server and open it in the browser.",
             )
-        else:
-            subparsers.add_parser("run", help="Run this object (if supported).")
+            p_gui.prog = f"{root_prog} gui"
+            p_gui.add_argument(
+                "--host",
+                default="127.0.0.1",
+                help="Bind address (default: 127.0.0.1).",
+            )
+            p_gui.add_argument(
+                "--port",
+                type=int,
+                default=None,
+                help="TCP port (default: 8765 or AGENTFLOW_GUI_PORT env var).",
+            )
+            p_gui.add_argument(
+                "--no-browser",
+                action="store_true",
+                help="Do not open the browser automatically.",
+            )
+            command_entries.append((
+                "gui",
+                "Start the local web GUI server and open it in the browser.",
+                p_gui,
+            ))
+
+        p_describe = subparsers.add_parser(
+            "describe",
+            help="Print or save a description of this object.",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
+        p_describe.prog = f"{root_prog} describe"
+        _patch_subcommand_help_on_error(p_describe)
+        p_describe.add_argument(
+            "--format",
+            choices=_DESCRIBE_FORMATS,
+            default="markdown",
+            help="Output format (default: markdown).",
+        )
+        self._add_output_arguments(p_describe)
+        command_entries.append((
+            "describe",
+            "Print or save a description of this object.",
+            p_describe,
+        ))
+
+        p_graph = subparsers.add_parser(
+            "graph",
+            help="Render, save, or open the composition graph.",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
+        p_graph.prog = f"{root_prog} graph"
+        _patch_subcommand_help_on_error(p_graph)
+        p_graph.add_argument(
+            "--browser",
+            action="store_true",
+            help="Open the interactive graph in the default browser.",
+        )
+        p_graph.add_argument(
+            "--format",
+            choices=_GRAPH_FORMATS,
+            default="html",
+            help="Graph output format when not using --browser (default: html).",
+        )
+        self._add_output_arguments(p_graph)
+        command_entries.append((
+            "graph",
+            "Render, save, or open the composition graph.",
+            p_graph,
+        ))
+
+        if hasattr(self, "_add_argparse_commands"):
+            self._add_argparse_commands(subparsers)
+            self._append_extra_cli_command_entries(subparsers, command_entries, root_prog)
+
+        parser.epilog = self._build_cli_command_reference(command_entries)
+
+        if len(sys.argv) == 1:
+            parser.print_help()
+            sys.exit(0)
 
         args = parser.parse_args()
         if args.command is None:
-            args.command = default_command
+            parser.print_help()
+            sys.exit(2)
 
-        out_file: str | None = getattr(args, "out_file", None)
+        if args.command == "run":
+            self._cli_run(args, default_question=default_question)
+        elif args.command == "gui":
+            self._cli_start_gui(
+                host=args.host,
+                port=args.port,
+                no_browser=args.no_browser,
+            )
+        elif args.command == "describe":
+            self._cli_describe(args)
+        elif args.command == "graph":
+            self._cli_graph(args, title=title, title_tooltip=title_tooltip)
+        elif hasattr(self, "_handle_argparse_command"):
+            self._handle_argparse_command(args)
+        else:
+            parser.error(f"unknown command {args.command!r}")
 
-        def _write(content: str) -> None:
-            if out_file:
-                Path(out_file).write_text(content, encoding="utf-8")
-                print(f"Saved: {out_file}", file=sys.stderr)
-            else:
-                print(content)
+    def _cli_run(
+        self,
+        args: argparse.Namespace,
+        *,
+        default_question: str | None,
+    ) -> None:
+        """Dispatch the ``run`` subcommand."""
+        parts: list[str] = getattr(args, "question", [])
+        if parts:
+            question = " ".join(parts)
+            result = self.run(question)  # type: ignore[call-arg]
+        elif default_question is not None:
+            result = self.run(default_question)  # type: ignore[call-arg]
+        else:
+            result = self.run()
+        if result is not None:
+            print(f"\n{result}")
 
-        if args.command == "dict":
-            _write(json.dumps(self.get_description_dict(), indent=2, ensure_ascii=False))
-        elif args.command == "markdown":
-            _write(self.get_description_markdown())
-        elif args.command == "html":
-            _write(self.get_description_html())
-        elif args.command == "graph-dot":
-            _write(self.get_graph_dot())
-        elif args.command == "graph-svg":
-            _write(self.get_graph_interactive_svg())
-        elif args.command == "graph-svg-raw":
-            _write(self.get_graph_svg())
-        elif args.command == "graph-html":
-            _write(self.get_graph_html(title=title, title_tooltip=title_tooltip))
-        elif args.command == "graph-png":
-            saved = self.get_graph_png(Path(out_file) if out_file else None)
-            print(f"PNG saved: {saved}")
-        elif args.command in ("graph-browser", "browser"):
+    def _cli_describe(self, args: argparse.Namespace) -> None:
+        """Dispatch the ``describe`` subcommand."""
+        fmt: str = args.format
+        if fmt == "json":
+            content = json.dumps(self.get_description_dict(), indent=2, ensure_ascii=False)
+        elif fmt == "html":
+            content = self.get_description_html()
+        else:
+            content = self.get_description_markdown()
+        self._cli_write_output(content, getattr(args, "output_file", None))
+
+    def _cli_graph(
+        self,
+        args: argparse.Namespace,
+        *,
+        title: str,
+        title_tooltip: str,
+    ) -> None:
+        """Dispatch the ``graph`` subcommand."""
+        if args.browser:
             self.open_graph_browser(title=title, title_tooltip=title_tooltip)
-        elif args.command == "run":
-            if default_question is not None:
-                question = getattr(args, "question", default_question)
-                result = self.run(question)  # type: ignore[call-arg]
+            return
+
+        output_file: str | None = getattr(args, "output_file", None)
+        fmt: str = args.format
+        if fmt == "dot":
+            self._cli_write_output(self.get_graph_dot(), output_file)
+        elif fmt == "svg":
+            self._cli_write_output(self.get_graph_interactive_svg(), output_file)
+        elif fmt == "svg-raw":
+            self._cli_write_output(self.get_graph_svg(), output_file)
+        elif fmt == "html":
+            self._cli_write_output(
+                self.get_graph_html(title=title, title_tooltip=title_tooltip),
+                output_file,
+            )
+        elif fmt == "png":
+            saved = self.get_graph_png(Path(output_file) if output_file else None)
+            print(f"PNG saved: {saved}", file=sys.stderr)
+
+    @staticmethod
+    def _cli_write_output(content: str, output_file: str | None) -> None:
+        """Write *content* to *output_file* or stdout."""
+        if output_file:
+            Path(output_file).write_text(content, encoding="utf-8")
+            print(f"Saved: {output_file}", file=sys.stderr)
+        else:
+            print(content)
+
+    @staticmethod
+    def _append_extra_cli_command_entries(
+        subparsers: argparse._SubParsersAction,
+        command_entries: list[tuple[str, str, argparse.ArgumentParser]],
+        root_prog: str,
+    ) -> None:
+        """Register subcommands added by ``_add_argparse_commands`` in the help epilog."""
+        known = {name for name, _, _ in command_entries}
+        help_by_dest = {
+            action.dest: action.help
+            for action in getattr(subparsers, "_choices_actions", ())
+            if getattr(action, "help", None)
+        }
+        for cmd_name, sub_parser in subparsers.choices.items():
+            if cmd_name in known:
+                continue
+            sub_parser.prog = f"{root_prog} {cmd_name}"
+            summary = help_by_dest.get(cmd_name) or cmd_name
+            command_entries.append((cmd_name, summary, sub_parser))
+
+    @staticmethod
+    def _extract_help_argument_sections(help_text: str) -> list[str]:
+        """Return ``positional arguments`` / ``options`` blocks from argparse help text."""
+        lines = help_text.splitlines()
+        result: list[str] = []
+        i = 0
+        while i < len(lines):
+            if lines[i] in _CLI_HELP_SECTIONS:
+                result.append(lines[i])
+                i += 1
+                while i < len(lines):
+                    if (
+                        lines[i]
+                        and not lines[i].startswith((" ", "\t"))
+                        and lines[i].endswith(":")
+                        and lines[i] not in _CLI_HELP_SECTIONS
+                    ):
+                        break
+                    if (
+                        lines[i] == ""
+                        and i + 1 < len(lines)
+                        and lines[i + 1]
+                        and not lines[i + 1].startswith((" ", "\t"))
+                    ):
+                        break
+                    result.append(lines[i])
+                    i += 1
             else:
-                result = self.run()
-            if result is not None:
-                print(f"\n{result}")
+                i += 1
+        return result
+
+    @staticmethod
+    def _build_cli_command_reference(
+        entries: list[tuple[str, str, argparse.ArgumentParser]],
+    ) -> str:
+        """Build an epilog listing every subcommand with its full argument grammar."""
+        out: list[str] = ["", "commands (full syntax):", ""]
+        for cmd_name, summary, sub_parser in entries:
+            out.append(f"  {cmd_name}")
+            out.append(f"    {summary}")
+            for section_line in Describable._extract_help_argument_sections(
+                sub_parser.format_help(),
+            ):
+                out.append(f"    {section_line}")
+            out.append("")
+        while out and out[-1] == "":
+            out.pop()
+        return "\n".join(out)
+
+    @staticmethod
+    def _add_output_arguments(parser: argparse.ArgumentParser) -> None:
+        """Add ``-o`` / ``--output`` to a subcommand parser (not the root parser)."""
+        parser.add_argument(
+            "-o",
+            "--output",
+            dest="output_file",
+            metavar="FILE",
+            help="Write output to FILE instead of stdout.",
+        )
 
     # ------------------------------------------------------------------
     # Private — graph building
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _class_source_location(cls: type) -> tuple[str, int]:
+        """Return the absolute source file path and class definition line for *cls*.
+
+        Args:
+            cls: Class whose definition location is resolved.
+
+        Returns:
+            Tuple of ``(absolute_path, line_number)``.  Both are empty/zero when
+            the location cannot be determined (built-ins, REPL-defined classes, …).
+        """
+        try:
+            source_path = Path(inspect.getfile(cls)).resolve()
+            line_number = inspect.getsourcelines(cls)[1]
+            return str(source_path), line_number
+        except (TypeError, OSError):
+            return "", 0
 
     def _build_vertex(self, vertex_id: str) -> Vertex:
         """Recursively build a Vertex for this object and all owned Describables.
@@ -669,36 +905,20 @@ class Describable:
                         children.append(item._build_vertex(f"{vertex_id}.{key}[{i}]"))
         for key, value in self._extra_describable_children().items():
             children.append(value._build_vertex(f"{vertex_id}.{key}"))
+        source_file, source_line = Describable._class_source_location(type(self))
         return Vertex(
             id=vertex_id,
             label=type(self).__name__,
             description=self.get_description_item_dict(),
             children=children,
+            source_file=source_file,
+            source_line=source_line,
         )
 
     # ------------------------------------------------------------------
     # Private static helpers — rendering implementation details
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _output_file_parser() -> argparse.ArgumentParser:
-        """Return a reusable parser fragment for the optional ``-o`` output flag.
-
-        Uses ``default=argparse.SUPPRESS`` so that the subparser's unset ``-o``
-        does **not** overwrite the value already captured by the main parser.
-        Without SUPPRESS, ``-o file command`` would lose ``file`` because the
-        subparser resets ``out_file`` to its own ``None`` default.
-        """
-        parser = argparse.ArgumentParser(add_help=False)
-        parser.add_argument(
-            "-o",
-            "--out-file",
-            dest="out_file",
-            default=argparse.SUPPRESS,
-            metavar="OUTPUT_FILE",
-            help="Write output to OUTPUT_FILE instead of stdout.",
-        )
-        return parser
 
     @staticmethod
     def _wrap_html_page(body: str) -> str:

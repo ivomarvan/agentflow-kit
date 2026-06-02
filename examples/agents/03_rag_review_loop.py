@@ -9,9 +9,10 @@ The loop runs until the draft is approved or _MAX_ATTEMPTS is reached.
 FakeLlmConnector is used to satisfy the Context API — no LLM calls are made.
 
 Run:
-    uv run python examples/agents/03_rag_review_loop.py
+    uv run python examples/agents/03_rag_review_loop.py -h
+    uv run python examples/agents/03_rag_review_loop.py run
     uv run python examples/agents/03_rag_review_loop.py gui
-    uv run python examples/agents/03_rag_review_loop.py browser
+    uv run python examples/agents/03_rag_review_loop.py graph --browser
 """
 
 from dataclasses import dataclass

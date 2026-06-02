@@ -4,10 +4,10 @@ Demonstrates the full agentflow.statemachine MVP:
   Research → Parallel(WriteIntro, WriteBody) → Review → (loop | StdEnd)
 
 Run with:
-    uv run python examples/quickstart/01_brief_example.py              # run workflow
     uv run python examples/quickstart/01_brief_example.py -h           # help
-    uv run python examples/quickstart/01_brief_example.py browser      # graph in browser
-    uv run python examples/quickstart/01_brief_example.py graph-html   # save HTML graph
+    uv run python examples/quickstart/01_brief_example.py run         # run workflow
+    uv run python examples/quickstart/01_brief_example.py graph --browser
+    uv run python examples/quickstart/01_brief_example.py graph -o graph.html
 
 The graph cycles until Review approves — after APPROVE_AFTER rejections.
 FakeLlmConnector is used so no real LLM calls are made.

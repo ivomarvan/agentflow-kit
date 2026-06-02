@@ -17,14 +17,14 @@ using an external framework lives in `examples/frameworks/`.
 ## Running examples
 
 ```bash
-# Run the workflow (default)
-uv run python examples/agents/01_tool_calling_agent.py
-
 # Show help
 uv run python examples/agents/01_tool_calling_agent.py -h
 
+# Run the workflow
+uv run python examples/agents/01_tool_calling_agent.py run
+
 # Open composition graph in browser
-uv run python examples/agents/01_tool_calling_agent.py browser
+uv run python examples/agents/01_tool_calling_agent.py graph --browser
 
 # Start the GUI (web-based chat + settings + graph)
 uv run python examples/agents/01_tool_calling_agent.py gui

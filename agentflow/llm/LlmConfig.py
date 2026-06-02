@@ -302,6 +302,61 @@ class LlmConfig(BaseModel):
         )
         return cfg
 
+    def with_overrides(
+        self,
+        *,
+        backend: str | None = None,
+        model: str | None = None,
+    ) -> LlmConfig:
+        """Return a copy with backend/model overrides and re-resolved connection fields.
+
+        When *model* is overridden without an explicit *backend*, the backend is
+        re-inferred from the model name prefix (e.g. ``gpt-`` → openai).
+
+        Args:
+            backend: Explicit backend override.  When ``None`` and *model* implies a
+                     different backend, the inferred backend is used.
+            model: Model name override.  When ``None``, the current model is kept.
+
+        Returns:
+            New ``LlmConfig`` with updated backend, model, base_url, and api_key.
+
+        Raises:
+            ValueError: If *backend* names an unsupported backend.
+            RuntimeError: If the resolved backend requires an API key that is missing.
+        """
+        new_model = model if model is not None else self.model
+        if backend is not None:
+            if backend not in SUPPORTED_BACKENDS:
+                raise ValueError(
+                    f"Unsupported backend={backend!r}. "
+                    f"Valid options: {sorted(SUPPORTED_BACKENDS)}"
+                )
+            new_backend = backend
+        elif model is not None:
+            inferred = self._infer_backend(model)
+            new_backend = inferred if inferred else self.backend
+        else:
+            new_backend = self.backend
+
+        base_url_env = os.getenv("LLM_BASE_URL", "").strip() or None
+        new_base_url = base_url_env if base_url_env else _DEFAULT_BASE_URLS.get(new_backend)
+        new_api_key = self._resolve_api_key(new_backend)
+
+        if new_backend in _API_KEY_ENV_VARS and not new_api_key:
+            env_var_names = ", ".join(_API_KEY_ENV_VARS[new_backend])
+            raise RuntimeError(
+                f"Backend {new_backend!r} requires an API key. "
+                f"Set one of: {env_var_names}"
+            )
+
+        return self.model_copy(update={
+            "backend": new_backend,
+            "model": new_model,
+            "base_url": new_base_url,
+            "api_key": new_api_key,
+        })
+
     # ------------------------------------------------------------------
     # Convenience
     # ------------------------------------------------------------------
