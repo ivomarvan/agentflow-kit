@@ -5,7 +5,7 @@ yet touching every part of the public API so it can serve as the reference
 when exploring or making design changes.
 
 Feature coverage:
-  ▸ AgentApp           — base class with cli() / browser / gui / run support
+  ▸ AgentApp           — base class with cli() / graph / gui / run support
   ▸ StateGraph         — typed frozen state, EnumSignal routing, Transition edges
   ▸ StateVertex        — two custom vertices forming the ReAct loop
   ▸ ToolBase           — three tools with multi-param @param_desc JSON schema
@@ -20,10 +20,10 @@ Feature coverage:
   ▸ Injectable connector — pass any LlmConnectorBase (e.g. FakeLlmConnector)
 
 Run:
-    uv run python examples/showcase.py              # run with real LLM
-    uv run python examples/showcase.py browser      # open graph in browser
+    uv run python examples/showcase.py -h           # help (full command grammar)
+    uv run python examples/showcase.py run          # run with real LLM
+    uv run python examples/showcase.py graph --browser
     uv run python examples/showcase.py gui          # start local GUI server
-    uv run python examples/showcase.py -h           # show help
 """
 
 from __future__ import annotations

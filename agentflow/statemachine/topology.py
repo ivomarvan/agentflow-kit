@@ -284,13 +284,17 @@ class StateGraph(Describable):  # type: ignore[misc]
         Returns:
             Vertex whose children are the topology nodes (same as get_graph().root.children).
         """
+        from agentflow.describable.describable import Describable
         from agentflow.describable.graph import Vertex  # noqa: F811 — local import avoids circular
         topology = self.get_graph()
+        source_file, source_line = Describable._class_source_location(type(self))
         return Vertex(
             id=vertex_id,
             label=type(self).__name__,
             description=self.get_description_item_dict(),
             children=list(topology.root.children),
+            source_file=source_file,
+            source_line=source_line,
         )
 
     def _collect_topology_nodes(self) -> list[StateVertex]:
@@ -376,9 +380,11 @@ class StateGraph(Describable):  # type: ignore[misc]
         """
         import inspect
 
+        from agentflow.describable.describable import Describable
         from agentflow.describable.graph import Vertex
 
         cls_name = type(node).__name__
+        source_file, source_line = Describable._class_source_location(type(node))
         attributes: dict[str, Any] = {}
         if is_start:
             attributes["is_start"] = True
@@ -395,6 +401,8 @@ class StateGraph(Describable):  # type: ignore[misc]
             label=cls_name,
             description=description,
             attributes=attributes,
+            source_file=source_file,
+            source_line=source_line,
         )
 
     def _make_topology_edges(self, node_ids: dict[int, str]) -> list[Edge]:

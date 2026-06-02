@@ -65,18 +65,18 @@ class Calculator(ToolBase):
     def _handle_argparse_command(self, args: Any) -> None:
         """Dispatch the ``test`` command."""
         import sys
-        if args.command == "test":
-            ok = True
-            for expr, expected_prefix in self._SELF_TEST_CASES:
-                result = self.execute(expression=expr)
-                status = "OK" if result.startswith(expected_prefix) else "FAIL"
-                if status == "FAIL":
-                    ok = False
-                print(f"  [{status}] {expr!r:25s} -> {result}")
-            sys.exit(0 if ok else 1)
-        else:
+
+        if args.command != "test":
             print(f"Unknown command: {args.command!r}", file=sys.stderr)
             sys.exit(1)
+        ok = True
+        for expr, expected_prefix in self._SELF_TEST_CASES:
+            result = self.execute(expression=expr)
+            status = "OK" if result.startswith(expected_prefix) else "FAIL"
+            if status == "FAIL":
+                ok = False
+            print(f"  [{status}] {expr!r:25s} -> {result}")
+        sys.exit(0 if ok else 1)
 
 
 if __name__ == "__main__":

@@ -123,6 +123,53 @@ class TestFromEnvBackendResolution:
 
 
 # ---------------------------------------------------------------------------
+# with_overrides
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestWithOverrides:
+    def test_model_override_infers_openai_backend(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Overriding model to gpt-* must switch away from default ollama backend."""
+        monkeypatch.delenv("LLM_BACKEND", raising=False)
+        monkeypatch.delenv("LLM_MODEL", raising=False)
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        base = LlmConfig.from_env()
+        assert base.backend == "ollama"
+
+        updated = base.with_overrides(model="gpt-4o-mini")
+        assert updated.backend == "openai"
+        assert updated.model == "gpt-4o-mini"
+        assert updated.base_url is None
+        assert updated.api_key == "test-key"
+
+    def test_explicit_backend_override_is_respected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("LLM_BACKEND", "ollama")
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        base = LlmConfig.from_env()
+
+        updated = base.with_overrides(backend="openai", model="gpt-4o")
+        assert updated.backend == "openai"
+        assert updated.model == "gpt-4o"
+
+
+@pytest.mark.unit
+def test_llm_connector_model_override_infers_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LlmConnector(model=...) must not leave ollama backend for OpenAI model names."""
+    from agentflow.llm.connectors.LlmConnector import LlmConnector
+
+    monkeypatch.delenv("LLM_BACKEND", raising=False)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    connector = LlmConnector(model="gpt-4o-mini")
+    assert connector.config.backend == "openai"
+    assert connector.config.model == "gpt-4o-mini"
+    assert connector.config.base_url is None
+
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 

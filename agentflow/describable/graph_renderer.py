@@ -2,7 +2,7 @@
 
 Rendering pipeline::
 
-    Graph ──► _build_dot() ──► DOT source + descriptions dict
+    Graph ──► _build_dot() ──► DOT source + vertex/edge description dicts
                                       │                 │
                               Graphviz CLI       JS tooltip JSON
                                       │
@@ -30,6 +30,7 @@ import json
 import os
 import re
 import webbrowser
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -48,6 +49,9 @@ _CLUSTER_PALETTE: list[tuple[str, str]] = [
     ("lightyellow",  "olivedrab"),
     ("mistyrose",    "firebrick"),
 ]
+
+_USAGE_EDGE_LLM_STROKE = "#7b2fa8"
+_USAGE_EDGE_TOOLS_STROKE = "#1a7a43"
 
 _LEAF_FILL   = "honeydew"
 _LEAF_BORDER = "darkgreen"
@@ -82,7 +86,7 @@ class GraphRenderer:
         Returns:
             Multi-line DOT source string.
         """
-        dot, _ = GraphRenderer._build_dot(graph)
+        dot, _, _ = GraphRenderer._build_dot(graph)
         return dot
 
     @staticmethod
@@ -99,8 +103,8 @@ class GraphRenderer:
             ImportError: If the ``graphviz`` Python package is not installed.
         """
         gv = GraphRenderer._require_graphviz()
-        dot, _ = GraphRenderer._build_dot(graph)
-        return gv.Source(dot).pipe(format="svg").decode("utf-8")
+        dot, _, _ = GraphRenderer._build_dot(graph)
+        return GraphRenderer._render_svg_from_dot(dot)
 
     @staticmethod
     def to_png(graph: Graph, path: Path | None = None) -> Path:
@@ -117,7 +121,7 @@ class GraphRenderer:
             ImportError: If the ``graphviz`` Python package is not installed.
         """
         gv = GraphRenderer._require_graphviz()
-        dot, _ = GraphRenderer._build_dot(graph)
+        dot, _, _ = GraphRenderer._build_dot(graph)
         if path is None:
             tmp_dir = Path(tempfile.mkdtemp())
             path = tmp_dir / f"{graph.root.label}.png"
@@ -154,8 +158,8 @@ class GraphRenderer:
             ImportError: If the ``graphviz`` Python package is not installed.
         """
         gv = GraphRenderer._require_graphviz()
-        dot, descs = GraphRenderer._build_dot(graph)
-        svg = gv.Source(dot, format="svg").pipe().decode("utf-8")
+        dot, descs, edge_descs = GraphRenderer._build_dot(graph)
+        svg = GraphRenderer._render_svg_from_dot(dot)
         page_title = title or graph.root.label
         title_tt_json = json.dumps(title_tooltip if title_tooltip else None, ensure_ascii=False)
         return (
@@ -163,7 +167,56 @@ class GraphRenderer:
             .replace("%%TITLE%%",          _html_stdlib.escape(page_title))
             .replace("%%SVG%%",            svg)
             .replace("%%DESCRIPTIONS%%",   json.dumps(descs, ensure_ascii=False))
+            .replace("%%EDGE_DESCRIPTIONS%%", json.dumps(edge_descs, ensure_ascii=False))
             .replace("%%TITLE_TOOLTIP%%",  title_tt_json)
+        )
+
+    @staticmethod
+    def dot_to_html(
+        dot_source: str,
+        *,
+        title: str = "",
+        title_tooltip: str = "",
+        descs: dict[str, str] | None = None,
+        edge_descs: dict[str, str] | None = None,
+    ) -> str:
+        """Render an existing DOT source to the same interactive HTML as ``to_html()``.
+
+        Uses ``_render_svg_from_dot()`` and ``_HTML_TEMPLATE``.  When *descs* /
+        *edge_descs* are omitted, tooltip attributes are extracted from the DOT
+        so hover panels work for agentflow-generated files.
+
+        Args:
+            dot_source: Graphviz DOT document.
+            title: Page title; defaults to the first ``label=`` in the file.
+            title_tooltip: Optional Markdown tooltip for the page header.
+            descs: Vertex/cluster tooltip map; auto-extracted when ``None``.
+            edge_descs: Usage-edge tooltip map; auto-extracted when ``None``.
+
+        Returns:
+            Complete standalone HTML string.
+
+        Raises:
+            ImportError: If the ``graphviz`` Python package is not installed.
+        """
+        parsed_descs, parsed_edge_descs = GraphRenderer._extract_tooltip_descs_from_dot(
+            dot_source,
+        )
+        if descs is None:
+            descs = parsed_descs
+        if edge_descs is None:
+            edge_descs = parsed_edge_descs
+        GraphRenderer._require_graphviz()
+        svg = GraphRenderer._render_svg_from_dot(dot_source)
+        page_title = title or GraphRenderer._default_title_from_dot(dot_source)
+        title_tt_json = json.dumps(title_tooltip if title_tooltip else None, ensure_ascii=False)
+        return (
+            _HTML_TEMPLATE
+            .replace("%%TITLE%%", _html_stdlib.escape(page_title))
+            .replace("%%SVG%%", svg)
+            .replace("%%DESCRIPTIONS%%", json.dumps(descs, ensure_ascii=False))
+            .replace("%%EDGE_DESCRIPTIONS%%", json.dumps(edge_descs, ensure_ascii=False))
+            .replace("%%TITLE_TOOLTIP%%", title_tt_json)
         )
 
     @staticmethod
@@ -189,9 +242,9 @@ class GraphRenderer:
             ImportError: If the ``graphviz`` Python package is not installed.
         """
         gv  = GraphRenderer._require_graphviz()
-        dot, descs = GraphRenderer._build_dot(graph)
-        raw_svg = gv.Source(dot, format="svg").pipe().decode("utf-8")
-        return GraphRenderer._inject_svg_interactivity(raw_svg, descs)
+        dot, descs, edge_descs = GraphRenderer._build_dot(graph)
+        raw_svg = GraphRenderer._render_svg_from_dot(dot)
+        return GraphRenderer._inject_svg_interactivity(raw_svg, descs, edge_descs)
 
     @staticmethod
     def open_browser(graph: Graph, title: str = "", title_tooltip: str = "") -> None:
@@ -232,28 +285,30 @@ class GraphRenderer:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_dot(graph: Graph) -> tuple[str, dict[str, str]]:
-        """Build the DOT source and the descriptions dict for tooltip rendering.
+    def _build_dot(graph: Graph) -> tuple[str, dict[str, str], dict[str, str]]:
+        """Build the DOT source and tooltip description dicts for rendering.
 
         Returns:
-            Tuple of ``(dot_source, {dot_id: markdown_string})``.
-            The ``dot_id`` keys match the ``<title>`` text of the corresponding
-            SVG group elements so that the JavaScript tooltip logic can look
-            them up.
+            Tuple of ``(dot_source, vertex_descs, edge_descs)``.
+            Vertex keys match Graphviz node/cluster ``<title>`` text; edge keys
+            match Graphviz edge ``<title>`` text (with optional ``:port`` suffix).
         """
         lines: list[str] = [
             "digraph {",
-            "  rankdir=LR",
+            "  rankdir=TB",
+            "  center=true",
             "  compound=true",
+            "  splines=true",
             '  node [fontname="Helvetica" fontsize=11]',
             '  edge [fontname="Helvetica" fontsize=9 color=gray40]',
         ]
         descs: dict[str, str] = {}
+        edge_descs: dict[str, str] = {}
         GraphRenderer._render_vertex(graph.root, lines, descs, depth=0)
         for edge in graph.edges:
-            lines.append(f"  {GraphRenderer._edge_to_dot(edge)}")
+            lines.append(f"  {GraphRenderer._edge_to_dot(edge, edge_descs)}")
         lines.append("}")
-        return "\n".join(lines), descs
+        return "\n".join(lines), descs, edge_descs
 
     @staticmethod
     def _render_vertex(
@@ -270,11 +325,9 @@ class GraphRenderer:
         them (Graphviz edges cannot target a cluster directly).
 
         Depth-based layout rules (depth = distance from AgentApp root):
-          depth 0  — root cluster (AgentApp); default styling.
-          depth 1  — top-level children (StateGraph, Context); children that are
-                     themselves sub-clusters get invisible ordering edges so that
-                     Graphviz places them left-to-right (matching graph rankdir=LR)
-                     instead of stacking them in a column.
+          depth 0  — AgentApp stacks StateGraph above Context (invisible edges).
+          depth 1  — StateGraph uses ``rankdir=LR``; Context uses ``rankdir=TB``
+                     and stacks its child clusters vertically.
           depth ≥2 — compact clusters: smaller frame margin and tighter node
                      margins / font to keep inner boxes visually lean.
 
@@ -293,13 +346,15 @@ class GraphRenderer:
         safe    = GraphRenderer._safe_id(v.id)
         md      = GraphRenderer._vertex_to_md(v)
         tooltip = GraphRenderer._vertex_to_dot_tooltip(v)
+        url_suffix = GraphRenderer._dot_url_suffix(v)
 
         if not v.children:
             fill = "#90EE90" if v.attributes.get("active", False) else _LEAF_FILL
             # Compact leaf nodes deep in the hierarchy: tighter padding and smaller font.
             compact = ' margin="0.1,0.04" fontsize=10' if depth >= 3 else ""
             node_attrs = (
-                f'label="{v.label}" '
+                f'label="{v.label}"'
+                f'{url_suffix} '
                 f'tooltip="{tooltip}" '
                 f'shape=box style="rounded,filled" '
                 f'fillcolor={fill} color={_LEAF_BORDER}'
@@ -315,36 +370,166 @@ class GraphRenderer:
         descs[cluster_id] = md
         lines.append(f"{pad}subgraph {cluster_id} {{")
         lines.append(f'{ipad}label="{v.label}"')
+        if url_suffix:
+            lines.append(f"{ipad}{url_suffix.lstrip()}")
         lines.append(f'{ipad}style="rounded,filled"')
         lines.append(f"{ipad}fillcolor={fill}")
         lines.append(f"{ipad}color={border}")
         lines.append(f'{ipad}tooltip="{tooltip}"')
+        cluster_rankdir = GraphRenderer._cluster_rankdir(v, depth)
+        if cluster_rankdir is not None:
+            lines.append(f"{ipad}rankdir={cluster_rankdir}")
         # Compact inner clusters: tighter frame padding (default Graphviz margin is ~8 pt).
         if depth >= 2:
             lines.append(f'{ipad}margin="10,5"')
-        # Invisible anchor — gives edges a concrete target node.
-        lines.append(
+        usage_port_cluster = GraphRenderer._is_usage_port_cluster(v)
+        anchor_after_children = GraphRenderer._cluster_anchor_after_children(v)
+        invis_anchor = (
             f"{ipad}{anchor_id} [label=\"\" style=invis width=0.01 height=0.01]"
         )
-        child_ids: list[str] = []
+        if not anchor_after_children:
+            lines.append(invis_anchor)
+        child_anchors: list[tuple[str, str]] = []
+        usage_port_leaves: list[str] = []
         for child in v.children:
-            child_id = GraphRenderer._render_vertex(child, lines, descs, depth + 1)
-            child_ids.append(child_id)
+            child_anchor = GraphRenderer._render_vertex(child, lines, descs, depth + 1)
+            if child_anchor.startswith("_a_"):
+                child_anchors.append((child.label, child_anchor))
+            elif usage_port_cluster:
+                usage_port_leaves.append(child_anchor)
+        if usage_port_cluster:
+            GraphRenderer._align_usage_port_anchor(
+                lines, ipad, anchor_id, usage_port_leaves
+            )
+        elif anchor_after_children:
+            lines.append(invis_anchor)
 
-        # Depth-1 clusters whose children are themselves sub-clusters (i.e. anchor
-        # nodes, identified by the "_a_" prefix) have no explicit edges between them.
-        # Without edges Graphviz stacks them in one column.  Invisible ordering edges
-        # force sequential left-to-right placement matching the graph's rankdir=LR.
-        if depth == 1:
-            cluster_child_ids = [cid for cid in child_ids if cid.startswith("_a_")]
-            for a, b in zip(cluster_child_ids, cluster_child_ids[1:]):
-                lines.append(f"{ipad}{a} -> {b} [style=invis]")
+        if depth == 0:
+            GraphRenderer._append_vertical_stack_edges(lines, ipad, child_anchors, root=True)
+        elif depth == 1 and v.label == "Context":
+            GraphRenderer._append_vertical_stack_edges(lines, ipad, child_anchors, root=False)
 
         lines.append(f"{pad}}}")
         return anchor_id
 
+    # Preferred top-to-bottom order for AgentApp's depth-1 clusters in graph output.
+    _AGENTAPP_CLUSTER_ORDER: dict[str, int] = {"StateGraph": 0, "Context": 1}
+    # Clusters that receive dashed usage edges from StateGraph vertices.
+    _USAGE_PORT_CLUSTER_LABELS: frozenset[str] = frozenset({"LlmConnector", "ToolRegistry"})
+
     @staticmethod
-    def _edge_to_dot(edge: Edge) -> str:
+    def _is_usage_port_cluster(v: Vertex) -> bool:
+        """Return True when dashed usage edges should attach to *v*'s west port."""
+        return v.label in GraphRenderer._USAGE_PORT_CLUSTER_LABELS
+
+    @staticmethod
+    def _cluster_anchor_after_children(v: Vertex) -> bool:
+        """Return True when the invisible cluster anchor is emitted after children.
+
+        StateGraph uses ``rankdir=LR``; declaring its anchor after state vertices
+        keeps the left-to-right flow unobstructed for usage edges leaving via
+        ``tailport=e``.
+        """
+        return v.label == "StateGraph"
+
+    @staticmethod
+    def _align_usage_port_anchor(
+        lines: list[str],
+        ipad: str,
+        anchor_id: str,
+        leaf_ids: list[str],
+    ) -> None:
+        """Vertically align a west-side usage port anchor with the middle leaf.
+
+        The invisible anchor node is declared before visible children so Graphviz
+        places it on the left cluster border for ``headport=w`` compound edges.
+
+        Args:
+            lines: DOT line buffer to append to.
+            ipad: Indentation prefix inside the parent cluster.
+            anchor_id: Invisible anchor node identifier (already declared).
+            leaf_ids: DOT ids of rendered leaf nodes inside the cluster.
+        """
+        if leaf_ids:
+            mid_leaf = leaf_ids[len(leaf_ids) // 2]
+            lines.append(f"{ipad}{{ rank=same; {anchor_id}; {mid_leaf}; }}")
+
+    @staticmethod
+    def _cluster_rankdir(v: Vertex, depth: int) -> str | None:
+        """Return a Graphviz ``rankdir`` for cluster *v*, or ``None`` for default.
+
+        Args:
+            v: Cluster vertex being rendered.
+            depth: Nesting depth from the application root.
+
+        Returns:
+            ``"LR"``, ``"TB"``, or ``None`` when the global digraph default applies.
+        """
+        if v.label == "StateGraph":
+            return "LR"
+        if v.label == "Context":
+            return "TB"
+        if depth == 0:
+            return "TB"
+        return None
+
+    @staticmethod
+    def _append_vertical_stack_edges(
+        lines: list[str],
+        ipad: str,
+        child_anchors: list[tuple[str, str]],
+        *,
+        root: bool,
+    ) -> None:
+        """Add invisible edges that force sibling clusters into a vertical column.
+
+        Args:
+            lines: DOT line buffer to append to.
+            ipad: Indentation prefix for statements inside the parent cluster.
+            child_anchors: ``(child_label, anchor_dot_id)`` for each sub-cluster.
+            root: When ``True``, sort StateGraph before Context for AgentApp layout.
+        """
+        if len(child_anchors) < 2:
+            return
+        ordered = child_anchors
+        if root:
+            ordered = sorted(
+                child_anchors,
+                key=lambda item: GraphRenderer._AGENTAPP_CLUSTER_ORDER.get(item[0], 99),
+            )
+        for (_, from_anchor), (_, to_anchor) in zip(ordered, ordered[1:]):
+            lines.append(
+                f"{ipad}{from_anchor} -> {to_anchor} [style=invis, weight=100]"
+            )
+
+    @staticmethod
+    def _register_usage_edge_tooltip(
+        edge_descs: dict[str, str],
+        from_dot: str,
+        to_anchor: str,
+        summary: str,
+    ) -> None:
+        """Store Markdown tooltip text for a usage edge under Graphviz title keys.
+
+        Graphviz edge ``<title>`` values include an optional ``:port`` suffix when
+        ``headport`` / ``tailport`` are set; both variants are registered.
+
+        Args:
+            edge_descs: Edge-description dict mutated in place.
+            from_dot: Source node DOT identifier.
+            to_anchor: Target invisible anchor node DOT identifier.
+            summary: Plain-text usage summary shown in the tooltip heading.
+        """
+        markdown = f"## {summary}"
+        for key in (
+            f"{from_dot}:e->{to_anchor}:w",
+            f"{from_dot}->{to_anchor}:w",
+            f"{from_dot}->{to_anchor}",
+        ):
+            edge_descs[key] = markdown
+
+    @staticmethod
+    def _edge_to_dot(edge: Edge, edge_descs: dict[str, str] | None = None) -> str:
         """Render an explicit edge to a single DOT statement.
 
         Three edge flavours are supported:
@@ -352,15 +537,16 @@ class GraphRenderer:
         * **Parallel fan-out** (``edge.attributes["parallel"] == True``):
           dashed blue arrow — distinguishes fan-out from sequential transitions.
         * **Usage** (``edge.attributes["usage"] == True``):
-          dashed purple arrow from a StateVertex to the LlmConnector or ToolRegistry
-          cluster it uses.  Because clusters cannot be direct edge targets in
-          Graphviz, the arrow targets the cluster's invisible anchor node while
-          ``lhead`` makes the arrowhead land visually on the cluster boundary
-          (requires ``compound=true`` in the root digraph).
+          dashed undirected line from a StateVertex to the LlmConnector or ToolRegistry
+          cluster it uses.  ``headport=w`` / ``tailport=e`` attach the line to the
+          left-centre of the target cluster and the right-centre of the source vertex.
+          The human-readable usage summary is stored in ``edge_descs`` for HTML/SVG tooltips, not as a
+          visible edge label.  ``lhead`` clips the segment to the cluster boundary.
         * **Default**: plain grey directed or undirected arrow.
 
         Args:
             edge: The edge to render.
+            edge_descs: Optional dict populated with usage-edge tooltip Markdown.
 
         Returns:
             DOT statement string (no trailing newline).
@@ -368,17 +554,34 @@ class GraphRenderer:
         if edge.attributes.get("usage"):
             from_dot = GraphRenderer._safe_id(edge.from_id)
             to_safe  = GraphRenderer._safe_id(edge.to_id)
-            color    = '"#7b2fa8"' if edge.attributes.get("usage_type") == "llm" else '"#1a7a43"'
+            to_anchor = f"_a_{to_safe}"
+            color    = (
+                f'"{_USAGE_EDGE_LLM_STROKE}"'
+                if edge.attributes.get("usage_type") == "llm"
+                else f'"{_USAGE_EDGE_TOOLS_STROKE}"'
+            )
+            # dir=none + arrowsize=0 yields undirected usage lines.  Do not set
+            # arrowhead=none/arrowtail=none together with headport/tailport compass
+            # points — Graphviz mis-parses the port letter as an arrow type name
+            # (e.g. Warning: Arrow type "w" unknown).
             attrs = [
                 "style=dashed",
+                "dir=none",
+                "arrowsize=0",
                 f"color={color}",
                 "penwidth=1",
-                "arrowsize=0.7",
+                "tailport=e",
+                "headport=w",
                 f'lhead="cluster_{to_safe}"',
             ]
             if edge.label:
-                attrs.append(f'label="{edge.label}" fontsize=8')
-            return f"{from_dot} -> _a_{to_safe} [{', '.join(attrs)}]"
+                tooltip = GraphRenderer._dot_attr_escape(edge.label)
+                attrs.append(f'tooltip="{tooltip}"')
+                if edge_descs is not None:
+                    GraphRenderer._register_usage_edge_tooltip(
+                        edge_descs, from_dot, to_anchor, edge.label,
+                    )
+            return f"{from_dot} -> {to_anchor} [{', '.join(attrs)}]"
 
         from_id = GraphRenderer._safe_id(edge.from_id)
         to_id   = GraphRenderer._safe_id(edge.to_id)
@@ -407,6 +610,196 @@ class GraphRenderer:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _skip_description_key(v: Vertex, key: str, value: Any) -> bool:
+        """Return True when *key* should be omitted from graph tooltip rendering.
+
+        Skips structural keys and ``name`` when it duplicates the vertex label.
+
+        Args:
+            v: Vertex being rendered.
+            key: Description dict key.
+            value: Description dict value.
+
+        Returns:
+            ``True`` when the key/value pair must not appear in tooltips.
+        """
+        if key == "_type":
+            return True
+        return key == "name" and str(value) == v.label
+
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _agentflow_package_root() -> Path | None:
+        """Return the installed ``agentflow`` package directory, if importable.
+
+        Uses ``agentflow.__file__`` so library detection works for editable
+        checkouts and pip-installed wheels alike.
+
+        Returns:
+            Absolute path to the ``agentflow`` package root, or ``None``.
+        """
+        try:
+            import agentflow
+        except ImportError:
+            return None
+        package_file = getattr(agentflow, "__file__", None)
+        if not package_file:
+            return None
+        return Path(package_file).resolve().parent
+
+    @staticmethod
+    def _is_library_vertex(v: Vertex) -> bool:
+        """Return True when the vertex class is defined inside the ``agentflow`` package.
+
+        Args:
+            v: Vertex with optional ``source_file`` metadata.
+
+        Returns:
+            ``True`` for library classes; ``False`` for user/application code.
+        """
+        if not v.source_file:
+            return False
+        root = GraphRenderer._agentflow_package_root()
+        if root is None:
+            return False
+        try:
+            return Path(v.source_file).resolve().is_relative_to(root)
+        except (OSError, ValueError):
+            return False
+
+    @staticmethod
+    def _truncate_library_description(text: str) -> str:
+        """Shorten a library docstring to the first sentence or paragraph.
+
+        Stops at the first period (included) or blank line (paragraph break).
+        When the source text continues beyond that point, appends `` ...``.
+
+        Args:
+            text: Full class or field description text.
+
+        Returns:
+            One-sentence summary, optionally suffixed with `` ...``.
+        """
+        remaining = text.strip()
+        if not remaining:
+            return ""
+
+        period_idx = remaining.find(".")
+        blank_line_idx = remaining.find("\n\n")
+        cutoffs: list[int] = []
+        if period_idx >= 0:
+            cutoffs.append(period_idx + 1)
+        if blank_line_idx >= 0:
+            cutoffs.append(blank_line_idx)
+
+        if cutoffs:
+            end = min(cutoffs)
+            short = remaining[:end].strip()
+            tail = remaining[end:].strip()
+        else:
+            short = remaining
+            tail = ""
+
+        if tail and not short.endswith("..."):
+            return f"{short} ..."
+        return short
+
+    @staticmethod
+    def _tooltip_description_text(v: Vertex) -> str | None:
+        """Return the body description line(s) for graph tooltips.
+
+        Library vertices get a one-sentence summary; user vertices keep the full
+        text.  The result is rendered without a ``description:`` field label.
+
+        Args:
+            v: Vertex whose ``description`` dict may contain a ``description`` key.
+
+        Returns:
+            Plain-text description body, or ``None`` when absent or skipped.
+        """
+        if "description" not in v.description:
+            return None
+        raw = v.description["description"]
+        if GraphRenderer._skip_description_key(v, "description", raw):
+            return None
+        text = str(raw).strip()
+        if not text:
+            return None
+        if GraphRenderer._is_library_vertex(v):
+            text = GraphRenderer._truncate_library_description(text)
+        return text
+
+    @staticmethod
+    def _iter_tooltip_attribute_items(v: Vertex) -> list[tuple[str, Any]]:
+        """Return description dict entries rendered below the free-form body text.
+
+        Args:
+            v: Source vertex.
+
+        Returns:
+            ``(key, value)`` pairs excluding structural keys and ``description``.
+        """
+        items: list[tuple[str, Any]] = []
+        for key, value in v.description.items():
+            if key == "description":
+                continue
+            if GraphRenderer._skip_description_key(v, key, value):
+                continue
+            items.append((key, value))
+        return items
+
+    @staticmethod
+    def _vertex_source_href(v: Vertex) -> str | None:
+        """Return a ``file://`` URL pointing at the class definition, if known.
+
+        Args:
+            v: Vertex whose ``source_file`` / ``source_line`` are used.
+
+        Returns:
+            URL string suitable for Markdown links, or ``None`` when unavailable.
+        """
+        if not v.source_file or v.source_line <= 0:
+            return None
+        try:
+            return Path(v.source_file).resolve().as_uri() + f"#L{v.source_line}"
+        except (OSError, ValueError):
+            return None
+
+    @staticmethod
+    def _dot_url_suffix(v: Vertex) -> str:
+        """Return a Graphviz ``URL`` attribute suffix for clickable vertex labels.
+
+        Graphviz embeds ``URL`` as ``xlink:href`` on the node/cluster label in SVG
+        output (``graph --format svg|html``, ``graph --browser``, interactive SVG).
+
+        Args:
+            v: Vertex whose source location is linked when known.
+
+        Returns:
+            Empty string, or `` URL="file://…"`` safe for inline DOT attributes.
+        """
+        href = GraphRenderer._vertex_source_href(v)
+        if href is None:
+            return ""
+        escaped = href.replace("\\", "\\\\").replace('"', '\\"')
+        return f' URL="{escaped}"'
+
+    @staticmethod
+    def _vertex_heading_md(v: Vertex) -> str:
+        """Return the Markdown heading line for a vertex tooltip.
+
+        Source links are rendered on graph labels (Graphviz ``URL``), not here,
+        because tooltip panels follow the cursor and label links are clickable.
+
+        Args:
+            v: Source vertex.
+
+        Returns:
+            Plain ``## Label`` heading without hyperlinks.
+        """
+        return f"## {v.label}"
+
+    @staticmethod
     def _vertex_to_dot_tooltip(v: Vertex) -> str:
         """Build the ``tooltip`` attribute value for a DOT node or cluster.
 
@@ -425,10 +818,11 @@ class GraphRenderer:
             Escaped DOT attribute value string (no surrounding quotes).
         """
         lines: list[str] = [v.label]
-        for key, value in v.description.items():
-            if key == "_type":
-                continue
-            lines.extend(GraphRenderer._dot_kv(key, value, indent=0))
+        body = GraphRenderer._tooltip_description_text(v)
+        if body:
+            lines.append(body)
+        for key, value in GraphRenderer._iter_tooltip_attribute_items(v):
+            lines.extend(GraphRenderer._dot_kv(key, value, indent=1))
         return GraphRenderer._dot_attr_escape("\n".join(lines))
 
     @staticmethod
@@ -487,12 +881,128 @@ class GraphRenderer:
             .replace("\n", "\\n")
         )
 
+    @staticmethod
+    def _dot_attr_unescape(text: str) -> str:
+        """Reverse ``_dot_attr_escape`` for tooltip values read from DOT source.
+
+        Args:
+            text: Escaped attribute value from a DOT file (without surrounding quotes).
+
+        Returns:
+            Unescaped plain text.
+        """
+        return (
+            text
+            .replace("\\n", "\n")
+            .replace('\\"', '"')
+            .replace("\\\\", "\\")
+        )
+
+    _DOT_TOOLTIP_RE = re.compile(r'tooltip="((?:\\.|[^"\\])*)"')
+    _DOT_NODE_LINE_RE = re.compile(r"^(\s*)([A-Za-z_]\w*)\s+\[")
+    _DOT_SUBGRAPH_RE = re.compile(r"^\s*subgraph\s+(cluster_\w+)\s*\{")
+    _DOT_USAGE_EDGE_RE = re.compile(
+        r"^(\s*)([A-Za-z_]\w*)\s+->\s+(_a_[A-Za-z_]\w*)\s+\[(.*)\]\s*$",
+    )
+
+    @staticmethod
+    def _tooltip_to_markdown(raw: str) -> str:
+        """Convert a Graphviz tooltip string to the Markdown heading used in HTML hover."""
+        text = GraphRenderer._dot_attr_unescape(raw).strip()
+        if not text:
+            return ""
+        if "\n" in text:
+            heading, body = text.split("\n", 1)
+            return f"## {heading}\n{body}"
+        return f"## {text}"
+
+    @staticmethod
+    def _extract_dot_attribute(attrs: str, name: str) -> str | None:
+        """Return the unescaped value of *name* from a DOT attribute list string."""
+        match = re.search(
+            rf'{name}="((?:\\.|[^"\\])*)"',
+            attrs,
+        )
+        if not match:
+            return None
+        return GraphRenderer._dot_attr_unescape(match.group(1))
+
+    @staticmethod
+    def _default_title_from_dot(dot_source: str) -> str:
+        """Guess a page title from the first ``label=`` attribute in *dot_source*."""
+        match = re.search(r'label="((?:\\.|[^"\\])*)"', dot_source)
+        if match:
+            return GraphRenderer._dot_attr_unescape(match.group(1))
+        return "Graph"
+
+    @staticmethod
+    def _extract_tooltip_descs_from_dot(
+        dot_source: str,
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        """Build vertex and usage-edge description dicts from DOT ``tooltip=`` attrs.
+
+        Keys match Graphviz SVG ``<title>`` text so the HTML hover script can resolve
+        them the same way as graphs built via ``_build_dot()``.
+
+        Args:
+            dot_source: Graphviz DOT document.
+
+        Returns:
+            Tuple ``(vertex_descs, edge_descs)``.
+        """
+        descs: dict[str, str] = {}
+        edge_descs: dict[str, str] = {}
+        cluster_stack: list[str] = []
+
+        for line in dot_source.splitlines():
+            subgraph_match = GraphRenderer._DOT_SUBGRAPH_RE.match(line)
+            if subgraph_match:
+                cluster_stack.append(subgraph_match.group(1))
+                continue
+
+            stripped = line.strip()
+            if stripped == "}" and cluster_stack:
+                cluster_stack.pop()
+                continue
+
+            edge_match = GraphRenderer._DOT_USAGE_EDGE_RE.match(line)
+            if edge_match:
+                from_dot, to_anchor, attrs = edge_match.group(2), edge_match.group(3), edge_match.group(4)
+                summary = GraphRenderer._extract_dot_attribute(attrs, "tooltip")
+                if summary and "style=dashed" in attrs:
+                    GraphRenderer._register_usage_edge_tooltip(
+                        edge_descs, from_dot, to_anchor, summary,
+                    )
+                continue
+
+            node_match = GraphRenderer._DOT_NODE_LINE_RE.match(line)
+            tooltip_match = GraphRenderer._DOT_TOOLTIP_RE.search(line)
+            if not tooltip_match:
+                continue
+
+            markdown = GraphRenderer._tooltip_to_markdown(tooltip_match.group(1))
+            if not markdown:
+                continue
+
+            if node_match:
+                descs[node_match.group(2)] = markdown
+                continue
+
+            if cluster_stack and "tooltip=" in line and "->" not in line:
+                descs[cluster_stack[-1]] = markdown
+
+        return descs, edge_descs
+
     # ------------------------------------------------------------------
     # Private — interactive SVG injection
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _inject_svg_interactivity(svg_str: str, descs: dict[str, str]) -> str:
+    def _inject_svg_interactivity(
+        svg_str: str,
+        descs: dict[str, str],
+        edge_descs: dict[str, str] | None = None,
+    ) -> str:
         """Post-process a Graphviz SVG string to add interactive hover tooltips.
 
         Injects before ``</svg>``:
@@ -508,12 +1018,18 @@ class GraphRenderer:
         Args:
             svg_str: Raw SVG string from Graphviz.
             descs: Mapping ``{dot_node_or_cluster_id: markdown_string}``.
+            edge_descs: Mapping ``{edge_title: markdown_string}`` for usage edges.
 
         Returns:
             Modified SVG string with embedded interactivity.
         """
         descs_json = json.dumps(descs, ensure_ascii=False)
-        injection = _SVG_INJECTION_TEMPLATE.replace("%%DESCRIPTIONS%%", descs_json)
+        edge_descs_json = json.dumps(edge_descs or {}, ensure_ascii=False)
+        injection = (
+            _SVG_INJECTION_TEMPLATE
+            .replace("%%DESCRIPTIONS%%", descs_json)
+            .replace("%%EDGE_DESCRIPTIONS%%", edge_descs_json)
+        )
         return svg_str.replace("</svg>", injection + "\n</svg>", 1)
 
     # ------------------------------------------------------------------
@@ -530,14 +1046,15 @@ class GraphRenderer:
         Returns:
             Markdown string with the vertex label, id, and description entries.
         """
-        lines: list[str] = [f"## {v.label}"]
+        lines: list[str] = [GraphRenderer._vertex_heading_md(v)]
         if v.id != v.label:
             lines.append(f"*`{v.id}`*")
         lines.append("")
-        for key, value in v.description.items():
-            if key == "_type":
-                continue
-            lines.extend(GraphRenderer._md_kv(key, value, indent=0))
+        body = GraphRenderer._tooltip_description_text(v)
+        if body:
+            lines.append(body)
+        for key, value in GraphRenderer._iter_tooltip_attribute_items(v):
+            lines.extend(GraphRenderer._md_kv(key, value, indent=1))
         return "\n".join(lines)
 
     @staticmethod
@@ -572,6 +1089,113 @@ class GraphRenderer:
     # ------------------------------------------------------------------
     # Private — utility
     # ------------------------------------------------------------------
+
+    # Inline SVG styles for Graphviz label hyperlinks (file:// class definitions).
+    _SVG_LABEL_LINK_STYLE = (
+        "a { cursor: pointer; }"
+        "a text { fill: #1565c0; text-decoration: underline;"
+        " text-decoration-color: #1565c0; }"
+    )
+
+    @staticmethod
+    def _render_svg_from_dot(dot: str) -> str:
+        """Render DOT to SVG and post-process label hyperlinks for all graph outputs.
+
+        Args:
+            dot: Graphviz DOT source.
+
+        Returns:
+            SVG string with new-tab targets and label link styling applied.
+        """
+        gv = GraphRenderer._require_graphviz()
+        svg = gv.Source(dot, format="svg").pipe().decode("utf-8")
+        svg = GraphRenderer._strip_usage_edge_arrowheads(svg)
+        return GraphRenderer._enhance_label_links(svg)
+
+    _USAGE_EDGE_STROKE_COLORS: frozenset[str] = frozenset({
+        _USAGE_EDGE_LLM_STROKE,
+        _USAGE_EDGE_TOOLS_STROKE,
+    })
+
+    @staticmethod
+    def _strip_usage_edge_arrowheads(svg_str: str) -> str:
+        """Remove arrow polygons from dashed LLM/tool usage edges in Graphviz SVG.
+
+        ``dir=none`` with ``arrowsize=0`` suppresses most arrowheads, but some
+        compound edges still emit a degenerate ``<polygon>``; those are stripped
+        so usage lines stay visually undirected.
+
+        Args:
+            svg_str: Raw SVG from Graphviz.
+
+        Returns:
+            SVG string with usage-edge arrow polygons removed.
+        """
+        usage_strokes = GraphRenderer._USAGE_EDGE_STROKE_COLORS
+
+        def _clean_edge_block(match: re.Match[str]) -> str:
+            block = match.group(0)
+            if "stroke-dasharray" not in block:
+                return block
+            if not any(f'stroke="{color}"' in block for color in usage_strokes):
+                return block
+            return re.sub(r"<polygon[^>]*/>", "", block)
+
+        return re.sub(
+            r'<g id="(?:a_)?edge\d+" class="edge">.*?</g>',
+            _clean_edge_block,
+            svg_str,
+            flags=re.DOTALL,
+        )
+
+    @staticmethod
+    def _enhance_label_links(svg_str: str) -> str:
+        """Add new-tab navigation and link styling to Graphviz ``URL`` anchors in SVG.
+
+        Graphviz emits ``<a xlink:href="…">`` around vertex/cluster labels.  This
+        adds ``target="_blank"``, injects shared CSS, and keeps tooltip cleanup
+        separate (handled in HTML/JS templates).
+
+        Args:
+            svg_str: Raw SVG from Graphviz.
+
+        Returns:
+            Post-processed SVG string.
+        """
+        if "xlink:href=" not in svg_str:
+            return svg_str
+
+        svg_str = GraphRenderer._inject_svg_label_link_style(svg_str)
+
+        def _add_new_tab_target(match: re.Match[str]) -> str:
+            tag = match.group(0)
+            if "target=" in tag:
+                return tag
+            return tag[:-1] + ' target="_blank" rel="noopener noreferrer">'
+
+        return re.sub(
+            r'<a\b[^>]*xlink:href="[^"]*"[^>]*>',
+            _add_new_tab_target,
+            svg_str,
+        )
+
+    @staticmethod
+    def _inject_svg_label_link_style(svg_str: str) -> str:
+        """Insert CSS for blue underlined label links into an SVG document.
+
+        Args:
+            svg_str: SVG XML string.
+
+        Returns:
+            SVG with a ``<style>`` block immediately after the root ``<svg>`` tag.
+        """
+        marker = GraphRenderer._SVG_LABEL_LINK_STYLE
+        if marker in svg_str:
+            return svg_str
+        style_block = (
+            f'<style type="text/css"><![CDATA[{GraphRenderer._SVG_LABEL_LINK_STYLE}]]></style>'
+        )
+        return re.sub(r"(<svg[^>]*>)", r"\1\n" + style_block, svg_str, count=1)
 
     @staticmethod
     def _safe_id(vertex_id: str) -> str:
@@ -629,8 +1253,12 @@ class GraphRenderer:
 #     5. Tries to load marked.js from CDN after setup; falls back to an inline
 #        mini-renderer (bold, italic, code, h2, h3, lists) if CDN fails.
 
-_SVG_INJECTION_TEMPLATE = """\
+_SVG_INJECTION_TEMPLATE = r"""\
 <defs>
+  <style type="text/css"><![CDATA[
+    a { cursor: pointer; }
+    a text { fill: #1565c0; text-decoration: underline; text-decoration-color: #1565c0; }
+  ]]></style>
   <filter id="gv-tt-shadow" x="-10%" y="-10%" width="130%" height="130%">
     <feDropShadow dx="0" dy="3" stdDeviation="5" flood-opacity="0.20"/>
   </filter>
@@ -669,6 +1297,7 @@ _SVG_INJECTION_TEMPLATE = """\
 (function () {
   "use strict";
   var descs = %%DESCRIPTIONS%%;
+  var edgeDescs = %%EDGE_DESCRIPTIONS%%;
   var TT_W = 390, TT_H = 430, PAD = 12;
 
   // Inline mini Markdown renderer — fallback when marked.js is unavailable.
@@ -727,12 +1356,53 @@ _SVG_INJECTION_TEMPLATE = """\
     g.removeChild(titleEl);
   }
 
+    function lookupEdgeMd(titleKey) {
+      if (edgeDescs[titleKey]) return edgeDescs[titleKey];
+      var colon = titleKey.lastIndexOf(":");
+      if (colon > 0 && edgeDescs[titleKey.slice(0, colon)]) {
+        return edgeDescs[titleKey.slice(0, colon)];
+      }
+      var normalized = titleKey.replace(/^([^:]+):[a-z]+->/, "$1->");
+      if (edgeDescs[normalized]) return edgeDescs[normalized];
+      colon = normalized.lastIndexOf(":");
+      if (colon > 0 && edgeDescs[normalized.slice(0, colon)]) {
+        return edgeDescs[normalized.slice(0, colon)];
+      }
+      return null;
+    }
+
+  var allEdges = svg.querySelectorAll("g.edge");
+  for (var ei = 0; ei < allEdges.length; ei++) {
+    var edgeG = allEdges[ei];
+    var edgeTitle = null;
+    for (var ec = 0; ec < edgeG.childNodes.length; ec++) {
+      var edgeNode = edgeG.childNodes[ec];
+      if (edgeNode.nodeType === 1 && edgeNode.tagName === "title") {
+        edgeTitle = edgeNode;
+        break;
+      }
+    }
+    if (!edgeTitle) continue;
+    var edgeKey = edgeTitle.textContent.trim();
+    var edgeMd = lookupEdgeMd(edgeKey);
+    if (edgeMd) {
+      edgeG._md = edgeMd;
+      edgeG.style.cursor = "help";
+    }
+    edgeG.removeChild(edgeTitle);
+  }
+
   // Remove xlink:title from <a> elements: Graphviz tooltip= DOT attribute
   // generates these, causing a second native grey tooltip alongside the custom panel.
   var allAnchors = svg.querySelectorAll("a");
   for (var ai = 0; ai < allAnchors.length; ai++) {
-    allAnchors[ai].removeAttribute("xlink:title");
-    allAnchors[ai].removeAttribute("title");
+    var anchor = allAnchors[ai];
+    if (anchor.hasAttribute("xlink:href") || anchor.hasAttribute("href")) {
+      anchor.setAttribute("target", "_blank");
+      anchor.setAttribute("rel", "noopener noreferrer");
+    }
+    anchor.removeAttribute("xlink:title");
+    anchor.removeAttribute("title");
   }
 
   function getSVGPoint(e) {
@@ -837,6 +1507,12 @@ _HTML_TEMPLATE = """\
       padding: 24px;
     }
     #svg-wrap svg { max-width: none; height: auto; }
+    #svg-wrap svg a { cursor: pointer; }
+    #svg-wrap svg a text {
+      fill: #1565c0;
+      text-decoration: underline;
+      text-decoration-color: #1565c0;
+    }
     #tt {
       display: none; position: fixed; z-index: 1000;
       max-width: 400px; max-height: 72vh; overflow-y: auto;
@@ -868,7 +1544,23 @@ _HTML_TEMPLATE = """\
   <div id="tt"></div>
   <script>
     const descs = %%DESCRIPTIONS%%;
+    const edgeDescs = %%EDGE_DESCRIPTIONS%%;
     const tt = document.getElementById("tt");
+
+    function lookupEdgeMd(titleKey) {
+      if (edgeDescs[titleKey]) return edgeDescs[titleKey];
+      let colon = titleKey.lastIndexOf(":");
+      if (colon > 0 && edgeDescs[titleKey.slice(0, colon)]) {
+        return edgeDescs[titleKey.slice(0, colon)];
+      }
+      const normalized = titleKey.replace(/^([^:]+):[a-z]+->/, "$1->");
+      if (edgeDescs[normalized]) return edgeDescs[normalized];
+      colon = normalized.lastIndexOf(":");
+      if (colon > 0 && edgeDescs[normalized.slice(0, colon)]) {
+        return edgeDescs[normalized.slice(0, colon)];
+      }
+      return null;
+    }
 
     // Attach Markdown descriptions to SVG groups by matching their <title>.
     // Remove <title> to suppress the browser's native grey tooltip box.
@@ -881,9 +1573,20 @@ _HTML_TEMPLATE = """\
       tel.remove();
     });
 
-    // Remove xlink:title from <a> elements: Graphviz tooltip= DOT attribute
-    // generates these, causing a second native grey tooltip to appear.
+    document.querySelectorAll("#svg-wrap svg g.edge").forEach(function(g) {
+      const tel = g.querySelector(":scope > title");
+      if (!tel) return;
+      const md = lookupEdgeMd(tel.textContent.trim());
+      if (md) { g._md = md; g.style.cursor = "help"; }
+      tel.remove();
+    });
+
+    // Remove native Graphviz tooltips; keep label hyperlinks (new tab + styling).
     document.querySelectorAll("#svg-wrap svg a").forEach(function(a) {
+      if (a.hasAttribute("xlink:href") || a.hasAttribute("href")) {
+        a.setAttribute("target", "_blank");
+        a.setAttribute("rel", "noopener noreferrer");
+      }
       a.removeAttribute("xlink:title");
       a.removeAttribute("title");
     });

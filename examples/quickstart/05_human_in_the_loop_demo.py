@@ -9,10 +9,10 @@ the checkpoint store.  resume() then picks up from that checkpoint and
 completes the workflow.
 
 Run with:
-    uv run python examples/quickstart/05_human_in_the_loop_demo.py              # run workflow
     uv run python examples/quickstart/05_human_in_the_loop_demo.py -h           # help
-    uv run python examples/quickstart/05_human_in_the_loop_demo.py browser      # graph in browser
-    uv run python examples/quickstart/05_human_in_the_loop_demo.py graph-html   # save HTML graph
+    uv run python examples/quickstart/05_human_in_the_loop_demo.py run          # run workflow
+    uv run python examples/quickstart/05_human_in_the_loop_demo.py graph --browser
+    uv run python examples/quickstart/05_human_in_the_loop_demo.py graph -o graph.html
 """
 
 import dataclasses

@@ -22,11 +22,17 @@ Typical usage::
     # Self-documenting output (inherited from Describable):
     print(agent.get_description_markdown())   # Markdown with full structure
     print(agent.get_graph_dot())              # Graphviz DOT source
-    agent.open_graph_browser()                # open diagram in browser
+    agent.open_graph_browser()                # open diagram in browser (Python API)
 
     # Unified CLI entry-point:
-    agent.run_argparse(doc=__doc__, name=__name__,
-                       default_question="What is 42 * 7?", default_command="run")
+    #   python script.py run "What is 42 * 7?"
+    #   python script.py describe --format markdown
+    #   python script.py graph --browser
+    agent.run_argparse(
+        doc=__doc__,
+        name=__name__,
+        default_question="What is 42 * 7?",
+    )
 
 Design notes:
   - Accepts a ToolRegistry or a plain list of ToolBase instances (auto-wrapped).

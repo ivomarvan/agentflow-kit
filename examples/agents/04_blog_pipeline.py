@@ -10,9 +10,10 @@ distinct role (persona) and builds on the previous vertex's output:
 Each vertex issues one LLM call with a role-specific system prompt.
 
 Run:
-    uv run python examples/agents/04_blog_pipeline.py
+    uv run python examples/agents/04_blog_pipeline.py -h
+    uv run python examples/agents/04_blog_pipeline.py run
     uv run python examples/agents/04_blog_pipeline.py gui
-    uv run python examples/agents/04_blog_pipeline.py browser
+    uv run python examples/agents/04_blog_pipeline.py graph --browser
 """
 
 from dataclasses import dataclass

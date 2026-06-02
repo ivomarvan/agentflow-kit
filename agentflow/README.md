@@ -167,6 +167,26 @@ StateGraphRunner(graph, Context(FakeLlmConnector())).run_sync(S())
 
 See [statemachine/README.md](statemachine/README.md) for the full reference.
 
+## Unified CLI (`Describable` / `AgentApp`)
+
+Runnable scripts call `run_argparse()` or `AgentApp.cli()` as the `if __name__ == "__main__"` entry-point.
+With **no arguments**, the script prints help (including full grammar for every subcommand) and exits.
+
+```text
+script.py -h
+script.py run [QUESTION...]
+script.py gui [--host HOST] [--port PORT] [--no-browser]   # AgentApp only
+script.py describe [--format markdown|json|html] [-o|--output FILE]
+script.py graph [--format dot|svg|svg-raw|html|png] [-o|--output FILE]
+script.py graph --browser
+```
+
+```bash
+uv run python examples/quickstart/01_brief_example.py run
+uv run python examples/quickstart/01_brief_example.py graph --browser
+uv run python examples/agents/01_tool_calling_agent.py describe --format json -o desc.json
+```
+
 ## Ollama model management
 
 Models are stored in `~/.ollama/models/` — shared system-wide across all projects and venvs.

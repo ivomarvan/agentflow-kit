@@ -23,6 +23,9 @@ dependencies = [
     "python-dateutil>=2.9.0.post0",
 ]
 
+[project.scripts]
+dot2html = "tools.dot2html:main"
+
 [project.optional-dependencies]
 gui = [
     # FastAPI + uvicorn for the optional local GUI server (agentflow[gui])
@@ -62,7 +65,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["agentflow*"]
+include = ["agentflow*", "tools*"]
 
 [tool.mypy]
 python_version = "3.10"

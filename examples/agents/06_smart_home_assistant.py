@@ -27,8 +27,9 @@ Framework features demonstrated:
   ▸ Declarative AgentApp  — no subclassing
 
 Run:
-    uv run python examples/agents/06_smart_home_assistant.py
-    uv run python examples/agents/06_smart_home_assistant.py browser
+    uv run python examples/agents/06_smart_home_assistant.py run
+    uv run python examples/agents/06_smart_home_assistant.py run "Turn on kitchen lights"
+    uv run python examples/agents/06_smart_home_assistant.py graph --browser
     uv run python examples/agents/06_smart_home_assistant.py gui
     uv run python examples/agents/06_smart_home_assistant.py -h
 """
@@ -51,6 +52,7 @@ from agentflow.statemachine import (
     StateVertex,
     StdEnd,
     Transition,
+    UNSET,
 )
 from agentflow.tools.Tool import ToolBase, param_desc
 from agentflow.tools.ToolRegistry import ToolRegistry
@@ -108,14 +110,18 @@ class SmartHomeState:
 
 @dataclass(frozen=True)
 class SmartHomePatch:
-    """Partial update emitted by each vertex; runner merges it into SmartHomeState."""
+    """Partial update emitted by each vertex; runner merges it into SmartHomeState.
 
-    messages:         tuple[dict, ...] = field(default_factory=tuple)
-    intent:           str = ""
-    action_plan:      str = ""
-    rejection_reason: str = ""
-    revisions:        int = 0
-    final_response:   str = ""
+    Fields default to UNSET so apply_patches() updates only what each vertex sets.
+    Use an empty string explicitly when a field must be cleared (e.g. rejection_reason).
+    """
+
+    messages:         tuple[dict, ...] | object = UNSET
+    intent:           str | object = UNSET
+    action_plan:      str | object = UNSET
+    rejection_reason: str | object = UNSET
+    revisions:        int | object = UNSET
+    final_response:   str | object = UNSET
 
 
 class SmartHomeSignal(Signal):
@@ -274,7 +280,7 @@ class DeviceWorkerVertex(StateVertex):
                 )},
                 *state.messages,
             ],
-            registry=ctx.tools(self.tools),
+            registry=ctx.get_tools(self.tools),
             max_rounds=self.max_rounds,
         )
         return SmartHomeSignal.proposed, SmartHomePatch(
@@ -357,13 +363,6 @@ class VoiceFormatterVertex(StateVertex):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    import sys
-
-    _GRAPH_CMDS = {
-        "browser", "graph-browser", "graph-html", "graph-svg",
-        "graph-svg-raw", "graph-dot", "graph-png", "gui", "-h", "--help",
-    }
-
     _app = AgentApp(
         doc=__doc__,
         system_prompt=_SYSTEM_PROMPT,
@@ -411,13 +410,4 @@ if __name__ == "__main__":
         ),
     )
 
-    if len(sys.argv) > 1 and sys.argv[1] in _GRAPH_CMDS:
-        _app.cli(__doc__)
-    else:
-        result, stats = _app.run_and_stats(_DEFAULT_QUESTION)
-        if result:
-            print(result)
-        print(f"\nTokens: {stats.total_tokens}  "
-              f"(prompt={stats.prompt_tokens} / completion={stats.completion_tokens})  "
-              f"LLM calls: {stats.llm_calls}  cache hits: {stats.cache_hits}  "
-              f"wall time: {stats.wall_time_ms:.0f} ms")
+    _app.cli(__doc__, name=__name__)

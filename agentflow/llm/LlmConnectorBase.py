@@ -302,9 +302,16 @@ class LlmConnectorBase(Describable):
             return f"{type(self).__name__} (no config)"
 
     def _get_own_attributes(self) -> dict[str, Any]:
+        """Expose cache, backend, and model in graph tooltips and descriptions."""
         attrs = super()._get_own_attributes()
         if self._cache is not None:
             attrs["cache"] = type(self._cache).__name__
+        try:
+            cfg = self.config
+        except NotImplementedError:
+            return attrs
+        attrs["backend"] = cfg.backend
+        attrs["model"] = cfg.model
         return attrs
 
     def _extra_describable_children(self) -> dict[str, Any]:

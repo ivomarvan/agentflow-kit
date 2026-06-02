@@ -98,3 +98,57 @@ def test_sample_prompts_default_empty() -> None:
 def test_example_app_alias_is_agent_app() -> None:
     """ExampleApp should be an alias for AgentApp (backward compat)."""
     assert ExampleApp is AgentApp
+
+
+@pytest.mark.unit
+def test_usage_llm_edge_label_uses_backend_class_and_model() -> None:
+    """Usage LLM edge labels name the inner backend class and configured model."""
+    from agentflow.llm.LlmConfig import LlmConfig
+    from agentflow.llm.LlmConnector import LlmConnector
+
+    connector = LlmConnector(
+        config=LlmConfig(backend="openai", model="gpt-4o-mini", api_key="test"),
+    )
+    label = AgentApp._usage_llm_edge_label("DeviceWorkerVertex", connector)
+    assert label == "DeviceWorkerVertex-OpenAiConnector-gpt-4o-mini"
+
+
+@pytest.mark.unit
+def test_usage_llm_edge_label_for_anthropic_backend() -> None:
+    """Anthropic backends appear as AnthropicConnector in usage edge labels."""
+    from agentflow.llm.LlmConfig import LlmConfig
+    from agentflow.llm.LlmConnector import LlmConnector
+
+    connector = LlmConnector(
+        config=LlmConfig(backend="anthropic", model="claude-3-5-sonnet", api_key="test"),
+    )
+    label = AgentApp._usage_llm_edge_label("SafetyJudgeVertex", connector)
+    assert label == "SafetyJudgeVertex-AnthropicConnector-claude-3-5-sonnet"
+
+
+@pytest.mark.unit
+def test_usage_tools_edge_label_format() -> None:
+    """Usage tool-registry edge labels follow '<Vertex>-Tools: <key>'."""
+    label = AgentApp._usage_tools_edge_label("DeviceWorkerVertex", "default")
+    assert label == "DeviceWorkerVertex-Tools: default"
+
+
+@pytest.mark.unit
+def test_llm_connector_base_exposes_backend_and_model_in_description() -> None:
+    """All real connectors expose backend and model in description dicts."""
+    from agentflow.llm.LlmConfig import LlmConfig
+    from agentflow.llm.LlmConnector import LlmConnector
+    from agentflow.llm.connectors.AnthropicConnector import AnthropicConnector
+    from agentflow.llm.connectors.OpenAiConnector import OpenAiConnector
+
+    openai_cfg = LlmConfig(backend="openai", model="gpt-4o", api_key="test")
+    anthropic_cfg = LlmConfig(backend="anthropic", model="claude-3-5-sonnet", api_key="test")
+
+    for connector in (
+        LlmConnector(config=openai_cfg),
+        OpenAiConnector(openai_cfg),
+        AnthropicConnector(anthropic_cfg),
+    ):
+        desc = connector.get_description_item_dict()
+        assert desc["backend"] == connector.config.backend
+        assert desc["model"] == connector.config.model

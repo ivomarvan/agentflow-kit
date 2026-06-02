@@ -9,10 +9,10 @@ Graph topology:
 FakeLlmConnector is used so no real API key is needed.
 
 Run with:
-    uv run python examples/quickstart/02_tool_agent_demo.py              # run workflow
     uv run python examples/quickstart/02_tool_agent_demo.py -h           # help
-    uv run python examples/quickstart/02_tool_agent_demo.py browser      # graph in browser
-    uv run python examples/quickstart/02_tool_agent_demo.py graph-html   # save HTML graph
+    uv run python examples/quickstart/02_tool_agent_demo.py run        # run workflow
+    uv run python examples/quickstart/02_tool_agent_demo.py graph --browser
+    uv run python examples/quickstart/02_tool_agent_demo.py graph -o graph.html
 """
 
 import dataclasses
