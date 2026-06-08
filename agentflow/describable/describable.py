@@ -453,6 +453,7 @@ class Describable:
         title_tooltip: str = "",
         *,
         with_title: bool = True,
+        source_link_base: str | None = None,
     ) -> str:
         """Return a standalone interactive HTML page for this object's graph.
 
@@ -460,6 +461,8 @@ class Describable:
             title: Page title.  Defaults to ``self.name``.
             title_tooltip: Markdown shown as tooltip when hovering the title.
             with_title: Include the visible page header (False for GUI embed).
+            source_link_base: When set, tooltip ``file`` links target this HTTP
+                endpoint (e.g. GUI ``/api/source``) instead of ``file://`` URLs.
 
         Returns:
             Complete self-contained HTML string with hover tooltips.
@@ -473,6 +476,7 @@ class Describable:
             title=title or type(self).__name__,
             title_tooltip=title_tooltip,
             with_title=with_title,
+            source_link_base=source_link_base,
         )
 
     def open_graph_browser(

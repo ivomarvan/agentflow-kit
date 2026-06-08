@@ -33,6 +33,7 @@ import webbrowser
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
 if TYPE_CHECKING:
     from agentflow.describable.graph import Edge, Graph, Vertex
@@ -44,6 +45,41 @@ _HTML_TIMING_JS = (
     f"OFFSET_X = {OFFSET_X}, OFFSET_Y = {OFFSET_Y};"
 )
 _SVG_TIMING_JS = f"var IDLE_MS = {IDLE_MS}, HIDE_MS = {HIDE_MS};"
+
+# Shared JS helpers for Markdown links inside hover tooltip panels.
+_TOOLTIP_LINK_JS = r"""
+  function mdInlineLinks(s) {
+    return s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  }
+  function enhanceTooltipLinks(root) {
+    if (!root) return;
+    root.querySelectorAll("a[href]").forEach(function(a) {
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener noreferrer");
+    });
+  }
+  function bindTooltipLinkClicks(root) {
+    if (!root || root._linkClickBound) return;
+    root._linkClickBound = true;
+    // Do not call window.open() — it is blocked in sandboxed GUI iframes.
+    // target="_blank" on <a> works for left-click; stop propagation only.
+    root.addEventListener("mousedown", function(e) {
+      var a = e.target.closest("a[href]");
+      if (!a || !root.contains(a)) return;
+      e.stopPropagation();
+    }, true);
+    root.addEventListener("click", function(e) {
+      var a = e.target.closest("a[href]");
+      if (!a || !root.contains(a)) return;
+      e.stopPropagation();
+    }, true);
+  }
+  function setTooltipHtml(root, md, renderFn) {
+    root.innerHTML = renderFn(md);
+    enhanceTooltipLinks(root);
+  }
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +229,7 @@ class GraphRenderer:
         title_tooltip: str = "",
         *,
         with_title: bool = True,
+        source_link_base: str | None = None,
     ) -> str:
         """Return a standalone interactive HTML page for *graph*.
 
@@ -210,6 +247,9 @@ class GraphRenderer:
                            ``with_title`` is True).
             with_title: When True, include the visible header bar with *title*.
                         Set False when embedding in another UI (e.g. GUI Structure tab).
+            source_link_base: When set (e.g. ``http://127.0.0.1:8765/api/source``),
+                              tooltip ``file`` links use this HTTP endpoint instead of
+                              ``file://`` URLs (required for GUI iframe embed).
 
         Returns:
             Complete self-contained HTML string (no external files needed).
@@ -218,7 +258,10 @@ class GraphRenderer:
             ImportError: If the ``graphviz`` Python package is not installed.
         """
         gv = GraphRenderer._require_graphviz()
-        dot, descs, edge_descs = GraphRenderer._build_dot(graph)
+        dot, descs, edge_descs = GraphRenderer._build_dot(
+            graph,
+            source_link_base=source_link_base,
+        )
         svg = GraphRenderer._render_svg_from_dot(dot)
         page_title = title or graph.root.label
         return GraphRenderer._assemble_interactive_html(
@@ -357,8 +400,16 @@ class GraphRenderer:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_dot(graph: Graph) -> tuple[str, dict[str, str], dict[str, str]]:
+    def _build_dot(
+        graph: Graph,
+        *,
+        source_link_base: str | None = None,
+    ) -> tuple[str, dict[str, str], dict[str, str]]:
         """Build the DOT source and tooltip description dicts for rendering.
+
+        Args:
+            graph: Composition graph to serialize.
+            source_link_base: Optional HTTP base URL for tooltip ``file`` links.
 
         Returns:
             Tuple of ``(dot_source, vertex_descs, edge_descs)``.
@@ -376,7 +427,13 @@ class GraphRenderer:
         ]
         descs: dict[str, str] = {}
         edge_descs: dict[str, str] = {}
-        GraphRenderer._render_vertex(graph.root, lines, descs, depth=0)
+        GraphRenderer._render_vertex(
+            graph.root,
+            lines,
+            descs,
+            depth=0,
+            source_link_base=source_link_base,
+        )
         for edge in graph.edges:
             lines.append(f"  {GraphRenderer._edge_to_dot(edge, edge_descs)}")
         lines.append("}")
@@ -388,6 +445,8 @@ class GraphRenderer:
         lines: list[str],
         descs: dict[str, str],
         depth: int,
+        *,
+        source_link_base: str | None = None,
     ) -> str:
         """Recursively render one vertex to DOT lines.
 
@@ -416,9 +475,8 @@ class GraphRenderer:
         pad  = "  " * (depth + 1)   # outer indent (inside digraph / parent cluster)
         ipad = "  " * (depth + 2)   # inner indent (inside this cluster)
         safe    = GraphRenderer._safe_id(v.id)
-        md      = GraphRenderer._vertex_to_md(v)
+        md      = GraphRenderer._vertex_to_md(v, source_link_base=source_link_base)
         tooltip = GraphRenderer._vertex_to_dot_tooltip(v)
-        url_suffix = GraphRenderer._dot_url_suffix(v)
 
         if not v.children:
             fill = "#90EE90" if v.attributes.get("active", False) else _LEAF_FILL
@@ -426,8 +484,7 @@ class GraphRenderer:
             compact = ' margin="0.1,0.04" fontsize=10' if depth >= 3 else ""
             node_attrs = (
                 f'label="{v.label}"'
-                f'{url_suffix} '
-                f'tooltip="{tooltip}" '
+                f' tooltip="{tooltip}" '
                 f'shape=box style="rounded,filled" '
                 f'fillcolor={fill} color={_LEAF_BORDER}'
                 f"{compact}"
@@ -442,8 +499,6 @@ class GraphRenderer:
         descs[cluster_id] = md
         lines.append(f"{pad}subgraph {cluster_id} {{")
         lines.append(f'{ipad}label="{v.label}"')
-        if url_suffix:
-            lines.append(f"{ipad}{url_suffix.lstrip()}")
         lines.append(f'{ipad}style="rounded,filled"')
         lines.append(f"{ipad}fillcolor={fill}")
         lines.append(f"{ipad}color={border}")
@@ -464,7 +519,13 @@ class GraphRenderer:
         child_anchors: list[tuple[str, str]] = []
         usage_port_leaves: list[str] = []
         for child in v.children:
-            child_anchor = GraphRenderer._render_vertex(child, lines, descs, depth + 1)
+            child_anchor = GraphRenderer._render_vertex(
+                child,
+                lines,
+                descs,
+                depth + 1,
+                source_link_base=source_link_base,
+            )
             if child_anchor.startswith("_a_"):
                 child_anchors.append((child.label, child_anchor))
             elif usage_port_cluster:
@@ -821,11 +882,17 @@ class GraphRenderer:
         return items
 
     @staticmethod
-    def _vertex_source_href(v: Vertex) -> str | None:
-        """Return a ``file://`` URL pointing at the class definition, if known.
+    def _vertex_source_href(
+        v: Vertex,
+        *,
+        source_link_base: str | None = None,
+    ) -> str | None:
+        """Return a hyperlink to the class definition, if known.
 
         Args:
             v: Vertex whose ``source_file`` / ``source_line`` are used.
+            source_link_base: When set, return an HTTP URL under this base
+                (e.g. ``/api/source``) instead of a ``file://`` URI.
 
         Returns:
             URL string suitable for Markdown links, or ``None`` when unavailable.
@@ -833,35 +900,77 @@ class GraphRenderer:
         if not v.source_file or v.source_line <= 0:
             return None
         try:
-            return Path(v.source_file).resolve().as_uri() + f"#L{v.source_line}"
+            resolved = Path(v.source_file).resolve()
+        except (OSError, ValueError):
+            return None
+        if source_link_base is not None:
+            base = source_link_base.rstrip("/")
+            return (
+                f"{base}?path={quote(str(resolved))}&line={v.source_line}"
+            )
+        return resolved.as_uri() + f"#L{v.source_line}"
+
+    @staticmethod
+    def _vertex_source_display_path(v: Vertex) -> str | None:
+        """Return a human-readable source path with line anchor for tooltip display.
+
+        Args:
+            v: Vertex whose ``source_file`` / ``source_line`` are used.
+
+        Returns:
+            Absolute path with ``#L<line>`` suffix, or ``None`` when unavailable.
+        """
+        if not v.source_file or v.source_line <= 0:
+            return None
+        try:
+            return f"{Path(v.source_file).resolve()}#L{v.source_line}"
         except (OSError, ValueError):
             return None
 
     @staticmethod
-    def _dot_url_suffix(v: Vertex) -> str:
-        """Return a Graphviz ``URL`` attribute suffix for clickable vertex labels.
-
-        Graphviz embeds ``URL`` as ``xlink:href`` on the node/cluster label in SVG
-        output (``graph --format svg|html``, ``graph --browser``, interactive SVG).
+    def _vertex_file_tooltip_md_lines(
+        v: Vertex,
+        *,
+        source_link_base: str | None = None,
+    ) -> list[str]:
+        """Return Markdown list lines for the ``file`` tooltip parameter.
 
         Args:
             v: Vertex whose source location is linked when known.
+            source_link_base: Optional HTTP base for tooltip links (GUI mode).
 
         Returns:
-            Empty string, or `` URL="file://…"`` safe for inline DOT attributes.
+            One-item list ``- **file**: [path](url)``, or empty when no source.
         """
-        href = GraphRenderer._vertex_source_href(v)
-        if href is None:
-            return ""
-        escaped = href.replace("\\", "\\\\").replace('"', '\\"')
-        return f' URL="{escaped}"'
+        href = GraphRenderer._vertex_source_href(
+            v,
+            source_link_base=source_link_base,
+        )
+        display = GraphRenderer._vertex_source_display_path(v)
+        if href is None or display is None:
+            return []
+        return [f"  - **file**: [{display}]({href})"]
+
+    @staticmethod
+    def _vertex_file_tooltip_dot_lines(v: Vertex) -> list[str]:
+        """Return plain-text lines for the ``file`` field in DOT tooltips.
+
+        Args:
+            v: Vertex whose source path is shown when known.
+
+        Returns:
+            Indented ``file: …`` line(s), or empty when no source.
+        """
+        display = GraphRenderer._vertex_source_display_path(v)
+        if display is None:
+            return []
+        return GraphRenderer._dot_kv("file", display, indent=1)
 
     @staticmethod
     def _vertex_heading_md(v: Vertex) -> str:
         """Return the Markdown heading line for a vertex tooltip.
 
-        Source links are rendered on graph labels (Graphviz ``URL``), not here,
-        because tooltip panels follow the cursor and label links are clickable.
+        Graph labels stay plain text; source links live in the ``file`` parameter.
 
         Args:
             v: Source vertex.
@@ -895,6 +1004,7 @@ class GraphRenderer:
             lines.append(body)
         for key, value in GraphRenderer._iter_tooltip_attribute_items(v):
             lines.extend(GraphRenderer._dot_kv(key, value, indent=1))
+        lines.extend(GraphRenderer._vertex_file_tooltip_dot_lines(v))
         return GraphRenderer._dot_attr_escape("\n".join(lines))
 
     @staticmethod
@@ -1110,11 +1220,16 @@ class GraphRenderer:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _vertex_to_md(v: Vertex) -> str:
+    def _vertex_to_md(
+        v: Vertex,
+        *,
+        source_link_base: str | None = None,
+    ) -> str:
         """Convert a vertex to a Markdown string used as the HTML tooltip.
 
         Args:
             v: Source vertex.
+            source_link_base: Optional HTTP base for tooltip ``file`` links.
 
         Returns:
             Markdown string with the vertex label, id, and description entries.
@@ -1128,6 +1243,12 @@ class GraphRenderer:
             lines.append(body)
         for key, value in GraphRenderer._iter_tooltip_attribute_items(v):
             lines.extend(GraphRenderer._md_kv(key, value, indent=1))
+        lines.extend(
+            GraphRenderer._vertex_file_tooltip_md_lines(
+                v,
+                source_link_base=source_link_base,
+            )
+        )
         return "\n".join(lines)
 
     @staticmethod
@@ -1163,27 +1284,19 @@ class GraphRenderer:
     # Private — utility
     # ------------------------------------------------------------------
 
-    # Inline SVG styles for Graphviz label hyperlinks (file:// class definitions).
-    _SVG_LABEL_LINK_STYLE = (
-        "a { cursor: pointer; }"
-        "a text { fill: #1565c0; text-decoration: underline;"
-        " text-decoration-color: #1565c0; }"
-    )
-
     @staticmethod
     def _render_svg_from_dot(dot: str) -> str:
-        """Render DOT to SVG and post-process label hyperlinks for all graph outputs.
+        """Render DOT to SVG and post-process usage-edge arrowheads.
 
         Args:
             dot: Graphviz DOT source.
 
         Returns:
-            SVG string with new-tab targets and label link styling applied.
+            SVG string ready for embedding in HTML or raw SVG output.
         """
         gv = GraphRenderer._require_graphviz()
         svg = gv.Source(dot, format="svg").pipe().decode("utf-8")
-        svg = GraphRenderer._strip_usage_edge_arrowheads(svg)
-        return GraphRenderer._enhance_label_links(svg)
+        return GraphRenderer._strip_usage_edge_arrowheads(svg)
 
     _USAGE_EDGE_STROKE_COLORS: frozenset[str] = frozenset({
         _USAGE_EDGE_LLM_STROKE,
@@ -1220,55 +1333,6 @@ class GraphRenderer:
             svg_str,
             flags=re.DOTALL,
         )
-
-    @staticmethod
-    def _enhance_label_links(svg_str: str) -> str:
-        """Add new-tab navigation and link styling to Graphviz ``URL`` anchors in SVG.
-
-        Graphviz emits ``<a xlink:href="…">`` around vertex/cluster labels.  This
-        adds ``target="_blank"``, injects shared CSS, and keeps tooltip cleanup
-        separate (handled in HTML/JS templates).
-
-        Args:
-            svg_str: Raw SVG from Graphviz.
-
-        Returns:
-            Post-processed SVG string.
-        """
-        if "xlink:href=" not in svg_str:
-            return svg_str
-
-        svg_str = GraphRenderer._inject_svg_label_link_style(svg_str)
-
-        def _add_new_tab_target(match: re.Match[str]) -> str:
-            tag = match.group(0)
-            if "target=" in tag:
-                return tag
-            return tag[:-1] + ' target="_blank" rel="noopener noreferrer">'
-
-        return re.sub(
-            r'<a\b[^>]*xlink:href="[^"]*"[^>]*>',
-            _add_new_tab_target,
-            svg_str,
-        )
-
-    @staticmethod
-    def _inject_svg_label_link_style(svg_str: str) -> str:
-        """Insert CSS for blue underlined label links into an SVG document.
-
-        Args:
-            svg_str: SVG XML string.
-
-        Returns:
-            SVG with a ``<style>`` block immediately after the root ``<svg>`` tag.
-        """
-        marker = GraphRenderer._SVG_LABEL_LINK_STYLE
-        if marker in svg_str:
-            return svg_str
-        style_block = (
-            f'<style type="text/css"><![CDATA[{GraphRenderer._SVG_LABEL_LINK_STYLE}]]></style>'
-        )
-        return re.sub(r"(<svg[^>]*>)", r"\1\n" + style_block, svg_str, count=1)
 
     @staticmethod
     def _safe_id(vertex_id: str) -> str:
@@ -1361,6 +1425,10 @@ _SVG_INJECTION_TEMPLATE = r"""\
         #gv-tt-inner ul, #gv-tt-inner ol { padding-left: 1.3em; margin: 3px 0; }
         #gv-tt-inner li  { margin: 2px 0; }
         #gv-tt-inner p   { margin: 2px 0; }
+        #gv-tt-inner a {
+          pointer-events: auto; cursor: pointer;
+          color: #1565c0; text-decoration: underline;
+        }
       </style>
       <div id="gv-tt-inner"></div>
     </div>
@@ -1372,6 +1440,7 @@ _SVG_INJECTION_TEMPLATE = r"""\
   var descs = %%DESCRIPTIONS%%;
   var edgeDescs = %%EDGE_DESCRIPTIONS%%;
   var TT_W = 390, TT_H = 430, PAD = 12;
+""" + _TOOLTIP_LINK_JS + r"""
 
   // Inline mini Markdown renderer — fallback when marked.js is unavailable.
   function miniMd(text) {
@@ -1388,7 +1457,7 @@ _SVG_INJECTION_TEMPLATE = r"""\
       var liMatch = l.match(/^( *)- (.*)/);
       if (liMatch) {
         var depth = liMatch[1].length;
-        var item = liMatch[2]
+        var item = mdInlineLinks(liMatch[2])
           .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
           .replace(/\*([^*]+)\*/g, "<em>$1</em>")
           .replace(/`([^`]+)`/g, "<code>$1</code>");
@@ -1396,7 +1465,7 @@ _SVG_INJECTION_TEMPLATE = r"""\
         continue;
       }
       if (l.trim() === "") { out += "<br>"; continue; }
-      var p = l
+      var p = mdInlineLinks(l)
         .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
         .replace(/\*([^*]+)\*/g, "<em>$1</em>")
         .replace(/`([^`]+)`/g, "<code>$1</code>");
@@ -1536,7 +1605,7 @@ _SVG_INJECTION_TEMPLATE = r"""\
       if (el._md) {
         if (ttSource !== el) {       // new target — render, reposition, re-arm
           ttSource = el;
-          ttInner.innerHTML = renderMd(el._md);
+          setTooltipHtml(ttInner, el._md, renderMd);
           frozen = false;
           ttG.setAttribute("display", "block");
           positionTooltip(e);
@@ -1558,6 +1627,8 @@ _SVG_INJECTION_TEMPLATE = r"""\
   });
 
   svg.addEventListener("mouseleave", scheduleHide);
+
+  bindTooltipLinkClicks(ttInner);
 
   // Attempt to load marked.js from CDN for richer Markdown rendering.
   // Falls back silently to miniMd() if CDN is unreachable.
@@ -1646,6 +1717,10 @@ _HTML_TEMPLATE = """\
     #tt table { border-collapse: collapse; width: 100%; margin: 6px 0; }
     #tt td, #tt th { padding: 3px 8px; border: 1px solid #ddd; font-size: 0.9em; }
     #tt th { background: #f0f4f8; font-weight: 600; }
+    #tt a {
+      pointer-events: auto; cursor: pointer;
+      color: #1565c0; text-decoration: underline;
+    }
   </style>
 </head>
 <body>
@@ -1655,6 +1730,7 @@ _HTML_TEMPLATE = """\
     const descs = %%DESCRIPTIONS%%;
     const edgeDescs = %%EDGE_DESCRIPTIONS%%;
     const tt = document.getElementById("tt");
+""" + _TOOLTIP_LINK_JS + """
 
     // --- Sticky tooltip ---------------------------------------------------
     // The panel follows the cursor while it moves, then "freezes" after a
@@ -1693,7 +1769,7 @@ _HTML_TEMPLATE = """\
     function showTip(md, source, e) {
       if (ttSource !== source) {     // new target — render, reposition, re-arm
         ttSource = source;
-        tt.innerHTML = renderMd(md);
+        setTooltipHtml(tt, md, renderMd);
         tt.classList.remove("sticky");
         frozen = false;
         tt.style.display = "block";
@@ -1702,6 +1778,8 @@ _HTML_TEMPLATE = """\
       clearHide();
       if (!frozen) armIdle();
     }
+
+    bindTooltipLinkClicks(tt);
 
     // Keep the panel alive and frozen while the cursor is inside it.
     tt.addEventListener("mouseenter", function() { clearHide(); freezeTip(); });

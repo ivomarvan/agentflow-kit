@@ -11,6 +11,7 @@ Exposes a REST + WebSocket API that wraps a single ``AgentApp`` instance:
         POST /api/run       — start a workflow run (returns run_id)
         GET  /api/samples   — list of example prompts
         GET  /api/graph     — interactive HTML graph (same as ``graph --browser``)
+        GET  /api/source    — syntax-highlighted Python source (tooltip file links)
 
     WebSocket endpoint:
         WS   /ws/{run_id}   — event stream for a specific run
@@ -33,7 +34,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -237,10 +238,11 @@ def create_app(agent_app: AgentApp) -> FastAPI:
         return app.state.agent_app.sample_prompts
 
     @app.get("/api/graph")
-    async def graph() -> HTMLResponse:
+    async def graph(request: Request) -> HTMLResponse:
         """Return the agent composition graph as interactive HTML.
 
         Interactive graph HTML (tooltips); no duplicate page header (``with_title=False``).
+        Tooltip ``file`` links point at ``/api/source`` so they work inside the GUI iframe.
 
         Returns:
             Complete HTML document from ``Describable.get_graph_html()``.
@@ -250,10 +252,47 @@ def create_app(agent_app: AgentApp) -> FastAPI:
         """
         agent = app.state.agent_app
         title = getattr(agent, "gui_script_name", "") or agent.name
+        base = str(request.base_url).rstrip("/")
         try:
-            html = agent.get_graph_html(title=title, with_title=False)
+            html = agent.get_graph_html(
+                title=title,
+                with_title=False,
+                source_link_base=f"{base}/api/source",
+            )
         except ImportError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return HTMLResponse(content=html, media_type="text/html; charset=utf-8")
+
+    @app.get("/api/source")
+    async def source(path: str, line: int | None = None) -> HTMLResponse:
+        """Return a Python source file as syntax-highlighted HTML.
+
+        Used by graph tooltip ``file`` links in the GUI Structure tab.  Only paths
+        under allowed roots (cwd, ``sys.path``, ``agentflow`` package) are served.
+
+        Args:
+            path: Absolute or relative path to a ``.py`` file.
+            line: Optional 1-based line number to highlight and scroll into view.
+
+        Returns:
+            Standalone HTML page with Pygments highlighting and line numbers.
+
+        Raises:
+            HTTPException 400: Invalid path or non-Python file.
+            HTTPException 403: Path outside allowed roots.
+            HTTPException 404: File not found.
+        """
+        from agentflow.gui.source_viewer import render_source_html, resolve_source_path
+
+        try:
+            resolved = resolve_source_path(path)
+            html = render_source_html(resolved, line=line)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return HTMLResponse(content=html, media_type="text/html; charset=utf-8")
 
     # ------------------------------------------------------------------

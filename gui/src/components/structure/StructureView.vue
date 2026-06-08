@@ -8,7 +8,7 @@
       v-else-if="structureStore.graphHtml"
       class="graph-frame"
       :srcdoc="structureStore.graphHtml"
-      sandbox="allow-scripts"
+      sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
       title="Agent structure graph"
     />
 

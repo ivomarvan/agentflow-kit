@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "ai-agents-education"
 version = "0.1.0"
@@ -32,6 +36,8 @@ gui = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",  # [standard] includes websockets + httptools
     "websockets>=12.0",
+    # Syntax-highlighted source viewer for graph tooltip file links (/api/source)
+    "pygments>=2.17",
 ]
 postgres = [
     # Async PostgreSQL driver for PostgresCheckpointStore
@@ -67,13 +73,17 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 where = ["."]
 include = ["agentflow*", "tools*"]
 
+# Editable install on `uv sync` — imports `agentflow` from repo source (no copy).
+[tool.uv]
+package = true
+
 [tool.mypy]
 python_version = "3.10"
 strict = true
 mypy_path = "."
 
 [tool.pytest.ini_options]
-# Package is installed as editable (`uv pip install -e .`), so agentflow is importable directly.
+# Fallback when running pytest without venv sync; normal workflow uses editable install.
 pythonpath = ["."]
 testpaths = ["tests"]
 

@@ -95,6 +95,40 @@ async def test_graph_returns_interactive_html(fastapi_app) -> None:  # type: ign
     assert "marked" in body
     assert "svg-wrap" in body
     assert 'id="header"' not in body
+    assert "http://test/api/source?path=" in body
+
+
+@pytest.mark.asyncio
+async def test_source_returns_highlighted_html(fastapi_app) -> None:  # type: ignore[no-untyped-def]
+    """GET /api/source returns Pygments HTML for an allowed project file."""
+    from pathlib import Path
+
+    source_path = Path(__file__).resolve()
+    async with AsyncClient(
+        transport=ASGITransport(app=fastapi_app), base_url="http://test"
+    ) as client:
+        r = await client.get(
+            "/api/source",
+            params={"path": str(source_path), "line": 1},
+        )
+    assert r.status_code == 200
+    assert "text/html" in r.headers.get("content-type", "")
+    body = r.text
+    assert "<!DOCTYPE html>" in body
+    assert "L1" in body
+    assert str(source_path) in body
+
+
+@pytest.mark.asyncio
+async def test_source_rejects_disallowed_path(fastapi_app, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """GET /api/source returns 403 for paths outside allowed roots."""
+    secret = tmp_path / "secret.py"
+    secret.write_text("x = 1\n", encoding="utf-8")
+    async with AsyncClient(
+        transport=ASGITransport(app=fastapi_app), base_url="http://test"
+    ) as client:
+        r = await client.get("/api/source", params={"path": str(secret)})
+    assert r.status_code == 403
 
 
 # ---------------------------------------------------------------------------

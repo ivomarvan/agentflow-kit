@@ -10,10 +10,10 @@ rendering pipeline as `agentflow graph` / `graph --browser` (`GraphRenderer.dot_
 **Prerequisite:** Graphviz system binary (`dot`) — `sudo apt install graphviz`
 
 ```bash
-# After editable install (uv pip install -e .)
+# After uv sync (editable install from repo root)
 dot2html -i g.dot -o g.html
 
-# Without install
+# Equivalent without the console script entry point
 uv run python -m tools.dot2html -i g.dot -o g.html
 ```
 

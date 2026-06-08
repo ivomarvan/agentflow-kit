@@ -88,7 +88,7 @@ def test_vertex_to_md_user_description_without_header() -> None:
     assert "First sentence. Second sentence." in markdown
     assert "  - **cache_file**: /tmp/cache.jsonl" in markdown
     assert markdown.startswith("## Sample")
-    assert "file://" not in markdown
+    assert "  - **file**: [/tmp/sample_app.py#L42](file:///tmp/sample_app.py#L42)" in markdown
 
 
 def test_vertex_to_md_library_description_truncated() -> None:
@@ -131,6 +131,7 @@ def test_vertex_to_dot_tooltip_user_description_without_header() -> None:
     assert "description: Hello" not in decoded
     assert "\nHello\n" in decoded
     assert "  size: 2" in decoded
+    assert "  file: /tmp/sample_app.py#L42" in decoded
 
 
 def test_vertex_to_dot_tooltip_library_description_truncated() -> None:
@@ -161,12 +162,13 @@ def test_build_vertex_populates_source_location() -> None:
     assert vertex.source_file.endswith("test_graph_renderer_tooltips.py")
     assert vertex.source_line > 0
     markdown = GraphRenderer._vertex_to_md(vertex)
-    assert "file://" not in markdown
+    assert "**file**" in markdown
+    assert "test_graph_renderer_tooltips.py" in markdown
     assert "**name**" not in markdown
 
 
-def test_to_dot_adds_url_for_source_location() -> None:
-    """Graphviz URL attribute on labels is emitted for all graph render paths."""
+def test_to_dot_omits_url_on_labels() -> None:
+    """Graph labels stay plain text; source links belong in tooltips only."""
     vertex = Vertex(
         id="Sample",
         label="Sample",
@@ -175,11 +177,12 @@ def test_to_dot_adds_url_for_source_location() -> None:
         source_line=42,
     )
     dot = GraphRenderer.to_dot(Graph(root=vertex))
-    assert 'URL="file:///tmp/sample_app.py#L42"' in dot
+    assert 'URL="file:///tmp/sample_app.py#L42"' not in dot
+    assert "file: /tmp/sample_app.py#L42" in dot.replace("\\n", "\n")
 
 
-def test_to_svg_embeds_label_hyperlink() -> None:
-    """Raw SVG from Graphviz includes xlink:href on vertex labels."""
+def test_to_svg_labels_have_no_source_hyperlink() -> None:
+    """Raw SVG must not wrap vertex labels in file:// anchors."""
     vertex = Vertex(
         id="Sample",
         label="Sample",
@@ -188,13 +191,11 @@ def test_to_svg_embeds_label_hyperlink() -> None:
         source_line=42,
     )
     svg = GraphRenderer.to_svg(Graph(root=vertex))
-    assert re.search(r'xlink:href="file:///tmp/sample_app\.py#L42"', svg)
-    assert 'target="_blank"' in svg
-    assert "a text { fill: #1565c0" in svg
+    assert not re.search(r'xlink:href="file:///tmp/sample_app\.py#L42"', svg)
 
 
-def test_to_html_embeds_label_hyperlink() -> None:
-    """Standalone HTML embeds the same clickable SVG labels."""
+def test_to_html_puts_source_link_in_tooltip_not_label() -> None:
+    """Interactive HTML exposes file path as a tooltip parameter, not on labels."""
     vertex = Vertex(
         id="Sample",
         label="Sample",
@@ -203,10 +204,12 @@ def test_to_html_embeds_label_hyperlink() -> None:
         source_line=42,
     )
     html = GraphRenderer.to_html(Graph(root=vertex), title="Sample")
-    assert 'xlink:href="file:///tmp/sample_app.py#L42"' in html
-    assert 'target="_blank"' in html
-    assert "#svg-wrap svg a text" in html
-    assert "file://" not in html.split("const descs =", 1)[1].split(";", 1)[0]
+    assert 'xlink:href="file:///tmp/sample_app.py#L42"' not in html
+    descs_json = html.split("const descs =", 1)[1].split(";", 1)[0]
+    assert "file:///tmp/sample_app.py#L42" in descs_json
+    assert "/tmp/sample_app.py#L42" in descs_json
+    assert "bindTooltipLinkClicks" in html
+    assert "mdInlineLinks" in html
 
 
 def test_to_html_with_title_false_omits_header() -> None:
@@ -215,6 +218,24 @@ def test_to_html_with_title_false_omits_header() -> None:
     html = GraphRenderer.to_html(Graph(root=vertex), title="Sample", with_title=False)
     assert 'id="header"' not in html
     assert "<title>Sample</title>" in html
+
+
+def test_vertex_to_md_uses_api_source_link_when_base_set() -> None:
+    """GUI graph tooltips link file paths through the HTTP source viewer."""
+    vertex = Vertex(
+        id="Sample",
+        label="Sample",
+        description={"description": "Hello"},
+        source_file="/tmp/sample_app.py",
+        source_line=42,
+    )
+    markdown = GraphRenderer._vertex_to_md(
+        vertex,
+        source_link_base="http://127.0.0.1:8765/api/source",
+    )
+    assert "file:///tmp/sample_app.py" not in markdown
+    assert "http://127.0.0.1:8765/api/source?path=" in markdown
+    assert "line=42" in markdown
 
 
 def test_to_html_with_title_true_includes_header() -> None:

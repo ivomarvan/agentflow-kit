@@ -30,9 +30,12 @@ is designed to be transparent and educational — no magic, all explicit.
 ```bash
 git clone <repo-url>
 cd <repo>
-uv sync
-uv pip install -e .
+uv sync --extra dev          # editable install of agentflow from source (no copy)
+uv sync --extra gui --extra dev   # + local GUI server (FastAPI, Pygments)
 ```
+
+`uv sync` links `agentflow/` from this repo into the venv (editable install).
+You edit source files directly — no separate `pip install` step after sync.
 
 ## Hello World (15 lines)
 
