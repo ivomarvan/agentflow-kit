@@ -41,6 +41,7 @@ onMounted(async () => {
 <style scoped>
 .structure-view {
   padding: 0;
+  height: 100%;
 }
 .loading,
 .empty-state {
@@ -49,8 +50,8 @@ onMounted(async () => {
 }
 .graph-frame {
   width: 100%;
-  height: calc(100vh - 200px);
-  min-height: 480px;
+  height: 100%;
+  min-height: 320px;
   border: 1px solid var(--p-content-border-color, #e2e8f0);
   border-radius: 8px;
   background: #f0f2f5;
