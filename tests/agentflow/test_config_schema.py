@@ -12,14 +12,7 @@ class _ConnectorApp(AgentApp):
 
     def __init__(self) -> None:
         super().__init__()
-        config = LlmConfig(
-            backend="openai",
-            model="gpt-4o-mini",
-            base_url=None,
-            api_key="test-key",
-            timeout=30.0,
-        )
-        self.connector = _LlmConnector(config=config)
+        self.connector = _LlmConnector(model="gpt-4o-mini", timeout=30.0)
 
 
 @pytest.mark.unit

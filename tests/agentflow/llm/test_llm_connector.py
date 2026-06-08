@@ -1,6 +1,6 @@
-"""Integration tests for LlmConnector — live API calls.
+"""Unit and integration tests for LlmConnector.
 
-These tests require a valid API key and network access.
+Integration tests require a valid API key and network access.
 Default model: gpt-4o-mini (very cheap, fast, reliable).
 
 Run with:
@@ -13,6 +13,7 @@ Skip in CI environments without an API key by using:
 from __future__ import annotations
 
 import pytest
+from pydantic import BaseModel
 
 from agentflow.llm.ChatResponse import ChatResponse
 from agentflow.llm.LlmConnector import LlmConnector
@@ -20,7 +21,66 @@ from agentflow.tools.common_tools.Calculator import Calculator
 from agentflow.tools.ToolRegistry import ToolRegistry
 
 # ---------------------------------------------------------------------------
-# Basic ping — single text response
+# Pydantic BaseModel contract (unit)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_llm_connector_is_pydantic_basemodel() -> None:
+    """LlmConnector must be a Pydantic BaseModel instance."""
+    connector = LlmConnector()
+    assert isinstance(connector, BaseModel)
+
+
+@pytest.mark.unit
+def test_llm_connector_model_field_is_annotated() -> None:
+    """model and timeout must be Pydantic fields (appear in model_fields)."""
+    assert "model" in LlmConnector.model_fields
+    assert "timeout" in LlmConnector.model_fields
+
+
+@pytest.mark.unit
+def test_llm_connector_model_update_rebuilds_inner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Changing model triggers backend rebuild — no stale inner connector."""
+    monkeypatch.delenv("LLM_BACKEND", raising=False)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    connector = LlmConnector(model="qwen2.5:1.5b")
+    old_inner = connector._inner
+    connector.model = "qwen2.5:0.5b"
+    assert connector._inner is not old_inner
+    assert connector._config.model == "qwen2.5:0.5b"
+
+
+@pytest.mark.unit
+def test_llm_connector_get_param_values_returns_model_and_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """get_param_values() must return exactly {model, timeout}."""
+    monkeypatch.delenv("LLM_BACKEND", raising=False)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    connector = LlmConnector(model="qwen2.5:1.5b", timeout=30.0)
+    vals = connector.get_param_values()
+    assert vals["model"] == "qwen2.5:1.5b"
+    assert vals["timeout"] == 30.0
+    assert "cache" not in vals
+
+
+@pytest.mark.unit
+def test_llm_connector_set_params_updates_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """set_params() from Describable must update model field and rebuild inner."""
+    monkeypatch.delenv("LLM_BACKEND", raising=False)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    connector = LlmConnector(model="qwen2.5:1.5b")
+    connector.set_params(model="qwen2.5:0.5b")
+    assert connector.model == "qwen2.5:0.5b"
+
+
+# ---------------------------------------------------------------------------
+# Basic ping — single text response (integration)
 # ---------------------------------------------------------------------------
 
 

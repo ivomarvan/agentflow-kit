@@ -68,4 +68,7 @@ def integration_config() -> LlmConfig:
 @pytest.fixture(scope="session")
 def integration_connector(integration_config: LlmConfig) -> LlmConnector:
     """Session-scoped LlmConnector for integration tests."""
-    return LlmConnector(integration_config)
+    return LlmConnector(
+        model=integration_config.model,
+        timeout=integration_config.timeout,
+    )

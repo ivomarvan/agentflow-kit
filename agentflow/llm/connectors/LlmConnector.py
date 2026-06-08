@@ -5,9 +5,8 @@ It reads ``LlmConfig`` from environment variables by default and delegates
 to the appropriate low-level backend (``OpenAiConnector`` or
 ``AnthropicConnector``).
 
-Constructor parameters all default to ``None``, which means the value is
-taken from the environment (``.env`` file or shell variables).  Passing an
-explicit value overrides only that field::
+Constructor parameters default to env-backed values; explicit keyword
+arguments override only those fields::
 
     # All settings from .env / environment:
     connector = LlmConnector()
@@ -18,13 +17,9 @@ explicit value overrides only that field::
     # Fully explicit, with a file cache:
     from agentflow.llm.cache import LlmFileCache
     connector = LlmConnector(
-        backend="openai",
         model="gpt-4o",
         cache=LlmFileCache(__file__),
     )
-
-    # Pass a pre-built LlmConfig (legacy / advanced usage):
-    connector = LlmConnector(config=LlmConfig.from_env())
 
 Pattern: Facade (GoF) — hides backend selection and config resolution
 behind a single, simple constructor.
@@ -33,7 +28,9 @@ behind a single, simple constructor.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Annotated, Any
+
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from agentflow.llm.LlmConfig import (
     OPENAI_COMPATIBLE_BACKENDS,
@@ -41,32 +38,22 @@ from agentflow.llm.LlmConfig import (
 )
 from agentflow.llm.LlmConnectorBase import LlmConnectorBase
 
-if TYPE_CHECKING:
-    from agentflow.llm.cache.LlmCacheBase import LlmCacheBase
-
 logger = logging.getLogger(__name__)
 
-_EXPOSED_PARAMS = ("model", "timeout")
 
-
-class LlmConnector(LlmConnectorBase):
+class LlmConnector(BaseModel, LlmConnectorBase):
     """Concrete LLM connector with automatic backend selection.
+
+    Pydantic fields (shown in GUI Settings):
+        model   — LLM model name; backend is auto-selected from the name prefix.
+        timeout — Request timeout in seconds.
+
+    Infrastructure fields (not shown in GUI):
+        cache   — Optional cache instance; excluded from JSON Schema.
 
     Wraps either ``OpenAiConnector`` or ``AnthropicConnector`` based on
     the resolved ``LlmConfig``.  Inherits transparent caching from
     ``LlmConnectorBase``.
-
-    Args:
-        config: Pre-built ``LlmConfig``.  When ``None`` the config is
-                resolved from environment variables via ``LlmConfig.from_env()``.
-                Any keyword overrides (``backend``, ``model``) are applied
-                after loading.
-        backend: Override the backend name (e.g. ``"openai"``, ``"anthropic"``).
-                 ``None`` → read from ``LLM_BACKEND`` env var.
-        model: Override the model name (e.g. ``"gpt-4o"``).
-               ``None`` → read from ``LLM_MODEL`` env var.
-        cache: Optional cache instance.  Responses are served from cache on
-               hit and stored on miss.  ``None`` disables caching.
 
     Raises:
         ValueError: If the resolved backend is not supported.
@@ -74,28 +61,71 @@ class LlmConnector(LlmConnectorBase):
                       key is absent from the environment.
     """
 
-    def __init__(
-        self,
-        config: LlmConfig | None = None,
-        *,
-        backend: str | None = None,
-        model: str | None = None,
-        cache: LlmCacheBase | None = None,
-    ) -> None:
-        super().__init__(cache=cache)
-        if config is None:
-            config = LlmConfig.from_env()
-        if backend is not None or model is not None:
-            config = config.with_overrides(backend=backend, model=model)
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
+    # --- Configurable parameters (appear in GUI) ---
+    model: Annotated[
+        str,
+        Field(
+            default="",
+            description="LLM model name. Backend is auto-selected from the model prefix.",
+        ),
+    ] = ""
+    timeout: Annotated[
+        float,
+        Field(default=120.0, gt=0, description="Request timeout in seconds."),
+    ] = 120.0
+
+    # --- Infrastructure (not shown in GUI) ---
+    cache: Annotated[
+        Any,
+        Field(default=None, exclude=True),
+    ] = None
+
+    # --- Private runtime state ---
+    _config: LlmConfig = PrivateAttr(default=None)
+    _inner: LlmConnectorBase = PrivateAttr(default=None)
+
+    def model_post_init(self, __context: Any) -> None:
+        """Build LlmConfig from env; apply model/timeout overrides; build inner connector."""
+        from agentflow.describable.describable import Describable
+
+        # BaseModel init does not run LlmConnectorBase.__init__; set Describable identity.
+        Describable.__init__(self)
+        object.__setattr__(self, "_cache", self.cache)
+
+        env_config = LlmConfig.from_env()
+        overrides: dict[str, Any] = {}
+        if self.model:
+            overrides["model"] = self.model
+        config = env_config.with_overrides(**overrides) if overrides else env_config
+        config.timeout = self.timeout
         self._config = config
         self._inner = self._build_inner(config)
+        # Sync Pydantic fields with resolved config so GUI reads actual values.
+        object.__setattr__(self, "model", config.model)
+        object.__setattr__(self, "timeout", config.timeout)
         logger.info(
             "LlmConnector ready: backend=%s model=%s cache=%s",
             config.backend,
             config.model,
-            type(cache).__name__ if cache else "none",
+            type(self.cache).__name__ if self.cache else "none",
         )
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Rebuild inner connector when model changes after initial construction."""
+        super().__setattr__(name, value)
+        if name == "model" and self._inner is not None:
+            updated_config = self._config.with_overrides(model=value)
+            self._config = updated_config
+            self._inner = self._build_inner(updated_config)
+            logger.info(
+                "LlmConnector model updated: backend=%s model=%s",
+                self._config.backend,
+                self._config.model,
+            )
+        elif name == "timeout" and self._config is not None:
+            self._config.timeout = value
 
     # ------------------------------------------------------------------
     # LlmConnectorBase interface
@@ -107,41 +137,7 @@ class LlmConnector(LlmConnectorBase):
         return self._config
 
     # ------------------------------------------------------------------
-    # Configurable parameters — model and timeout only (backend is hidden)
-    # ------------------------------------------------------------------
-
-    @property
-    def model(self) -> str:
-        """Active model identifier."""
-        return self._config.model
-
-    @model.setter
-    def model(self, value: str) -> None:
-        """Update model and rebuild backend connector when the backend changes.
-
-        Backend is re-inferred from the model name prefix automatically
-        (e.g. ``"claude-"`` → anthropic, ``"gpt-"`` → openai).
-        """
-        self._config = self._config.with_overrides(model=value)
-        self._inner = self._build_inner(self._config)
-        logger.info(
-            "LlmConnector model updated: backend=%s model=%s",
-            self._config.backend,
-            self._config.model,
-        )
-
-    @property
-    def timeout(self) -> float:
-        """Request timeout in seconds."""
-        return self._config.timeout
-
-    @timeout.setter
-    def timeout(self, value: float) -> None:
-        """Update timeout on the active config."""
-        self._config.timeout = value
-
-    # ------------------------------------------------------------------
-    # Describable — config schema and param access
+    # Describable — config schema (runtime-dynamic enum injection)
     # ------------------------------------------------------------------
 
     def get_config_schema(self) -> dict[str, Any]:
@@ -156,38 +152,20 @@ class LlmConnector(LlmConnectorBase):
             JSON-Schema-compatible dict with ``model`` (optional enum) and
             ``timeout`` properties.
         """
+        schema = super().get_config_schema()
+        properties = dict(schema.get("properties", {}))
+        properties.pop("cache", None)
+
         all_models: list[str] = []
         for backend_models in self._config.available_models.values():
             all_models.extend(backend_models)
         if self._config.model not in all_models:
             all_models.insert(0, self._config.model)
 
-        model_prop: dict[str, Any] = {
-            "type": "string",
-            "description": "Model identifier. Backend is auto-selected from the model name.",
-        }
-        if len(all_models) > 1:
-            model_prop["enum"] = all_models
+        if "model" in properties and len(all_models) > 1:
+            properties["model"] = {**properties["model"], "enum": all_models}
 
-        return {
-            "type": "object",
-            "title": type(self).__name__,
-            "properties": {
-                "model": model_prop,
-                "timeout": {
-                    "type": "number",
-                    "description": "Request timeout in seconds.",
-                },
-            },
-        }
-
-    def get_param_values(self) -> dict[str, Any]:
-        """Return current values of the exposed parameters.
-
-        Returns:
-            Dict with ``model`` and ``timeout`` values from the active config.
-        """
-        return {"model": self._config.model, "timeout": self._config.timeout}
+        return {**schema, "properties": properties}
 
     def _do_chat(
         self,

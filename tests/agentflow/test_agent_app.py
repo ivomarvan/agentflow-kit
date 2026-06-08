@@ -106,22 +106,20 @@ def test_usage_llm_edge_label_uses_backend_class_and_model() -> None:
     from agentflow.llm.LlmConfig import LlmConfig
     from agentflow.llm.LlmConnector import LlmConnector
 
-    connector = LlmConnector(
-        config=LlmConfig(backend="openai", model="gpt-4o-mini", api_key="test"),
-    )
+    connector = LlmConnector(model="gpt-4o-mini")
     label = AgentApp._usage_llm_edge_label("DeviceWorkerVertex", connector)
     assert label == "DeviceWorkerVertex-OpenAiConnector-gpt-4o-mini"
 
 
 @pytest.mark.unit
-def test_usage_llm_edge_label_for_anthropic_backend() -> None:
+def test_usage_llm_edge_label_for_anthropic_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Anthropic backends appear as AnthropicConnector in usage edge labels."""
-    from agentflow.llm.LlmConfig import LlmConfig
     from agentflow.llm.LlmConnector import LlmConnector
 
-    connector = LlmConnector(
-        config=LlmConfig(backend="anthropic", model="claude-3-5-sonnet", api_key="test"),
-    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    connector = LlmConnector(model="claude-3-5-sonnet")
     label = AgentApp._usage_llm_edge_label("SafetyJudgeVertex", connector)
     assert label == "SafetyJudgeVertex-AnthropicConnector-claude-3-5-sonnet"
 
@@ -145,7 +143,7 @@ def test_llm_connector_base_exposes_backend_and_model_in_description() -> None:
     anthropic_cfg = LlmConfig(backend="anthropic", model="claude-3-5-sonnet", api_key="test")
 
     for connector in (
-        LlmConnector(config=openai_cfg),
+        LlmConnector(model="gpt-4o"),
         OpenAiConnector(openai_cfg),
         AnthropicConnector(anthropic_cfg),
     ):
