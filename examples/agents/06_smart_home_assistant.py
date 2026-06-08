@@ -212,7 +212,6 @@ class ToggleDevice(ToolBase):
 class IntentParserVertex(StateVertex):
     """Parse and classify the user's voice command before passing it to the Worker."""
 
-    connector: Annotated[str, Field(description="LLM connector key from Context.")] = "economy"
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for classifying user intent into a category.",
@@ -229,15 +228,15 @@ class IntentParserVertex(StateVertex):
 
         Args:
             state: Current SmartHomeState with user messages.
-            ctx:   ctx.llm() provides the economy LLM connector.
+            ctx:   ctx.llm_for_model() resolves the LLM connector by model name.
 
         Returns:
             (SmartHomeSignal.parsed, patch) with intent category populated.
         """
-        response = await ctx.llm(self.connector).achat([
+        response = await ctx.llm_for_model(self.model).achat([
             {"role": "system", "content": self.system_prompt},
             *state.messages,
-        ])
+        ], temperature=self.temperature)
         intent = "UNKNOWN"
         for line in response.text.splitlines():
             if line.startswith("CATEGORY:"):
@@ -249,7 +248,6 @@ class IntentParserVertex(StateVertex):
 class DeviceWorkerVertex(StateVertex):
     """Propose device actions using a cheap LLM with tools (tool loop hidden in connector)."""
 
-    connector:  Annotated[str, Field(description="LLM connector key from Context.")] = "economy"
     tools:      Annotated[str, Field(description="Tool registry key from Context.")] = "default"
     max_rounds: Annotated[int, Field(ge=1, le=10, description="Max tool-calling rounds.")] = 4
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
@@ -268,7 +266,7 @@ class DeviceWorkerVertex(StateVertex):
 
         Args:
             state: Contains messages, intent, and optional prior rejection_reason.
-            ctx:   ctx.llm().achat_with_tools() runs the hidden LLM+tool loop.
+            ctx:   ctx.llm_for_model() runs the hidden LLM+tool loop.
 
         Returns:
             (SmartHomeSignal.proposed, patch) with action_plan set.
@@ -279,13 +277,14 @@ class DeviceWorkerVertex(StateVertex):
             "Please revise the plan to fix the issue."
             if state.rejection_reason else ""
         )
-        response = await ctx.llm(self.connector).achat_with_tools(
+        response = await ctx.llm_for_model(self.model).achat_with_tools(
             messages=[
                 {"role": "system", "content": base + correction},
                 *state.messages,
             ],
             registry=ctx.get_tools(self.tools),
             max_rounds=self.max_rounds,
+            temperature=self.temperature,
         )
         return SmartHomeSignal.proposed, SmartHomePatch(
             action_plan=response.text, rejection_reason=""
@@ -295,7 +294,6 @@ class DeviceWorkerVertex(StateVertex):
 class SafetyJudgeVertex(StateVertex):
     """Validate the action plan against safety rules; approve or reject with reason."""
 
-    connector:     Annotated[str, Field(description="LLM connector key from Context.")] = "quality"
     max_revisions: Annotated[int, Field(ge=1, le=3,
                        description="Max Worker→Judge retry loops before forcing approval.")] = 2
     # x-textarea: multi-line Inspector editor; triple-quoted default keeps "\\n" in the str.
@@ -322,7 +320,7 @@ If UNSAFE: respond exactly with "REJECTED: <specific rule violated and how to fi
 
         Args:
             state: action_plan to review, revisions count for loop guard.
-            ctx:   ctx.llm() provides the expensive quality LLM connector.
+            ctx:   ctx.llm_for_model() resolves the quality LLM connector.
 
         Returns:
             (SmartHomeSignal.approved, patch) when plan is safe.
@@ -334,10 +332,10 @@ If UNSAFE: respond exactly with "REJECTED: <specific rule violated and how to fi
             )
             return SmartHomeSignal.approved, SmartHomePatch(revisions=state.revisions + 1)
 
-        response = await ctx.llm(self.connector).achat([
+        response = await ctx.llm_for_model(self.model).achat([
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": f"Action plan to review:\n{state.action_plan}"},
-        ])
+        ], temperature=self.temperature)
         text = response.text.strip()
         upper = text.upper()
 
@@ -353,7 +351,6 @@ If UNSAFE: respond exactly with "REJECTED: <specific rule violated and how to fi
 class VoiceFormatterVertex(StateVertex):
     """Convert the approved action plan into a natural, TTS-optimised voice response."""
 
-    connector: Annotated[str, Field(description="LLM connector key from Context.")] = "economy"
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for converting the action plan into a voice-friendly reply.",
@@ -371,15 +368,15 @@ class VoiceFormatterVertex(StateVertex):
 
         Args:
             state: approved action_plan to summarise.
-            ctx:   ctx.llm() provides the economy LLM connector.
+            ctx:   ctx.llm_for_model() resolves the economy LLM connector.
 
         Returns:
             (SmartHomeSignal.done, patch) with TTS-ready final_response.
         """
-        response = await ctx.llm(self.connector).achat([
+        response = await ctx.llm_for_model(self.model).achat([
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": state.action_plan},
-        ])
+        ], temperature=self.temperature)
         return SmartHomeSignal.done, SmartHomePatch(final_response=response.text.strip())
 
 
@@ -421,9 +418,12 @@ if __name__ == "__main__":
         state_graph=StateGraph(
             start=IntentParserVertex,
             initialized_vertexes=[
-                SafetyJudgeVertex(max_revisions=2),   # quality LLM, 2 retry loops max
-                DeviceWorkerVertex(max_rounds=4),      # economy LLM, 4 tool-calling rounds
-                # IntentParserVertex and VoiceFormatterVertex use all-default params
+                SafetyJudgeVertex(model="gemini-3.5-flash", max_revisions=2),
+                DeviceWorkerVertex(model="gpt-4o-mini", max_rounds=4),
+                IntentParserVertex(model="gpt-4o-mini"),
+                VoiceFormatterVertex(model="gpt-4o-mini"),
+                # DeviceWorkerVertex and SafetyJudge explicitly override defaults;
+                # remaining vertices default to model="" → Context default connector
             ],
             transitions=[
                 Transition(IntentParserVertex,  SmartHomeSignal.parsed,   DeviceWorkerVertex),

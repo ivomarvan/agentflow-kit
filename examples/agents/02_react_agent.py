@@ -202,7 +202,6 @@ _MAX_STEPS = 10
 class LlmCallVertex(StateVertex):
     """Calls the LLM and decides whether to invoke a tool or emit a final answer."""
 
-    connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
     tools: Annotated[str, Field(description="Tool registry key from Context.")] = "default"
 
     async def run(self, state: ReactState, ctx: Context) -> tuple[ReactSignal, ReactPatch]:
@@ -219,8 +218,10 @@ class LlmCallVertex(StateVertex):
             return ReactSignal.max_steps, ReactPatch(
                 final_answer=f"AGENT ERROR: exceeded {_MAX_STEPS} steps"
             )
-        response = await ctx.llm(self.connector).achat(
-            list(state.messages), tools=ctx.get_tools(self.tools).schemas()
+        response = await ctx.llm_for_model(self.model).achat(
+            list(state.messages),
+            tools=ctx.get_tools(self.tools).schemas(),
+            temperature=self.temperature,
         )
         assistant_msg = response.to_message_dict()
         if response.has_tool_calls:

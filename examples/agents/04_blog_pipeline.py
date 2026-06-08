@@ -80,7 +80,6 @@ class BlogPatch:
 class ResearcherVertex(StateVertex):
     """Collects 3 concise bullet points about the topic via LLM."""
 
-    connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for the researcher role when gathering topic facts.",
@@ -102,7 +101,9 @@ class ResearcherVertex(StateVertex):
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": state.topic},
         ]
-        response = await ctx.llm(self.connector).achat(messages)
+        response = await ctx.llm_for_model(self.model).achat(
+            messages, temperature=self.temperature
+        )
         ctx.logger.info("researcher: notes_len=%d", len(response.text))
         return StdSignal.ok, BlogPatch(research_notes=response.text)
 
@@ -110,7 +111,6 @@ class ResearcherVertex(StateVertex):
 class WriterVertex(StateVertex):
     """Turns research bullet points into a 150-word blog post via LLM."""
 
-    connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for the writer role when drafting the blog post.",
@@ -132,7 +132,9 @@ class WriterVertex(StateVertex):
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": state.research_notes},
         ]
-        response = await ctx.llm(self.connector).achat(messages)
+        response = await ctx.llm_for_model(self.model).achat(
+            messages, temperature=self.temperature
+        )
         ctx.logger.info("writer: draft_len=%d", len(response.text))
         return StdSignal.ok, BlogPatch(draft=response.text)
 
@@ -140,7 +142,6 @@ class WriterVertex(StateVertex):
 class EditorVertex(StateVertex):
     """Polishes the draft for clarity, grammar, and brevity via LLM."""
 
-    connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for the editor role when polishing the draft.",
@@ -165,7 +166,9 @@ class EditorVertex(StateVertex):
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": state.draft},
         ]
-        response = await ctx.llm(self.connector).achat(messages)
+        response = await ctx.llm_for_model(self.model).achat(
+            messages, temperature=self.temperature
+        )
         ctx.logger.info("editor: final_len=%d", len(response.text))
         return StdSignal.ok, BlogPatch(final_post=response.text)
 
