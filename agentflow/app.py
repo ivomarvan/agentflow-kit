@@ -466,7 +466,28 @@ class AgentApp(Describable):
                     continue
                 props[attr_name] = attr_value.get_config_schema()
 
-        return {"type": "object", "title": type(self).__name__, "properties": props}
+        schema = {"type": "object", "title": type(self).__name__, "properties": props}
+        AgentApp._sanitize_gui_schema(schema)
+        return schema
+
+    @staticmethod
+    def _sanitize_gui_schema(schema: dict[str, Any]) -> None:
+        """Normalize vertex schemas for GUI JSONForms (in-place).
+
+        Maps legacy ``format: textarea`` to ``x-textarea: true`` so AJV does not
+        reject unknown format values and TextareaRenderer can detect the field.
+        """
+        props = schema.get("properties")
+        if not isinstance(props, dict):
+            return
+        for prop in props.values():
+            if not isinstance(prop, dict):
+                continue
+            if prop.get("format") == "textarea":
+                prop.pop("format", None)
+                prop["x-textarea"] = True
+            if prop.get("type") == "object" and isinstance(prop.get("properties"), dict):
+                AgentApp._sanitize_gui_schema(prop)
 
     def get_config(self) -> dict[str, Any]:
         """Return current values of all configurable parameters as a nested dict.

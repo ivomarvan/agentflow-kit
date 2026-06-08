@@ -75,7 +75,7 @@ class ResearcherVertex(StateVertex):
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
     system_prompt: Annotated[str, Field(
         description="Instruction for the researcher role when gathering topic facts.",
-        json_schema_extra={"format": "textarea"},
+        json_schema_extra={"x-textarea": True},
     )] = "You are a Tech Researcher. Collect 3 concise bullet points about the topic."
 
     async def run(self, state: BlogState, ctx: Context) -> tuple[Any, BlogPatch]:
@@ -104,7 +104,7 @@ class WriterVertex(StateVertex):
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
     system_prompt: Annotated[str, Field(
         description="Instruction for the writer role when drafting the blog post.",
-        json_schema_extra={"format": "textarea"},
+        json_schema_extra={"x-textarea": True},
     )] = "You are a Tech Writer. Turn the bullet points into a 150-word blog post."
 
     async def run(self, state: BlogState, ctx: Context) -> tuple[Any, BlogPatch]:
@@ -133,7 +133,7 @@ class EditorVertex(StateVertex):
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
     system_prompt: Annotated[str, Field(
         description="Instruction for the editor role when polishing the draft.",
-        json_schema_extra={"format": "textarea"},
+        json_schema_extra={"x-textarea": True},
     )] = (
         "You are a ruthless Editor. "
         "Polish the draft: improve clarity, fix grammar, keep it short."

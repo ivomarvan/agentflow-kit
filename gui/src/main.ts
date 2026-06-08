@@ -4,7 +4,7 @@ import PrimeVue from 'primevue/config'
 import Tooltip from 'primevue/tooltip'
 import Aura from '@primeuix/themes/aura'
 import 'primeicons/primeicons.css'
-import '@jsonforms/vue-vanilla/vanilla.css'
+import '@chaoqing/jsonforms-vue-primevue/lib/jsonforms-vue-primevue.css'
 import App from './App.vue'
 
 const app = createApp(App)

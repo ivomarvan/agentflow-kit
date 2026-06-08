@@ -207,7 +207,7 @@ class IntentParserVertex(StateVertex):
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "economy"
     system_prompt: Annotated[str, Field(
         description="Instruction for classifying user intent into a category.",
-        json_schema_extra={"format": "textarea"},
+        json_schema_extra={"x-textarea": True},
     )] = (
         "Classify the user's smart home request. "
         "Respond with: 'CATEGORY: <LIGHTING|TEMPERATURE|APPLIANCE|STATUS_QUERY|UNKNOWN>'"
@@ -245,7 +245,7 @@ class DeviceWorkerVertex(StateVertex):
     max_rounds: Annotated[int, Field(ge=1, le=10, description="Max tool-calling rounds.")] = 4
     system_prompt: Annotated[str, Field(
         description="Instruction for proposing device actions using available tools.",
-        json_schema_extra={"format": "textarea"},
+        json_schema_extra={"x-textarea": True},
     )] = (
         "You control a smart home. Use tools to check the current room state, "
         "then propose specific device actions clearly listed line by line."
@@ -290,7 +290,7 @@ class SafetyJudgeVertex(StateVertex):
                        description="Max Worker→Judge retry loops before forcing approval.")] = 2
     system_prompt: Annotated[str, Field(
         description="Safety rules for validating the proposed action plan.",
-        json_schema_extra={"format": "textarea"},
+        json_schema_extra={"x-textarea": True},
     )] = """\
 You are a safety officer for a smart home system. Review the proposed action plan.
 
@@ -345,7 +345,7 @@ class VoiceFormatterVertex(StateVertex):
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "economy"
     system_prompt: Annotated[str, Field(
         description="Instruction for converting the action plan into a voice-friendly reply.",
-        json_schema_extra={"format": "textarea"},
+        json_schema_extra={"x-textarea": True},
     )] = (
         "Turn the following smart home action plan into a short, natural voice reply "
         "for a smart speaker. Rules: no markdown, no bullet points, "
