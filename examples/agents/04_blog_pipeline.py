@@ -17,7 +17,9 @@ Run:
 """
 
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Annotated, Any, cast
+
+from pydantic import Field
 
 from agentflow import AgentApp
 from agentflow.llm.cache import LlmFileCache
@@ -70,6 +72,8 @@ class BlogPatch:
 class ResearcherVertex(StateVertex):
     """Collects 3 concise bullet points about the topic via LLM."""
 
+    connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
+
     async def run(self, state: BlogState, ctx: Context) -> tuple[Any, BlogPatch]:
         """Call the LLM in a researcher role to gather key facts.
 
@@ -90,13 +94,15 @@ class ResearcherVertex(StateVertex):
             },
             {"role": "user", "content": state.topic},
         ]
-        response = await ctx.llm("default").achat(messages)
+        response = await ctx.llm(self.connector).achat(messages)
         ctx.logger.info("researcher: notes_len=%d", len(response.text))
         return StdSignal.ok, BlogPatch(research_notes=response.text)
 
 
 class WriterVertex(StateVertex):
     """Turns research bullet points into a 150-word blog post via LLM."""
+
+    connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
 
     async def run(self, state: BlogState, ctx: Context) -> tuple[Any, BlogPatch]:
         """Call the LLM in a writer role to draft the blog post.
@@ -118,13 +124,15 @@ class WriterVertex(StateVertex):
             },
             {"role": "user", "content": state.research_notes},
         ]
-        response = await ctx.llm("default").achat(messages)
+        response = await ctx.llm(self.connector).achat(messages)
         ctx.logger.info("writer: draft_len=%d", len(response.text))
         return StdSignal.ok, BlogPatch(draft=response.text)
 
 
 class EditorVertex(StateVertex):
     """Polishes the draft for clarity, grammar, and brevity via LLM."""
+
+    connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
 
     async def run(self, state: BlogState, ctx: Context) -> tuple[Any, BlogPatch]:
         """Call the LLM in an editor role to refine the draft.
@@ -147,7 +155,7 @@ class EditorVertex(StateVertex):
             },
             {"role": "user", "content": state.draft},
         ]
-        response = await ctx.llm("default").achat(messages)
+        response = await ctx.llm(self.connector).achat(messages)
         ctx.logger.info("editor: final_len=%d", len(response.text))
         return StdSignal.ok, BlogPatch(final_post=response.text)
 

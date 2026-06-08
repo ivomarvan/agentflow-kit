@@ -342,6 +342,11 @@ class LlmConfig(BaseModel):
         base_url_env = os.getenv("LLM_BASE_URL", "").strip() or None
         new_base_url = base_url_env if base_url_env else _DEFAULT_BASE_URLS.get(new_backend)
         new_api_key = self._resolve_api_key(new_backend)
+        # When the backend is unchanged and no env key is found, preserve the
+        # existing api_key so that runtime overrides (e.g. via GUI) work even
+        # when the key was supplied programmatically rather than via env vars.
+        if not new_api_key and new_backend == self.backend:
+            new_api_key = self.api_key
 
         if new_backend in _API_KEY_ENV_VARS and not new_api_key:
             env_var_names = ", ".join(_API_KEY_ENV_VARS[new_backend])

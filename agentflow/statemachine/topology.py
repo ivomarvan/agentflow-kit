@@ -234,6 +234,19 @@ class StateGraph(Describable):  # type: ignore[misc]
         """
         return self._start
 
+    @property
+    def vertices(self) -> list[StateVertex]:
+        """Return all resolved vertex instances registered in this graph.
+
+        Includes every vertex that has been resolved (auto-instantiated or
+        pre-seeded) by the internal ``VertexResolver``.  Useful for GUI
+        tooling that needs to iterate over configurable graph nodes.
+
+        Returns:
+            List of ``StateVertex`` instances in registration order.
+        """
+        return list(self._resolver._name_index.values())
+
     def get_targets(self, node: StateVertex, signal: object) -> list[StateVertex | Parallel]:
         """Return all targets reachable from node via signal.
 

@@ -5,7 +5,7 @@ Demonstrates a pure-Python state machine without a real LLM:
   2. Generate  — produces a draft answer (improves on retry)
   3. Review    — approves the draft or sends it back for revision
 
-The loop runs until the draft is approved or _MAX_ATTEMPTS is reached.
+The loop runs until the draft is approved or Review.max_attempts is reached.
 FakeLlmConnector is used to satisfy the Context API — no LLM calls are made.
 
 Run:
@@ -17,7 +17,9 @@ Run:
 
 from dataclasses import dataclass
 from enum import auto
-from typing import Any, cast
+from typing import Annotated, Any, cast
+
+from pydantic import Field
 
 from agentflow import AgentApp
 from agentflow.logging_config import setup_pretty_logging
@@ -33,8 +35,6 @@ from agentflow.statemachine import (
 )
 from agentflow.statemachine.hooks import LoggingHooks
 from agentflow.statemachine.testing import FakeLlmConnector
-
-_MAX_ATTEMPTS: int = 3
 
 _STUB_DOCS: tuple[str, ...] = (
     "[doc1] Employees receive 25 days of paid vacation per year.",
@@ -128,6 +128,10 @@ class Generate(StateVertex):
 class Review(StateVertex):
     """Approves the draft if it is cited and sufficiently detailed."""
 
+    max_attempts: Annotated[
+        int, Field(ge=1, le=10, description="Max Generate→Review cycles before forcing approval.")
+    ] = 3
+
     async def run(self, state: ReviewState, ctx: Context) -> tuple[ReviewSignal, ReviewPatch]:
         """Check draft quality and route accordingly.
 
@@ -144,7 +148,7 @@ class Review(StateVertex):
             (ReviewSignal.max_attempts, empty patch) when the attempt limit is reached;
             (ReviewSignal.needs_revision, patch with feedback) otherwise.
         """
-        if state.attempts >= _MAX_ATTEMPTS - 1:
+        if state.attempts >= self.max_attempts - 1:
             ctx.logger.info("review: max_attempts=%d reached", state.attempts)
             return ReviewSignal.max_attempts, ReviewPatch()
         is_cited = "[doc" in state.draft

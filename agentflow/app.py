@@ -394,110 +394,201 @@ class AgentApp(Describable):
     def get_config_schema(self) -> dict[str, Any]:
         """Return a hierarchical JSON Schema of all configurable parameters.
 
-        Scans public attributes for LlmConnector instances and uses the
-        Pydantic ``model_json_schema()`` on their underlying LlmConfig to
-        build the schema.
+        Walks three sources in priority order:
+
+        1. ``context.llm_connectors`` dict — named LLM connectors.
+        2. ``state_graph.vertices`` — all resolved ``StateVertex`` instances
+           that expose at least one Pydantic scalar field.
+        3. Direct ``LlmConnector`` attributes on ``self`` — backward-compat
+           with the old subclass pattern (``self.connector = LlmConnector(...)``).
+
+        String fields named ``connector`` on vertices receive an ``enum``
+        populated from ``context.llm_connectors`` keys so the GUI renders a
+        select box.  Fields named ``tools`` receive an ``enum`` from
+        ``context.tool_registries`` keys likewise.
 
         Returns:
-            JSON-Schema-compatible dict with ``properties`` keyed by
-            attribute name (e.g. ``{"connector": {...LlmConfig schema...}}``).
+            JSON-Schema-compatible dict with ``properties`` keyed by component
+            name (connector key or vertex class name).
         """
-        from pydantic import BaseModel
-
-        schema: dict[str, Any] = {
-            "type": "object",
-            "title": type(self).__name__,
-            "properties": {},
-        }
         from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
 
+        props: dict[str, Any] = {}
+
+        # 1. Named LLM connectors from Context — use connector.get_config_schema()
+        #    so backend is hidden and model enum is populated dynamically.
+        if self._context is not None:
+            for key, connector in self._context.llm_connectors.items():
+                if isinstance(connector, LlmConnector):
+                    try:
+                        connector.config  # raises NotImplementedError for stubs
+                    except NotImplementedError:
+                        continue
+                    props[key] = connector.get_config_schema()
+
+        # 2. StateVertex instances from graph (skip vertices with no scalar fields)
+        connector_keys: list[str] = (
+            list(self._context.llm_connectors.keys()) if self._context is not None else []
+        )
+        tool_keys: list[str] = (
+            list(self._context.tool_registries.keys()) if self._context is not None else []
+        )
+
+        if self._state_graph is not None:
+            for vertex in self._state_graph.vertices:
+                vertex_schema = vertex.get_config_schema()
+                if not vertex_schema.get("properties"):
+                    continue
+                # Inject enum values for connector/tools reference fields so
+                # the GUI renders them as select boxes.
+                vertex_props = vertex_schema.get("properties", {})
+                if "connector" in vertex_props and connector_keys:
+                    vertex_props["connector"] = {
+                        **vertex_props["connector"],
+                        "enum": connector_keys,
+                    }
+                if "tools" in vertex_props and tool_keys:
+                    vertex_props["tools"] = {
+                        **vertex_props["tools"],
+                        "enum": tool_keys,
+                    }
+                props[type(vertex).__name__] = vertex_schema
+
+        # 3. Direct LlmConnector attrs on self (backward compat — old subclass pattern)
+        seen: set[str] = set(props.keys())
         for attr_name, attr_value in vars(self).items():
-            if attr_name.startswith("_"):
+            if attr_name.startswith("_") or attr_name in seen:
                 continue
             if isinstance(attr_value, LlmConnector):
                 try:
-                    config = attr_value.config
+                    attr_value.config
                 except NotImplementedError:
-                    continue  # FakeLlmConnector and similar stubs — skip gracefully
-                if isinstance(config, BaseModel):
-                    schema["properties"][attr_name] = config.model_json_schema()
-        return schema
+                    continue
+                props[attr_name] = attr_value.get_config_schema()
+
+        return {"type": "object", "title": type(self).__name__, "properties": props}
 
     def get_config(self) -> dict[str, Any]:
-        """Return current values of all configurable parameters as a flat dot-path dict.
+        """Return current values of all configurable parameters as a nested dict.
+
+        The top-level keys match those of ``get_config_schema()["properties"]``.
+        Each value is a flat ``{field_name: current_value}`` dict for that
+        component.
 
         Example return value::
 
             {
-                "connector.backend": "ollama",
-                "connector.model": "qwen2.5:1.5b",
-                "connector.timeout": 120.0,
+                "economy": {"model": "gpt-4o-mini", "timeout": 120.0},
+                "DeviceWorkerVertex": {"connector": "economy", "max_rounds": 4},
             }
 
         Returns:
-            Dict mapping dot-path strings to current parameter values.
+            Nested dict: ``{component_name: {field_name: value, ...}, ...}``.
         """
-        from pydantic import BaseModel
-
-        result: dict[str, Any] = {}
         from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
 
+        result: dict[str, Any] = {}
+
+        # 1. Named LLM connectors from Context
+        if self._context is not None:
+            for key, connector in self._context.llm_connectors.items():
+                if isinstance(connector, LlmConnector):
+                    try:
+                        connector.config
+                    except NotImplementedError:
+                        continue
+                    result[key] = connector.get_param_values()
+
+        # 2. StateVertex instances from graph
+        if self._state_graph is not None:
+            for vertex in self._state_graph.vertices:
+                values = vertex.get_param_values()
+                if values:
+                    result[type(vertex).__name__] = values
+
+        # 3. Direct LlmConnector attrs on self (backward compat)
+        seen: set[str] = set(result.keys())
         for attr_name, attr_value in vars(self).items():
-            if attr_name.startswith("_"):
+            if attr_name.startswith("_") or attr_name in seen:
                 continue
             if isinstance(attr_value, LlmConnector):
                 try:
-                    config = attr_value.config
+                    attr_value.config
                 except NotImplementedError:
-                    continue  # FakeLlmConnector and similar stubs — skip gracefully
-                if isinstance(config, BaseModel):
-                    for field_name in type(config).model_fields:
-                        result[f"{attr_name}.{field_name}"] = getattr(config, field_name)
+                    continue
+                result[attr_name] = attr_value.get_param_values()
+
         return result
 
     def set_config(self, path: str, value: Any) -> None:
         """Set a single configurable parameter by dot-path notation.
 
-        Supports setting fields on LlmConnector's underlying LlmConfig.
+        Routes to the correct component using the same priority as
+        ``get_config_schema()``:
+
+        1. Named LLM connector in ``context.llm_connectors``.
+        2. ``StateVertex`` instance looked up by class name in the graph.
+        3. Direct ``LlmConnector`` attribute on ``self`` (backward compat).
 
         Args:
-            path: Dot-path string in the form ``"child.param"``,
-                  e.g. ``"connector.model"`` or ``"connector.timeout"``.
+            path: Dot-path string ``"component.param"``,
+                  e.g. ``"economy.model"`` or ``"DeviceWorkerVertex.max_rounds"``.
             value: New value to assign.  Must pass Pydantic validation.
 
         Raises:
-            KeyError: If the path format is invalid or the child/param is unknown.
+            KeyError: If the path format is invalid or the component/param is
+                unknown.
             ValueError: If the value fails Pydantic field validation.
         """
-        from pydantic import BaseModel
+        from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
 
         parts = path.split(".", 1)
         if len(parts) != 2:
             raise KeyError(
-                f"Invalid config path: {path!r} — expected 'child.param' format"
+                f"Invalid config path: {path!r} — expected 'component.param' format"
             )
-        child_name, param_name = parts
-        child = getattr(self, child_name, None)
-        if child is None:
-            raise KeyError(f"No attribute {child_name!r} on {type(self).__name__}")
+        component_name, param_name = parts
 
-        from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
+        # 1. Named LLM connector from Context
+        if self._context is not None:
+            connector = self._context.llm_connectors.get(component_name)
+            if connector is not None and isinstance(connector, LlmConnector):
+                valid_keys = set(connector.get_config_schema().get("properties", {}).keys())
+                if param_name not in valid_keys:
+                    raise KeyError(
+                        f"Unknown config field {param_name!r} on {type(connector).__name__} "
+                        f"(valid: {sorted(valid_keys)})"
+                    )
+                setattr(connector, param_name, value)
+                return
 
-        if isinstance(child, LlmConnector):
-            config = child.config
-            if not isinstance(config, BaseModel):
+        # 2. StateVertex looked up by class name in graph
+        if self._state_graph is not None:
+            vertex = self._state_graph._resolver.lookup_by_name(component_name)
+            if vertex is not None:
+                valid_keys = set(vertex.get_config_schema().get("properties", {}).keys())
+                if param_name not in valid_keys:
+                    raise KeyError(
+                        f"Unknown param {param_name!r} on {type(vertex).__name__} "
+                        f"(valid: {sorted(valid_keys)})"
+                    )
+                setattr(vertex, param_name, value)
+                return
+
+        # 3. Direct LlmConnector attr on self (backward compat)
+        child = getattr(self, component_name, None)
+        if child is not None and isinstance(child, LlmConnector):
+            valid_keys = set(child.get_config_schema().get("properties", {}).keys())
+            if param_name not in valid_keys:
                 raise KeyError(
-                    f"{type(child).__name__}.config is not a Pydantic model"
+                    f"Unknown config field {param_name!r} on {type(child).__name__} "
+                    f"(valid: {sorted(valid_keys)})"
                 )
-            if param_name not in type(config).model_fields:
-                raise KeyError(
-                    f"Unknown config field {param_name!r} on {type(config).__name__}"
-                )
-            setattr(config, param_name, value)
+            setattr(child, param_name, value)
             return
 
         raise KeyError(
-            f"Attribute {child_name!r} on {type(self).__name__} does not support set_config"
+            f"No configurable component {component_name!r} found on {type(self).__name__}"
         )
 
     def _cli_start_gui(

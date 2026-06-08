@@ -46,6 +46,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_EXPOSED_PARAMS = ("model", "timeout")
+
 
 class LlmConnector(LlmConnectorBase):
     """Concrete LLM connector with automatic backend selection.
@@ -103,6 +105,89 @@ class LlmConnector(LlmConnectorBase):
     def config(self) -> LlmConfig:
         """Active backend configuration."""
         return self._config
+
+    # ------------------------------------------------------------------
+    # Configurable parameters — model and timeout only (backend is hidden)
+    # ------------------------------------------------------------------
+
+    @property
+    def model(self) -> str:
+        """Active model identifier."""
+        return self._config.model
+
+    @model.setter
+    def model(self, value: str) -> None:
+        """Update model and rebuild backend connector when the backend changes.
+
+        Backend is re-inferred from the model name prefix automatically
+        (e.g. ``"claude-"`` → anthropic, ``"gpt-"`` → openai).
+        """
+        self._config = self._config.with_overrides(model=value)
+        self._inner = self._build_inner(self._config)
+        logger.info(
+            "LlmConnector model updated: backend=%s model=%s",
+            self._config.backend,
+            self._config.model,
+        )
+
+    @property
+    def timeout(self) -> float:
+        """Request timeout in seconds."""
+        return self._config.timeout
+
+    @timeout.setter
+    def timeout(self, value: float) -> None:
+        """Update timeout on the active config."""
+        self._config.timeout = value
+
+    # ------------------------------------------------------------------
+    # Describable — config schema and param access
+    # ------------------------------------------------------------------
+
+    def get_config_schema(self) -> dict[str, Any]:
+        """Return a JSON Schema exposing only model and timeout.
+
+        The backend is intentionally hidden — it is auto-inferred from the
+        model name prefix and not user-configurable.  When ``available_models``
+        in the config contains model lists, the model field is rendered as an
+        ``enum`` (select box in the GUI).
+
+        Returns:
+            JSON-Schema-compatible dict with ``model`` (optional enum) and
+            ``timeout`` properties.
+        """
+        all_models: list[str] = []
+        for backend_models in self._config.available_models.values():
+            all_models.extend(backend_models)
+        if self._config.model not in all_models:
+            all_models.insert(0, self._config.model)
+
+        model_prop: dict[str, Any] = {
+            "type": "string",
+            "description": "Model identifier. Backend is auto-selected from the model name.",
+        }
+        if len(all_models) > 1:
+            model_prop["enum"] = all_models
+
+        return {
+            "type": "object",
+            "title": type(self).__name__,
+            "properties": {
+                "model": model_prop,
+                "timeout": {
+                    "type": "number",
+                    "description": "Request timeout in seconds.",
+                },
+            },
+        }
+
+    def get_param_values(self) -> dict[str, Any]:
+        """Return current values of the exposed parameters.
+
+        Returns:
+            Dict with ``model`` and ``timeout`` values from the active config.
+        """
+        return {"model": self._config.model, "timeout": self._config.timeout}
 
     def _do_chat(
         self,

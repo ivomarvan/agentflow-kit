@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from agentflow import AgentApp, ConfigParam, LlmConfig
+from agentflow.llm.LlmConnector import LlmConnector as _LlmConnector
 
 
 class _ConnectorApp(AgentApp):
@@ -11,8 +12,6 @@ class _ConnectorApp(AgentApp):
 
     def __init__(self) -> None:
         super().__init__()
-        from agentflow.llm.connectors.OpenAiConnector import OpenAiConnector
-
         config = LlmConfig(
             backend="openai",
             model="gpt-4o-mini",
@@ -20,7 +19,7 @@ class _ConnectorApp(AgentApp):
             api_key="test-key",
             timeout=30.0,
         )
-        self.connector = OpenAiConnector(config)
+        self.connector = _LlmConnector(config=config)
 
 
 @pytest.mark.unit
@@ -93,13 +92,15 @@ def test_agent_app_get_config_schema_with_connector() -> None:
 
 @pytest.mark.unit
 def test_agent_app_get_config_returns_current_values() -> None:
-    """get_config() should return flat dot-path dict of connector config values."""
+    """get_config() returns nested dict with model and timeout; backend is hidden."""
     app = _ConnectorApp()
     cfg = app.get_config()
-    assert "connector.backend" in cfg
-    assert "connector.model" in cfg
-    assert cfg["connector.backend"] == "openai"
-    assert cfg["connector.model"] == "gpt-4o-mini"
+    assert "connector" in cfg
+    assert isinstance(cfg["connector"], dict)
+    # backend is intentionally hidden from the config values
+    assert "backend" not in cfg["connector"]
+    assert cfg["connector"]["model"] == "gpt-4o-mini"
+    assert "timeout" in cfg["connector"]
 
 
 @pytest.mark.unit
@@ -107,7 +108,7 @@ def test_agent_app_set_config_updates_connector_field() -> None:
     """set_config('connector.model', ...) should update the connector's model."""
     app = _ConnectorApp()
     app.set_config("connector.model", "gpt-4o")
-    assert app.connector.config.model == "gpt-4o"
+    assert app.connector.model == "gpt-4o"
 
 
 @pytest.mark.unit
