@@ -92,6 +92,42 @@ class Context(Describable):
             f"No LLM connector available (key={key!r}). Set llm_connectors in Context."
         )
 
+    def llm_for_model(self, model: str) -> Any:
+        """Return the connector whose active model matches *model*.
+
+        Lookup order:
+        1. Scan llm_connectors.values() for the first connector where
+           conn.config.model == model.
+        2. Fall back to llm() (default connector) when model is empty.
+        3. Create a transient LlmConnector(model=model) when no named
+           connector matches — log a warning so users can add one for caching.
+
+        Args:
+            model: LLM model name (e.g. 'gpt-4o-mini'). Empty string uses the
+                default connector.
+
+        Returns:
+            LLM connector instance.
+
+        Raises:
+            ValueError: Propagated from llm() if no connector is available at all.
+        """
+        if not model:
+            return self.llm()
+        for conn in self.llm_connectors.values():
+            if hasattr(conn, "config") and conn.config.model == model:
+                return conn
+        # No named connector matches — create transient without cache
+        self.logger.warning(
+            "No connector found for model=%r; creating transient connector "
+            "(no cache). Add LlmConnector(model=%r) to Context.llm_connectors "
+            "to enable caching.",
+            model,
+            model,
+        )
+        from agentflow.llm.connectors.LlmConnector import LlmConnector  # avoid circular import
+        return LlmConnector(model=model)
+
     def get_tools(self, key: str = "default") -> ToolRegistry:
         """Return tool registry by key from tool_registries dict.
 

@@ -123,3 +123,54 @@ class TestContextExceeded:
     def test_exceeded_at_zero_step_returns_false_for_positive_n(self) -> None:
         ctx = Context()
         assert ctx.exceeded(1) is False
+
+
+# ---------------------------------------------------------------------------
+# ctx.llm_for_model()
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestContextLlmForModel:
+    def test_llm_for_model_finds_by_model_name(self) -> None:
+        """llm_for_model() returns the connector whose config.model matches."""
+        fake = FakeLlmConnector()
+        # FakeLlmConnector has no real config, so use a wrapped approach
+        # by patching config attribute for the test
+        from unittest.mock import MagicMock, patch
+
+        mock_config = MagicMock()
+        mock_config.model = "gpt-4o-mini"
+        with patch.object(type(fake), "config", new_callable=lambda: property(lambda self: mock_config)):
+            ctx = Context(llm_connectors={"default": fake})
+            result = ctx.llm_for_model("gpt-4o-mini")
+        assert result is fake
+
+    def test_llm_for_model_falls_back_to_default_when_model_empty(self) -> None:
+        """llm_for_model('') returns the default connector via llm()."""
+        fake = FakeLlmConnector()
+        ctx = Context(llm_connectors={"default": fake})
+        result = ctx.llm_for_model("")
+        assert result is fake
+
+    def test_llm_for_model_creates_transient_with_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """llm_for_model() logs a WARNING and creates transient connector when no match."""
+        fake = FakeLlmConnector()
+        # connector has no matching model
+        from unittest.mock import MagicMock, patch
+
+        mock_config = MagicMock()
+        mock_config.model = "other-model"
+        with (
+            caplog.at_level(logging.WARNING),
+            patch.object(type(fake), "config", new_callable=lambda: property(lambda self: mock_config)),
+        ):
+            ctx = Context(llm_connectors={"default": fake})
+            result = ctx.llm_for_model("gpt-4o-mini")
+        # Must have logged a warning about the missing connector
+        assert any("transient" in r.message.lower() or "no connector" in r.message.lower()
+                   for r in caplog.records)
+        # Must return some connector (the transient one)
+        assert result is not None
