@@ -2,8 +2,8 @@ import type { JsonFormsRendererRegistryEntry, JsonSchema } from '@jsonforms/core
 import { and, rankWith, schemaMatches, uiTypeIs } from '@jsonforms/core'
 import { primevueRenderers } from '@chaoqing/jsonforms-vue-primevue'
 import { inputChipsRendererEntry } from './InputChipsRenderer.vue'
-import { integerSliderRendererEntry } from './IntegerSliderRenderer.vue'
-import { textareaRendererEntry } from './TextareaRenderer.vue'
+import IntegerSliderRenderer from './IntegerSliderRenderer.vue'
+import TextareaRenderer from './TextareaRenderer.vue'
 import HorizontalFieldRenderer from './HorizontalFieldRenderer.vue'
 
 const isTextareaField = (schema: JsonSchema): boolean =>
@@ -26,6 +26,17 @@ const supportsHorizontalLayout = (schema: JsonSchema): boolean => {
 export const horizontalFieldRendererEntry: JsonFormsRendererRegistryEntry = {
   renderer: HorizontalFieldRenderer,
   tester: rankWith(5, and(uiTypeIs('Control'), schemaMatches(supportsHorizontalLayout))),
+}
+
+// schemaMatches resolves the control scope; a root-schema predicate never sees x-textarea.
+export const textareaRendererEntry: JsonFormsRendererRegistryEntry = {
+  renderer: TextareaRenderer,
+  tester: rankWith(10, and(uiTypeIs('Control'), schemaMatches(isTextareaField))),
+}
+
+export const integerSliderRendererEntry: JsonFormsRendererRegistryEntry = {
+  renderer: IntegerSliderRenderer,
+  tester: rankWith(10, and(uiTypeIs('Control'), schemaMatches(hasIntegerRange))),
 }
 
 /** Inspector param editor — custom renderers first, then PrimeVue defaults. */

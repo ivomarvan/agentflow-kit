@@ -13,7 +13,7 @@
       </label>
       <span v-else class="field-label field-label--empty" />
 
-      <div class="field-value">
+      <div :class="['field-value', statusClass]">
         <Select
           v-if="fieldKind === 'enum'"
           :input-id="inputId"
@@ -23,6 +23,7 @@
           :invalid="!!control.errors"
           class="field-control"
           @update:model-value="onChange"
+          @blur="onBlur"
         />
         <div v-else-if="fieldKind === 'boolean'" class="field-control field-control--checkbox">
           <Checkbox
@@ -32,6 +33,7 @@
             :invalid="!!control.errors"
             binary
             @update:model-value="onChange"
+            @blur="onBlur"
           />
         </div>
         <InputNumber
@@ -45,6 +47,7 @@
           :max="integerMax"
           class="field-control"
           @update:model-value="onChange"
+          @blur="onBlur"
         />
         <InputNumber
           v-else-if="fieldKind === 'number'"
@@ -57,6 +60,7 @@
           :use-grouping="false"
           class="field-control"
           @update:model-value="onChange"
+          @blur="onBlur"
         />
         <InputText
           v-else
@@ -66,6 +70,7 @@
           :invalid="!!control.errors"
           class="field-control"
           @update:model-value="onChange"
+          @blur="onBlur"
         />
         <small v-if="control.errors" class="field-error">{{ control.errors }}</small>
       </div>
@@ -80,9 +85,13 @@ import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import Checkbox from 'primevue/checkbox'
 import Select from 'primevue/select'
+import { useInspectorFieldAutosave } from '@/composables/useInspectorFieldAutosave'
 
 const props = defineProps(rendererProps<ControlElement>())
 const { control, handleChange } = useJsonFormsControl(props)
+const { statusClass, markEditing, onFieldBlur } = useInspectorFieldAutosave(
+  computed(() => control.value.path),
+)
 
 const inputId = computed(() => `${control.value.id}-input`)
 const computedLabel = computed(() => control.value.label ?? '')
@@ -117,7 +126,12 @@ const integerMax = computed(() => {
 })
 
 function onChange(value: unknown) {
+  markEditing()
   handleChange(control.value.path, value)
+}
+
+function onBlur() {
+  void onFieldBlur(control.value.data)
 }
 </script>
 

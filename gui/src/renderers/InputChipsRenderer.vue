@@ -15,17 +15,19 @@
           {{ computedLabel }}
           <span v-if="control.required" class="primevue-control-required">*</span>
         </label>
-        <InputChips
-          :id="control.id + '-input'"
-          :class="[styles.control.input, { 'p-invalid': control.errors }]"
-          :disabled="!control.enabled"
-          :placeholder="(appliedOptions as Record<string, unknown>).placeholder as string || 'Add item…'"
-          :model-value="(control.data as string[]) || []"
-          :separator="','"
-          @update:model-value="onChange"
-          @focus="handleFocus"
-          @blur="handleBlur"
-        />
+        <div :class="['field-value', statusClass]">
+          <InputChips
+            :id="control.id + '-input'"
+            :class="[styles.control.input, 'field-control', { 'p-invalid': control.errors }]"
+            :disabled="!control.enabled"
+            :placeholder="(appliedOptions as Record<string, unknown>).placeholder as string || 'Add item…'"
+            :model-value="(control.data as string[]) || []"
+            :separator="','"
+            @update:model-value="onChange"
+            @focus="handleFocus"
+            @blur="onBlur"
+          />
+        </div>
         <small v-if="control.errors" class="primevue-control-error">{{ control.errors }}</small>
         <small
           v-else-if="control.description && persistentHint()"
@@ -53,13 +55,14 @@ import {
   type UISchemaElement,
 } from '@jsonforms/core'
 import { rendererProps, useJsonFormsControl, type RendererProps } from '@jsonforms/vue'
-import { defineComponent } from 'vue'
+import { computed, defineComponent } from 'vue'
 import InputChips from 'primevue/inputchips'
 import Fluid from 'primevue/fluid'
 import {
   usePrimeVueControl,
   ControlWrapper,
 } from '@chaoqing/jsonforms-vue-primevue'
+import { useInspectorFieldAutosave } from '@/composables/useInspectorFieldAutosave'
 
 const isArrayOfStrings = (schema: JsonSchema): boolean =>
   schema.type === 'array' &&
@@ -85,7 +88,7 @@ const controlRenderer = defineComponent({
   components: { ControlWrapper, InputChips, Fluid },
   props: { ...rendererProps<ControlElement>() },
   setup(props: RendererProps<ControlElement>) {
-    return usePrimeVueControl(
+    const ctrl = usePrimeVueControl(
       useJsonFormsControl(props),
       (value: unknown) =>
         Array.isArray(value)
@@ -93,6 +96,18 @@ const controlRenderer = defineComponent({
           : [],
       300,
     )
+    const autosave = useInspectorFieldAutosave(
+      computed(() => ctrl.control.value.path),
+    )
+    function onChange(value: unknown) {
+      autosave.markEditing()
+      ctrl.onChange(value)
+    }
+    function onBlur() {
+      ctrl.handleBlur()
+      void autosave.onFieldBlur(ctrl.control.value.data)
+    }
+    return { ...ctrl, onChange, onBlur, statusClass: autosave.statusClass }
   },
 })
 

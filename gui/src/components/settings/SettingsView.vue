@@ -11,23 +11,18 @@
         :id="`param-group-${propKey}`"
         :class="[
           'param-group',
-          statusClass(propKey),
           { highlighted: structureStore.selectedNode === propKey },
         ]"
         @click="onGroupClick(propKey)"
       >
         <h3 class="group-title">{{ propKey }}</h3>
-        <div
-          @focusin="onGroupFocus(propKey)"
-          @focusout="onGroupBlur(propKey)"
-        >
-          <JsonForms
-            :data="(draftValues[propKey] as Record<string, unknown>) ?? {}"
-            :schema="(propSchema as JsonSchema)"
-            :renderers="renderers"
-            @change="(e: CoreActions) => onGroupChange(propKey, (e as { data: unknown }).data)"
-          />
-        </div>
+        <ParamGroupForm
+          :group-key="propKey"
+          :data="(draftValues[propKey] as Record<string, unknown>) ?? {}"
+          :schema="(propSchema as JsonSchema)"
+          :renderers="renderers"
+          @change="(e: CoreActions) => onGroupChange(propKey, (e as { data: unknown }).data)"
+        />
       </div>
     </div>
 
@@ -38,15 +33,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import { JsonForms } from '@jsonforms/vue'
+import { ref, computed, onMounted, watch, nextTick, provide } from 'vue'
 import type { CoreActions } from '@jsonforms/core'
 import type { JsonSchema } from '@jsonforms/core'
 import { api } from '@/services/api'
 import { useStructureStore } from '@/stores/structure'
 import { inspectorRenderers } from '@/renderers'
-
-type GroupStatus = 'saved' | 'editing' | 'error'
+import ParamGroupForm from './ParamGroupForm.vue'
+import {
+  INSPECTOR_AUTOSAVE_KEY,
+  type FieldStatus,
+  type InspectorFieldAutosaveContext,
+} from '@/composables/useInspectorFieldAutosave'
 
 const renderers = inspectorRenderers
 
@@ -54,9 +52,7 @@ const loading = ref(true)
 const configSchema = ref<Record<string, unknown> | null>(null)
 const configValues = ref<Record<string, unknown>>({})
 const draftValues = ref<Record<string, unknown>>({})
-const groupStatus = ref<Record<string, GroupStatus>>({})
-
-const blurTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+const fieldStatus = ref<Record<string, FieldStatus>>({})
 
 const structureStore = useStructureStore()
 
@@ -66,9 +62,32 @@ const topLevelProperties = computed<Record<string, unknown>>(() => {
   return (schema as Record<string, Record<string, unknown>>).properties ?? {}
 })
 
-function statusClass(propKey: string): string {
-  return `param-group--${groupStatus.value[propKey] ?? 'saved'}`
+function fieldStatusKey(groupKey: string, fieldKey: string): string {
+  return `${groupKey}.${fieldKey}`
 }
+
+function initFieldStatus(config: Record<string, unknown>): void {
+  const status: Record<string, FieldStatus> = {}
+  for (const [groupKey, groupData] of Object.entries(config)) {
+    if (groupData === null || typeof groupData !== 'object' || Array.isArray(groupData)) continue
+    for (const fieldKey of Object.keys(groupData as Record<string, unknown>)) {
+      status[fieldStatusKey(groupKey, fieldKey)] = 'saved'
+    }
+  }
+  fieldStatus.value = status
+}
+
+const autosaveContext: InspectorFieldAutosaveContext = {
+  markEditing(groupKey: string, fieldKey: string) {
+    fieldStatus.value[fieldStatusKey(groupKey, fieldKey)] = 'editing'
+  },
+  statusClass(groupKey: string, fieldKey: string) {
+    return `field-value--${fieldStatus.value[fieldStatusKey(groupKey, fieldKey)] ?? 'saved'}`
+  },
+  saveField,
+}
+
+provide(INSPECTOR_AUTOSAVE_KEY, autosaveContext)
 
 onMounted(async () => {
   try {
@@ -76,9 +95,7 @@ onMounted(async () => {
     configSchema.value = schema
     configValues.value = config
     draftValues.value = JSON.parse(JSON.stringify(config)) as Record<string, unknown>
-    for (const key of Object.keys(config)) {
-      groupStatus.value[key] = 'saved'
-    }
+    initFieldStatus(config)
   } catch (e) {
     console.error('Failed to load config', e)
   } finally {
@@ -112,7 +129,6 @@ function cloneForPostMessage(data: unknown): Record<string, unknown> | null {
 
 function onGroupChange(groupKey: string, data: unknown) {
   draftValues.value = { ...draftValues.value, [groupKey]: data }
-  groupStatus.value[groupKey] = 'editing'
   const params = cloneForPostMessage(data)
   if (!params) return
   graphIframe()?.contentWindow?.postMessage(
@@ -121,32 +137,37 @@ function onGroupChange(groupKey: string, data: unknown) {
   )
 }
 
-function onGroupFocus(groupKey: string) {
-  clearTimeout(blurTimers[groupKey])
-}
+async function saveField(groupKey: string, fieldKey: string, value: unknown): Promise<void> {
+  const statusKey = fieldStatusKey(groupKey, fieldKey)
+  if (fieldStatus.value[statusKey] !== 'editing') return
 
-function onGroupBlur(groupKey: string) {
-  blurTimers[groupKey] = setTimeout(() => {
-    void saveGroup(groupKey)
-  }, 150)
-}
-
-async function saveGroup(groupKey: string) {
-  if (groupStatus.value[groupKey] !== 'editing') return
   try {
-    const groupData = draftValues.value[groupKey] as Record<string, unknown> | undefined
-    if (!groupData) return
-    for (const [paramKey, value] of Object.entries(groupData)) {
-      await api.setConfig(`${groupKey}.${paramKey}`, value)
+    await api.setConfig(`${groupKey}.${fieldKey}`, value)
+
+    const groupDraft = {
+      ...(draftValues.value[groupKey] as Record<string, unknown>),
+      [fieldKey]: value,
     }
-    configValues.value = {
-      ...configValues.value,
-      [groupKey]: JSON.parse(JSON.stringify(groupData)) as unknown,
+    draftValues.value = { ...draftValues.value, [groupKey]: groupDraft }
+
+    const groupConfig = {
+      ...(configValues.value[groupKey] as Record<string, unknown>),
+      [fieldKey]: JSON.parse(JSON.stringify(value)) as unknown,
     }
-    groupStatus.value[groupKey] = 'saved'
+    configValues.value = { ...configValues.value, [groupKey]: groupConfig }
+
+    fieldStatus.value[statusKey] = 'saved'
+
+    const params = cloneForPostMessage(groupDraft)
+    if (params) {
+      graphIframe()?.contentWindow?.postMessage(
+        { type: 'af:updateTooltip', nodeId: groupKey, params },
+        '*',
+      )
+    }
   } catch (e) {
-    console.error('Failed to save', groupKey, e)
-    groupStatus.value[groupKey] = 'error'
+    console.error('Failed to save field', groupKey, fieldKey, e)
+    fieldStatus.value[statusKey] = 'error'
   }
 }
 </script>
@@ -163,17 +184,6 @@ async function saveGroup(groupKey: string) {
   cursor: pointer;
   transition: border-color 0.25s, background 0.25s;
 }
-.param-group--saved {
-  border-color: var(--p-content-border-color, #e2e8f0);
-}
-.param-group--editing {
-  border-color: #f59e0b;
-  background: #fffbeb;
-}
-.param-group--error {
-  border-color: #ef4444;
-  background: #fff5f5;
-}
 .param-group.highlighted {
   background: #fefce8;
   border-color: #facc15;
@@ -188,5 +198,43 @@ async function saveGroup(groupKey: string) {
 .param-group :deep(.control-description),
 .param-group :deep(.primevue-control-hint) {
   display: none;
+}
+
+/* Per-field save status — border only on the value control */
+.param-group :deep(.field-value--saved .field-control),
+.param-group :deep(.field-value--saved textarea),
+.param-group :deep(.field-value--saved .p-inputtext),
+.param-group :deep(.field-value--saved .p-select),
+.param-group :deep(.field-value--saved .p-inputnumber),
+.param-group :deep(.field-value--saved .p-inputchips),
+.param-group :deep(.field-value--saved .slider-row .p-inputnumber),
+.param-group :deep(.field-value--saved .slider-row .p-slider) {
+  box-shadow: none;
+}
+
+.param-group :deep(.field-value--editing .field-control),
+.param-group :deep(.field-value--editing textarea),
+.param-group :deep(.field-value--editing .p-inputtext),
+.param-group :deep(.field-value--editing .p-select),
+.param-group :deep(.field-value--editing .p-inputnumber),
+.param-group :deep(.field-value--editing .p-inputchips),
+.param-group :deep(.field-value--editing .slider-row .p-inputnumber),
+.param-group :deep(.field-value--editing .slider-row .p-slider) {
+  outline: 2px solid #f59e0b;
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+.param-group :deep(.field-value--error .field-control),
+.param-group :deep(.field-value--error textarea),
+.param-group :deep(.field-value--error .p-inputtext),
+.param-group :deep(.field-value--error .p-select),
+.param-group :deep(.field-value--error .p-inputnumber),
+.param-group :deep(.field-value--error .p-inputchips),
+.param-group :deep(.field-value--error .slider-row .p-inputnumber),
+.param-group :deep(.field-value--error .slider-row .p-slider) {
+  outline: 2px solid #ef4444;
+  outline-offset: 1px;
+  border-radius: 4px;
 }
 </style>

@@ -67,12 +67,21 @@ class BlogPatch:
 # ---------------------------------------------------------------------------
 # Vertices
 # ---------------------------------------------------------------------------
+#
+# system_prompt fields use json_schema_extra={"x-textarea": True}:
+#   - Runtime value is still a plain str (one string for LLM system messages).
+#   - Pydantic emits "x-textarea": true on that property in get_config_schema().
+#   - The Inspector GUI TextareaRenderer matches that flag and shows a multi-line
+#     textarea instead of a single-line input.
+#   - Default text is one string; use triple quotes or explicit "\\n" in the
+#     literal when you want visible line breaks in the editor.
 
 
 class ResearcherVertex(StateVertex):
     """Collects 3 concise bullet points about the topic via LLM."""
 
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
+    # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for the researcher role when gathering topic facts.",
         json_schema_extra={"x-textarea": True},
@@ -102,6 +111,7 @@ class WriterVertex(StateVertex):
     """Turns research bullet points into a 150-word blog post via LLM."""
 
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
+    # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for the writer role when drafting the blog post.",
         json_schema_extra={"x-textarea": True},
@@ -131,6 +141,7 @@ class EditorVertex(StateVertex):
     """Polishes the draft for clarity, grammar, and brevity via LLM."""
 
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
+    # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for the editor role when polishing the draft.",
         json_schema_extra={"x-textarea": True},

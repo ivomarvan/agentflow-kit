@@ -1,107 +1,98 @@
 <template>
-  <Fluid>
-    <control-wrapper
-      v-bind="controlWrapper"
-      :styles="styles"
-      :isFocused="isFocused"
-      :appliedOptions="appliedOptions"
+  <div
+    class="textarea-field-block"
+    v-tooltip.top="tooltipBinding"
+  >
+    <label
+      v-if="computedLabel"
+      :for="inputId"
+      class="field-label"
     >
-      <div
-        class="control-inner"
-        v-tooltip.top="tooltipBinding"
-      >
-        <label
-          v-if="computedLabel"
-          :for="control.id + '-input'"
-          class="primevue-control-label"
-        >
-          {{ computedLabel }}
-          <span v-if="control.required" class="primevue-control-required">*</span>
-        </label>
-        <Textarea
-          :id="control.id + '-input'"
-          :class="[styles.control.input, { 'p-invalid': control.errors }]"
-          :disabled="!control.enabled"
-          :model-value="(control.data as string) ?? ''"
-          :auto-resize="true"
-          :rows="4"
-          @update:model-value="onChange"
-          @focus="handleFocus"
-          @blur="handleBlur"
-        />
-        <small v-if="control.errors" class="primevue-control-error">
-          {{ control.errors }}
-        </small>
-      </div>
-    </control-wrapper>
-  </Fluid>
+      {{ computedLabel }}
+      <span v-if="control.required" class="field-required">*</span>
+    </label>
+    <div :class="['field-value', statusClass]">
+      <Textarea
+        :id="inputId"
+        :model-value="(control.data as string) ?? ''"
+        :disabled="!control.enabled"
+        :invalid="!!control.errors"
+        :auto-resize="true"
+        :rows="4"
+        class="field-control"
+        @update:model-value="onChange"
+        @blur="onBlur"
+      />
+      <small v-if="control.errors" class="field-error">{{ control.errors }}</small>
+    </div>
+  </div>
 </template>
 
-<script lang="ts">
-import {
-  type ControlElement,
-  type JsonFormsRendererRegistryEntry,
-  rankWith,
-  type JsonSchema,
-} from '@jsonforms/core'
-import { rendererProps, useJsonFormsControl, type RendererProps } from '@jsonforms/vue'
-import { computed, defineComponent } from 'vue'
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { ControlElement } from '@jsonforms/core'
+import { rendererProps, useJsonFormsControl } from '@jsonforms/vue'
 import Textarea from 'primevue/textarea'
-import Fluid from 'primevue/fluid'
-import { usePrimeVueControl, ControlWrapper } from '@chaoqing/jsonforms-vue-primevue'
+import { useInspectorFieldAutosave } from '@/composables/useInspectorFieldAutosave'
 
-const isTextareaString = (schema: JsonSchema): boolean =>
-  schema.type === 'string' && (schema as Record<string, unknown>)['x-textarea'] === true
+const props = defineProps(rendererProps<ControlElement>())
+const { control, handleChange } = useJsonFormsControl(props)
+const { statusClass, markEditing, onFieldBlur } = useInspectorFieldAutosave(
+  computed(() => control.value.path),
+)
 
-const controlRenderer = defineComponent({
-  name: 'textarea-control-renderer',
-  components: { ControlWrapper, Textarea, Fluid },
-  props: { ...rendererProps<ControlElement>() },
-  setup(props: RendererProps<ControlElement>) {
-    const ctrl = usePrimeVueControl(
-      useJsonFormsControl(props),
-      (value: unknown) => (typeof value === 'string' ? value : ''),
-      300,
-    )
-    const tooltipBinding = computed(() => {
-      const text = ctrl.control.value.description?.trim()
-      return text ? { value: text, showDelay: 350 } : undefined
-    })
-    return { ...ctrl, tooltipBinding }
-  },
-})
+const inputId = computed(() => `${control.value.id}-input`)
+const computedLabel = computed(() => control.value.label ?? '')
+const tooltipText = computed(() => control.value.description?.trim() || '')
+const tooltipBinding = computed(() =>
+  tooltipText.value
+    ? { value: tooltipText.value, showDelay: 350 }
+    : undefined,
+)
 
-export default controlRenderer
+function onChange(value: unknown) {
+  markEditing()
+  handleChange(control.value.path, value)
+}
 
-export const textareaRendererEntry: JsonFormsRendererRegistryEntry = {
-  renderer: controlRenderer,
-  tester: rankWith(10, (_ui, schema) => isTextareaString(schema)),
+function onBlur() {
+  void onFieldBlur(control.value.data)
 }
 </script>
 
 <style scoped>
-.control-inner {
+.textarea-field-block {
   display: flex;
   flex-direction: column;
-  gap: var(--p-spacing-1, 0.25rem);
+  gap: 0.35rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--p-content-border-color, #e8edf2);
 }
-.control-inner :deep(textarea) {
+.textarea-field-block:last-child {
+  border-bottom: none;
+}
+.field-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--p-text-color, #334155);
+}
+.field-required {
+  color: var(--p-red-500, #ef4444);
+  margin-left: 0.15rem;
+}
+.field-value {
+  min-width: 0;
+}
+.field-control {
   width: 100%;
   font-family: ui-monospace, monospace;
   font-size: 0.82rem;
   resize: vertical;
 }
-.primevue-control-label {
-  font-weight: 500;
-  color: var(--p-text-color);
-  font-size: var(--p-font-size-sm, 0.875rem);
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-.primevue-control-required { color: var(--p-error-color, #f87171); font-weight: 600; }
-.primevue-control-error {
-  color: var(--p-error-color, #f87171);
-  font-size: var(--p-font-size-sm, 0.875rem);
+.field-error {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--p-red-500, #ef4444);
 }
 </style>

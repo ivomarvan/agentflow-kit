@@ -199,12 +199,21 @@ class ToggleDevice(ToolBase):
 # NOTE: StateVertex inherits from Pydantic BaseModel (wish API).
 #   Class-level Annotated fields auto-generate __init__ + validation + JSON Schema.
 #   No __init__ body, no self.x = x assignments needed.
+#
+# system_prompt fields use json_schema_extra={"x-textarea": True}:
+#   - Runtime value is still a plain str (one string for LLM system messages).
+#   - Pydantic emits "x-textarea": true on that property in get_config_schema().
+#   - The Inspector GUI TextareaRenderer matches that flag and shows a multi-line
+#     textarea instead of a single-line input.
+#   - Default text is one string; use triple quotes or explicit "\\n" in the
+#     literal when you want visible line breaks in the editor.
 
 
 class IntentParserVertex(StateVertex):
     """Parse and classify the user's voice command before passing it to the Worker."""
 
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "economy"
+    # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for classifying user intent into a category.",
         json_schema_extra={"x-textarea": True},
@@ -243,6 +252,7 @@ class DeviceWorkerVertex(StateVertex):
     connector:  Annotated[str, Field(description="LLM connector key from Context.")] = "economy"
     tools:      Annotated[str, Field(description="Tool registry key from Context.")] = "default"
     max_rounds: Annotated[int, Field(ge=1, le=10, description="Max tool-calling rounds.")] = 4
+    # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for proposing device actions using available tools.",
         json_schema_extra={"x-textarea": True},
@@ -288,6 +298,7 @@ class SafetyJudgeVertex(StateVertex):
     connector:     Annotated[str, Field(description="LLM connector key from Context.")] = "quality"
     max_revisions: Annotated[int, Field(ge=1, le=3,
                        description="Max Worker→Judge retry loops before forcing approval.")] = 2
+    # x-textarea: multi-line Inspector editor; triple-quoted default keeps "\\n" in the str.
     system_prompt: Annotated[str, Field(
         description="Safety rules for validating the proposed action plan.",
         json_schema_extra={"x-textarea": True},
@@ -343,6 +354,7 @@ class VoiceFormatterVertex(StateVertex):
     """Convert the approved action plan into a natural, TTS-optimised voice response."""
 
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "economy"
+    # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for converting the action plan into a voice-friendly reply.",
         json_schema_extra={"x-textarea": True},

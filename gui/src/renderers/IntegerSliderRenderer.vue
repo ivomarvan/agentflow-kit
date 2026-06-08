@@ -1,129 +1,135 @@
 <template>
-  <Fluid>
-    <control-wrapper
-      v-bind="controlWrapper"
-      :styles="styles"
-      :isFocused="isFocused"
-      :appliedOptions="appliedOptions"
+  <div
+    class="horizontal-field-row"
+    v-tooltip.top="tooltipBinding"
+  >
+    <label
+      v-if="computedLabel"
+      :for="inputId"
+      class="field-label"
     >
-      <div
-        class="control-inner"
-        v-tooltip.top="tooltipBinding"
-      >
-        <label
-          v-if="computedLabel"
-          :for="control.id + '-input'"
-          class="primevue-control-label"
-        >
-          {{ computedLabel }}
-          <span v-if="control.required" class="primevue-control-required">*</span>
-        </label>
-        <div class="slider-row">
-          <InputNumber
-            :id="control.id + '-input'"
-            :class="{ 'p-invalid': control.errors }"
-            :disabled="!control.enabled"
-            :model-value="numValue"
-            :min="schema.minimum"
-            :max="schema.maximum"
-            :show-buttons="true"
-            :use-grouping="false"
-            input-class="slider-input"
-            @update:model-value="onNumberChange"
-            @focus="handleFocus"
-            @blur="handleBlur"
-          />
-          <Slider
-            v-if="hasRange"
-            class="slider-track"
-            :model-value="numValue ?? schema.minimum ?? 0"
-            :min="schema.minimum ?? 0"
-            :max="schema.maximum ?? 100"
-            :step="1"
-            :disabled="!control.enabled"
-            @update:model-value="onSliderChange"
-          />
-        </div>
-        <small v-if="control.errors" class="primevue-control-error">
-          {{ control.errors }}
-        </small>
+      {{ computedLabel }}
+      <span v-if="control.required" class="field-required">*</span>
+    </label>
+    <span v-else class="field-label field-label--empty" />
+
+    <div :class="['field-value', statusClass]">
+      <div class="slider-row">
+        <InputNumber
+          :input-id="inputId"
+          :model-value="numValue"
+          :disabled="!control.enabled"
+          :invalid="!!control.errors"
+          :min="integerMin"
+          :max="integerMax"
+          :show-buttons="true"
+          :use-grouping="false"
+          input-class="slider-input"
+          @update:model-value="onNumberChange"
+          @blur="onBlur"
+        />
+        <Slider
+          class="slider-track"
+          :model-value="numValue ?? integerMin ?? 0"
+          :min="integerMin ?? 0"
+          :max="integerMax ?? 100"
+          :step="1"
+          :disabled="!control.enabled"
+          @update:model-value="onSliderChange"
+          @mouseup="onSliderRelease"
+          @touchend="onSliderRelease"
+        />
       </div>
-    </control-wrapper>
-  </Fluid>
+      <small v-if="control.errors" class="field-error">{{ control.errors }}</small>
+    </div>
+  </div>
 </template>
 
-<script lang="ts">
-import {
-  type ControlElement,
-  type JsonFormsRendererRegistryEntry,
-  rankWith,
-  type JsonSchema,
-} from '@jsonforms/core'
-import { rendererProps, useJsonFormsControl, type RendererProps } from '@jsonforms/vue'
-import { computed, defineComponent } from 'vue'
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { ControlElement, JsonSchema } from '@jsonforms/core'
+import { rendererProps, useJsonFormsControl } from '@jsonforms/vue'
 import InputNumber from 'primevue/inputnumber'
 import Slider from 'primevue/slider'
-import Fluid from 'primevue/fluid'
-import { usePrimeVueControl, ControlWrapper } from '@chaoqing/jsonforms-vue-primevue'
+import { useInspectorFieldAutosave } from '@/composables/useInspectorFieldAutosave'
 
-const hasMinMax = (schema: JsonSchema): boolean =>
-  schema.type === 'integer' &&
-  schema.minimum !== undefined &&
-  schema.maximum !== undefined
+const props = defineProps(rendererProps<ControlElement>())
+const { control, handleChange } = useJsonFormsControl(props)
+const { statusClass, markEditing, onFieldBlur } = useInspectorFieldAutosave(
+  computed(() => control.value.path),
+)
 
-const controlRenderer = defineComponent({
-  name: 'integer-slider-control-renderer',
-  components: { ControlWrapper, InputNumber, Slider, Fluid },
-  props: { ...rendererProps<ControlElement>() },
-  setup(props: RendererProps<ControlElement>) {
-    const ctrl = usePrimeVueControl(
-      useJsonFormsControl(props),
-      (value: unknown) => (typeof value === 'number' ? value : null),
-      0,
-    )
-    const schema = computed(() => ctrl.control.value.schema as JsonSchema)
-    const hasRange = computed(
-      () => schema.value.minimum !== undefined && schema.value.maximum !== undefined,
-    )
-    const numValue = computed(() =>
-      typeof ctrl.control.value.data === 'number' ? ctrl.control.value.data : null,
-    )
-    const tooltipBinding = computed(() => {
-      const text = ctrl.control.value.description?.trim()
-      return text ? { value: text, showDelay: 350 } : undefined
-    })
-    function onNumberChange(val: number | null) {
-      ctrl.onChange(val ?? schema.value.minimum ?? 0)
-    }
-    function onSliderChange(val: number | number[]) {
-      const next = Array.isArray(val) ? val[0] : val
-      ctrl.onChange(next)
-    }
-    return {
-      ...ctrl,
-      schema,
-      hasRange,
-      numValue,
-      tooltipBinding,
-      onNumberChange,
-      onSliderChange,
-    }
-  },
+const resolvedSchema = computed(() => control.value.schema as JsonSchema)
+const inputId = computed(() => `${control.value.id}-input`)
+const computedLabel = computed(() => control.value.label ?? '')
+const tooltipText = computed(() => control.value.description?.trim() || '')
+const tooltipBinding = computed(() =>
+  tooltipText.value
+    ? { value: tooltipText.value, showDelay: 350 }
+    : undefined,
+)
+
+const integerMin = computed(() => {
+  const min = resolvedSchema.value.minimum
+  return typeof min === 'number' ? min : undefined
 })
 
-export default controlRenderer
+const integerMax = computed(() => {
+  const max = resolvedSchema.value.maximum
+  return typeof max === 'number' ? max : undefined
+})
 
-export const integerSliderRendererEntry: JsonFormsRendererRegistryEntry = {
-  renderer: controlRenderer,
-  tester: rankWith(10, (_ui, schema) => hasMinMax(schema)),
+const numValue = computed(() =>
+  typeof control.value.data === 'number' ? control.value.data : null,
+)
+
+function onNumberChange(val: number | null) {
+  markEditing()
+  handleChange(control.value.path, val ?? integerMin.value ?? 0)
+}
+
+function onSliderChange(val: number | number[]) {
+  markEditing()
+  const next = Array.isArray(val) ? val[0] : val
+  handleChange(control.value.path, next)
+}
+
+function onBlur() {
+  void onFieldBlur(control.value.data)
+}
+
+function onSliderRelease() {
+  void onFieldBlur(control.value.data)
 }
 </script>
 
 <style scoped>
-.control-inner {
-  display: flex;
-  flex-direction: column;
-  gap: var(--p-spacing-1, 0.25rem);
+.horizontal-field-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 38%) 1fr;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--p-content-border-color, #e8edf2);
+}
+.horizontal-field-row:last-child {
+  border-bottom: none;
+}
+.field-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--p-text-color, #334155);
+  word-break: break-word;
+}
+.field-label--empty {
+  visibility: hidden;
+}
+.field-required {
+  color: var(--p-red-500, #ef4444);
+  margin-left: 0.15rem;
+}
+.field-value {
+  min-width: 0;
 }
 .slider-row {
   display: flex;
@@ -136,17 +142,10 @@ export const integerSliderRendererEntry: JsonFormsRendererRegistryEntry = {
 .slider-track {
   flex: 1;
 }
-.primevue-control-label {
-  font-weight: 500;
-  color: var(--p-text-color);
-  font-size: var(--p-font-size-sm, 0.875rem);
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-.primevue-control-required { color: var(--p-error-color, #f87171); font-weight: 600; }
-.primevue-control-error {
-  color: var(--p-error-color, #f87171);
-  font-size: var(--p-font-size-sm, 0.875rem);
+.field-error {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--p-red-500, #ef4444);
 }
 </style>
