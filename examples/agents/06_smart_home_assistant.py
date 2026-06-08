@@ -68,19 +68,6 @@ _SYSTEM_PROMPT = (
     "Safety is the top priority."
 )
 
-_SAFETY_RULES = """\
-You are a safety officer for a smart home system. Review the proposed action plan.
-
-SAFETY RULES:
-1. Temperature must stay between 10°C and 28°C in any room.
-2. Never turn on a stove or oven when no person is detected in that room.
-3. Never set temperature below 15°C in a room where a person is present.
-4. Security cameras cannot be disabled remotely.
-
-If SAFE:   respond exactly with "APPROVED: <one-line confirmation>"
-If UNSAFE: respond exactly with "REJECTED: <specific rule violated and how to fix it>"
-"""
-
 # ---------------------------------------------------------------------------
 # Application state, patch and signals
 # ---------------------------------------------------------------------------
@@ -218,6 +205,13 @@ class IntentParserVertex(StateVertex):
     """Parse and classify the user's voice command before passing it to the Worker."""
 
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "economy"
+    system_prompt: Annotated[str, Field(
+        description="Instruction for classifying user intent into a category.",
+        json_schema_extra={"format": "textarea"},
+    )] = (
+        "Classify the user's smart home request. "
+        "Respond with: 'CATEGORY: <LIGHTING|TEMPERATURE|APPLIANCE|STATUS_QUERY|UNKNOWN>'"
+    )
 
     async def run(
         self, state: SmartHomeState, ctx: Context
@@ -232,10 +226,7 @@ class IntentParserVertex(StateVertex):
             (SmartHomeSignal.parsed, patch) with intent category populated.
         """
         response = await ctx.llm(self.connector).achat([
-            {"role": "system", "content": (
-                "Classify the user's smart home request. "
-                "Respond with: 'CATEGORY: <LIGHTING|TEMPERATURE|APPLIANCE|STATUS_QUERY|UNKNOWN>'"
-            )},
+            {"role": "system", "content": self.system_prompt},
             *state.messages,
         ])
         intent = "UNKNOWN"
@@ -252,6 +243,13 @@ class DeviceWorkerVertex(StateVertex):
     connector:  Annotated[str, Field(description="LLM connector key from Context.")] = "economy"
     tools:      Annotated[str, Field(description="Tool registry key from Context.")] = "default"
     max_rounds: Annotated[int, Field(ge=1, le=10, description="Max tool-calling rounds.")] = 4
+    system_prompt: Annotated[str, Field(
+        description="Instruction for proposing device actions using available tools.",
+        json_schema_extra={"format": "textarea"},
+    )] = (
+        "You control a smart home. Use tools to check the current room state, "
+        "then propose specific device actions clearly listed line by line."
+    )
 
     async def run(
         self, state: SmartHomeState, ctx: Context
@@ -265,6 +263,7 @@ class DeviceWorkerVertex(StateVertex):
         Returns:
             (SmartHomeSignal.proposed, patch) with action_plan set.
         """
+        base = self.system_prompt
         correction = (
             f"\n\nYour previous plan was REJECTED for this reason: {state.rejection_reason}\n"
             "Please revise the plan to fix the issue."
@@ -272,11 +271,7 @@ class DeviceWorkerVertex(StateVertex):
         )
         response = await ctx.llm(self.connector).achat_with_tools(
             messages=[
-                {"role": "system", "content": (
-                    "You control a smart home. Use tools to check the current room state, "
-                    "then propose specific device actions clearly listed line by line."
-                    + correction
-                )},
+                {"role": "system", "content": base + correction},
                 *state.messages,
             ],
             registry=ctx.get_tools(self.tools),
@@ -293,6 +288,21 @@ class SafetyJudgeVertex(StateVertex):
     connector:     Annotated[str, Field(description="LLM connector key from Context.")] = "quality"
     max_revisions: Annotated[int, Field(ge=1, le=3,
                        description="Max Worker→Judge retry loops before forcing approval.")] = 2
+    system_prompt: Annotated[str, Field(
+        description="Safety rules for validating the proposed action plan.",
+        json_schema_extra={"format": "textarea"},
+    )] = """\
+You are a safety officer for a smart home system. Review the proposed action plan.
+
+SAFETY RULES:
+1. Temperature must stay between 10°C and 28°C in any room.
+2. Never turn on a stove or oven when no person is detected in that room.
+3. Never set temperature below 15°C in a room where a person is present.
+4. Security cameras cannot be disabled remotely.
+
+If SAFE:   respond exactly with "APPROVED: <one-line confirmation>"
+If UNSAFE: respond exactly with "REJECTED: <specific rule violated and how to fix it>"
+"""
 
     async def run(
         self, state: SmartHomeState, ctx: Context
@@ -314,7 +324,7 @@ class SafetyJudgeVertex(StateVertex):
             return SmartHomeSignal.approved, SmartHomePatch(revisions=state.revisions + 1)
 
         response = await ctx.llm(self.connector).achat([
-            {"role": "system", "content": _SAFETY_RULES},
+            {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": f"Action plan to review:\n{state.action_plan}"},
         ])
         text = response.text.strip()
@@ -333,6 +343,14 @@ class VoiceFormatterVertex(StateVertex):
     """Convert the approved action plan into a natural, TTS-optimised voice response."""
 
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "economy"
+    system_prompt: Annotated[str, Field(
+        description="Instruction for converting the action plan into a voice-friendly reply.",
+        json_schema_extra={"format": "textarea"},
+    )] = (
+        "Turn the following smart home action plan into a short, natural voice reply "
+        "for a smart speaker. Rules: no markdown, no bullet points, "
+        "max 2 sentences, warm and friendly tone, confirm what was done."
+    )
 
     async def run(
         self, state: SmartHomeState, ctx: Context
@@ -347,11 +365,7 @@ class VoiceFormatterVertex(StateVertex):
             (SmartHomeSignal.done, patch) with TTS-ready final_response.
         """
         response = await ctx.llm(self.connector).achat([
-            {"role": "system", "content": (
-                "Turn the following smart home action plan into a short, natural voice reply "
-                "for a smart speaker. Rules: no markdown, no bullet points, "
-                "max 2 sentences, warm and friendly tone, confirm what was done."
-            )},
+            {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": state.action_plan},
         ])
         return SmartHomeSignal.done, SmartHomePatch(final_response=response.text.strip())

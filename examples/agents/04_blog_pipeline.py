@@ -73,6 +73,10 @@ class ResearcherVertex(StateVertex):
     """Collects 3 concise bullet points about the topic via LLM."""
 
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
+    system_prompt: Annotated[str, Field(
+        description="Instruction for the researcher role when gathering topic facts.",
+        json_schema_extra={"format": "textarea"},
+    )] = "You are a Tech Researcher. Collect 3 concise bullet points about the topic."
 
     async def run(self, state: BlogState, ctx: Context) -> tuple[Any, BlogPatch]:
         """Call the LLM in a researcher role to gather key facts.
@@ -86,12 +90,7 @@ class ResearcherVertex(StateVertex):
         """
         ctx.logger.info("researcher: topic=%r", state.topic)
         messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a Tech Researcher. Collect 3 concise bullet points about the topic."
-                ),
-            },
+            {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": state.topic},
         ]
         response = await ctx.llm(self.connector).achat(messages)
@@ -103,6 +102,10 @@ class WriterVertex(StateVertex):
     """Turns research bullet points into a 150-word blog post via LLM."""
 
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
+    system_prompt: Annotated[str, Field(
+        description="Instruction for the writer role when drafting the blog post.",
+        json_schema_extra={"format": "textarea"},
+    )] = "You are a Tech Writer. Turn the bullet points into a 150-word blog post."
 
     async def run(self, state: BlogState, ctx: Context) -> tuple[Any, BlogPatch]:
         """Call the LLM in a writer role to draft the blog post.
@@ -116,12 +119,7 @@ class WriterVertex(StateVertex):
         """
         ctx.logger.info("writer: notes_len=%d", len(state.research_notes))
         messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a Tech Writer. Turn the bullet points into a 150-word blog post."
-                ),
-            },
+            {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": state.research_notes},
         ]
         response = await ctx.llm(self.connector).achat(messages)
@@ -133,6 +131,13 @@ class EditorVertex(StateVertex):
     """Polishes the draft for clarity, grammar, and brevity via LLM."""
 
     connector: Annotated[str, Field(description="LLM connector key from Context.")] = "default"
+    system_prompt: Annotated[str, Field(
+        description="Instruction for the editor role when polishing the draft.",
+        json_schema_extra={"format": "textarea"},
+    )] = (
+        "You are a ruthless Editor. "
+        "Polish the draft: improve clarity, fix grammar, keep it short."
+    )
 
     async def run(self, state: BlogState, ctx: Context) -> tuple[Any, BlogPatch]:
         """Call the LLM in an editor role to refine the draft.
@@ -146,13 +151,7 @@ class EditorVertex(StateVertex):
         """
         ctx.logger.info("editor: draft_len=%d", len(state.draft))
         messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a ruthless Editor. "
-                    "Polish the draft: improve clarity, fix grammar, keep it short."
-                ),
-            },
+            {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": state.draft},
         ]
         response = await ctx.llm(self.connector).achat(messages)
