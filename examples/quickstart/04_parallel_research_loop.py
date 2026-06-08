@@ -182,48 +182,34 @@ class Publish(StateVertex):
         return StdSignal.ok, ResearchPatch(final_report=report)
 
 
-class ParallelResearchLoopApp(AgentApp):
-    """Demonstrates parallel fan-out, fan-in join, and a review-revision loop."""
+_app = AgentApp(
+    doc=__doc__,
+    sample_prompts=[
+        "Research the impact of large language models on software development.",
+        "Write a report on the current state of autonomous agents.",
+        "Analyze the trade-offs between BSP and event-driven agent architectures.",
+    ],
+    context=Context(),
+    state_graph=StateGraph(
+        start=Research,
+        transitions=[
+            Transition(Research, StdSignal.ok, Parallel(WriteIntro, WriteBody)),
+            Transition(WriteIntro, StdSignal.done, Review),
+            Transition(WriteBody, StdSignal.done, Review),
+            Transition(Review, ReviewSignal.needs_revision, Research),
+            Transition(Review, ReviewSignal.approved, Publish),
+            Transition(Publish, StdSignal.ok, StdEnd),
+        ],
+    ),
+    initial_state_factory=lambda q: ResearchState(topic=q) if q else ResearchState(),
+)
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.connector = FakeLlmConnector()
-        self.graph = StateGraph(
-            start=Research,
-            transitions=[
-                Transition(Research, StdSignal.ok, Parallel(WriteIntro, WriteBody)),
-                Transition(WriteIntro, StdSignal.done, Review),
-                Transition(WriteBody, StdSignal.done, Review),
-                Transition(Review, ReviewSignal.needs_revision, Research),
-                Transition(Review, ReviewSignal.approved, Publish),
-                Transition(Publish, StdSignal.ok, StdEnd),
-            ],
-        )
+def _extract_research_result(state: ResearchState) -> str | None:
+    if state.final_report:
+        return f"Report published: {state.final_report[:50]}..."
+    return "Completed."
 
-    @property
-    def sample_prompts(self) -> list[str]:
-        """Return example prompts for the GUI prompt selector."""
-        return [
-            "Research the impact of large language models on software development.",
-            "Write a report on the current state of autonomous agents.",
-            "Analyze the trade-offs between BSP and event-driven agent architectures.",
-        ]
-
-    async def run_workflow(self) -> str | None:
-        """Run the parallel research loop to completion and print the final state."""
-        setup_pretty_logging()
-
-        ctx = Context(connector=self.connector)
-        hooks = LoggingHooks()
-        runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
-        final_state: ResearchState = await runner.run(ResearchState())  # type: ignore[assignment]
-
-        print(f"\nFinal revision_count: {final_state.revision_count}")
-        print("Done!")
-        if final_state.final_report:
-            return f"Report published: {final_state.final_report[:50]}..."
-        return "Completed."
-
+_app._extract_result = _extract_research_result  # type: ignore[method-assign]
 
 if __name__ == "__main__":
-    ParallelResearchLoopApp().cli(__doc__, name=__name__)
+    _app.cli(__doc__, name=__name__)

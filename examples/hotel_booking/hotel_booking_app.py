@@ -114,68 +114,48 @@ class Done(StateVertex):
         return StdSignal.done, HotelPatch()
 
 
-class HotelBookingApp(AgentApp):
-    """Hotel booking demo — shows domain events and custom GUI renderer.
+_store = ReservationStore()
+_graph = StateGraph(
+    start=ProcessBooking,
+    transitions=[
+        Transition(ProcessBooking, StdSignal.ok, Done),
+        Transition(Done, StdSignal.done, StdEnd),
+    ],
+)
 
-    Uses FakeLlmConnector so no API key is required.
-    The ReservationEvent emitted by HotelBookingTool is rendered as a table
-    in the GUI when gui_renderers/hotel_reservation.vue is registered.
-    """
+_app = AgentApp(
+    doc=__doc__,
+    sample_prompts=[
+        "Book room 101 for John Smith from Dec 20 to Dec 23",
+        "Reserve a double room for Mary Jones, Jan 5-8",
+        "Book the penthouse for Bob Brown next weekend",
+    ],
+    state_graph=_graph,
+    initial_state_factory=lambda q: HotelState(request=q or "Book a room"),
+    context=Context(),
+)
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.connector = FakeLlmConnector()
-        self._store = ReservationStore()
-        self.registry = ToolRegistry([
-            HotelBookingTool(store=self._store, event_bus=self.event_bus),
-        ])
-        self.graph = StateGraph(
-            start=ProcessBooking,
-            transitions=[
-                Transition(ProcessBooking, StdSignal.ok, Done),
-                Transition(Done, StdSignal.done, StdEnd),
-            ],
-        )
+_registry = ToolRegistry([
+    HotelBookingTool(store=_store, event_bus=_app.event_bus),
+])
+_app._context = Context(
+    tool_registries={"default": _registry},
+    event_bus=_app.event_bus,
+)
+_app.context = _app._context
 
-    @property
-    def sample_prompts(self) -> list[str]:
-        """Return demo prompts shown in the GUI prompt selector.
 
-        Returns:
-            List of example booking request strings.
-        """
-        return [
-            "Book room 101 for John Smith from Dec 20 to Dec 23",
-            "Reserve a double room for Mary Jones, Jan 5-8",
-            "Book the penthouse for Bob Brown next weekend",
-        ]
+def _extract_hotel_result(state: HotelState) -> str | None:
+    total = len(_store)
+    logger.info("Reservations so far: %d", total)
+    return (
+        f"Booking complete. Total reservations: {total}. "
+        f"Last: {state.last_booking_result}"
+    )
 
-    async def run_workflow(self) -> str | None:
-        """Run the hotel booking workflow and return a summary.
 
-        Creates a fresh Context with the shared event_bus and tool registry,
-        executes the StateGraph, and logs the total reservation count.
-
-        Returns:
-            Summary string with total reservation count and last booking result.
-        """
-        ctx = Context(
-            connector=self.connector,
-            tools=self.registry,
-            event_bus=self.event_bus,
-        )
-        runner = StateGraphRunner(graph=self.graph, context=ctx)
-        final = cast(HotelState, await runner.run(
-            HotelState(request=self.current_prompt or "Book a room")
-        ))
-        total = len(self._store)
-        logger.info("Reservations so far: %d", total)
-        return (
-            f"Booking complete. Total reservations: {total}. "
-            f"Last: {final.last_booking_result}"
-        )
-
+_app._extract_result = _extract_hotel_result  # type: ignore[method-assign]
 
 if __name__ == "__main__":
     setup_pretty_logging()
-    HotelBookingApp().cli(__doc__, name=__name__)
+    _app.cli(__doc__, name=__name__)

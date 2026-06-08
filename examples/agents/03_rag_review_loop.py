@@ -162,44 +162,29 @@ class Review(StateVertex):
 
 
 # ---------------------------------------------------------------------------
-# App
+# Wiring — declarative AgentApp
 # ---------------------------------------------------------------------------
 
+_app = AgentApp(
+    doc=__doc__,
+    context=Context(),
+    state_graph=StateGraph(
+        start=Retrieve,
+        transitions=[
+            Transition(Retrieve, StdSignal.ok, Generate),
+            Transition(Generate, StdSignal.ok, Review),
+            Transition(Review, ReviewSignal.approved, StdEnd),
+            Transition(Review, ReviewSignal.max_attempts, StdEnd),
+            Transition(Review, ReviewSignal.needs_revision, Generate),
+        ],
+    ),
+    initial_state_factory=lambda _q: ReviewState(),
+)
 
-class RagReviewApp(AgentApp):
-    """RAG pipeline with an iterative review-revision loop (no real LLM)."""
+def _extract_rag_result(state: ReviewState) -> str | None:
+    return state.draft or "Completed."
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.connector = FakeLlmConnector()
-        self.graph = StateGraph(
-            start=Retrieve,
-            transitions=[
-                Transition(Retrieve, StdSignal.ok, Generate),
-                Transition(Generate, StdSignal.ok, Review),
-                Transition(Review, ReviewSignal.approved, StdEnd),
-                Transition(Review, ReviewSignal.max_attempts, StdEnd),
-                Transition(Review, ReviewSignal.needs_revision, Generate),
-            ],
-        )
-
-    async def run_workflow(self) -> str | None:
-        """Run the RAG review loop and print the approved draft.
-
-        Returns:
-            Final draft string or a status message.
-        """
-        setup_pretty_logging()
-        ctx = Context(
-            llm_connectors={"default": self.connector},
-            event_bus=self.event_bus,
-        )
-        hooks = LoggingHooks()
-        runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
-        final = cast(ReviewState, await runner.run(ReviewState()))
-        print(f"\nFinal draft (attempts={final.attempts}):\n{final.draft}")
-        return final.draft or "Completed."
-
+_app._extract_result = _extract_rag_result  # type: ignore[method-assign]
 
 if __name__ == "__main__":
-    RagReviewApp().cli(__doc__, name=__name__)
+    _app.cli(__doc__, name=__name__)

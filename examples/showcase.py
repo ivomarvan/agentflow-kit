@@ -287,29 +287,64 @@ class ToolExecutionVertex(StateVertex):
 
 
 # ---------------------------------------------------------------------------
-# Application
+# Wiring — declarative AgentApp
 # ---------------------------------------------------------------------------
 
+_connector = LlmConnector(cache=LlmFileCache(__file__))
+_registry = ToolRegistry(tools=[GetWeather(), Calculator(), GetExchangeRate()])
+_llm_v = LlmCallVertex(_registry)
+_tool_v = ToolExecutionVertex(_registry)
 
-class ShowcaseApp(AgentApp):
-    """agentflow showcase — ReAct agent with weather, calculator, and currency tools.
-
-    Wires every public framework feature into one concise runnable application.
-    Pass a custom ``connector`` to use offline (e.g. ``FakeLlmConnector``).
-    """
-
-    def __init__(self, connector: LlmConnectorBase | None = None) -> None:
-        super().__init__()
-        # Connector injection: real LLM by default, injectable for testing
-        self.connector: LlmConnectorBase = (
-            connector or LlmConnector(cache=LlmFileCache(__file__))
+_app = AgentApp(
+    doc=__doc__,
+    system_prompt=_SYSTEM_PROMPT,
+    default_question=_DEFAULT_QUESTION,
+    sample_prompts=[
+        "What's the weather in Prague? Also compute 42 * 7.",
+        "Is Tokyo warmer than London? And how much is 100 EUR in CZK?",
+        "Compare weather in Paris and Berlin. What is 1 GBP in EUR?",
+    ],
+    context=Context(
+        llm_connectors={"default": _connector},
+        tool_registries={"default": _registry},
+    ),
+    state_graph=StateGraph(
+        start=_llm_v,
+        transitions=[
+            Transition(_llm_v, AppSignal.tool_call, _tool_v),
+            Transition(_tool_v, StdSignal.ok, _llm_v),
+            Transition(_llm_v, AppSignal.final_answer, StdEnd),
+            Transition(_llm_v, AppSignal.max_steps, StdEnd),
+        ],
+    ),
+    initial_state_factory=lambda q: AppState(
+        messages=(
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": q or _DEFAULT_QUESTION},
         )
-        tools: list[ToolBase] = [GetWeather(), Calculator(), GetExchangeRate()]
-        self.registry = ToolRegistry(tools=tools)
+    ),
+)
 
-        llm_v = LlmCallVertex(self.registry)
-        tool_v = ToolExecutionVertex(self.registry)
-        self.graph = StateGraph(
+_app._extract_result = lambda state: state.final_answer  # type: ignore[method-assign, attr-defined]
+
+
+def ShowcaseApp(connector: LlmConnectorBase | None = None) -> AgentApp:
+    """Backward-compatible factory; optional connector injection for offline tests."""
+    if connector is None:
+        return _app
+    registry = ToolRegistry(tools=[GetWeather(), Calculator(), GetExchangeRate()])
+    llm_v = LlmCallVertex(registry)
+    tool_v = ToolExecutionVertex(registry)
+    return AgentApp(
+        doc=__doc__,
+        system_prompt=_SYSTEM_PROMPT,
+        default_question=_DEFAULT_QUESTION,
+        sample_prompts=_app.sample_prompts,
+        context=Context(
+            llm_connectors={"default": connector},
+            tool_registries={"default": registry},
+        ),
+        state_graph=StateGraph(
             start=llm_v,
             transitions=[
                 Transition(llm_v, AppSignal.tool_call, tool_v),
@@ -317,46 +352,15 @@ class ShowcaseApp(AgentApp):
                 Transition(llm_v, AppSignal.final_answer, StdEnd),
                 Transition(llm_v, AppSignal.max_steps, StdEnd),
             ],
-        )
-
-    @property
-    def sample_prompts(self) -> list[str]:
-        """Example prompts shown in the GUI prompt selector."""
-        return [
-            "What's the weather in Prague? Also compute 42 * 7.",
-            "Is Tokyo warmer than London? And how much is 100 EUR in CZK?",
-            "Compare weather in Paris and Berlin. What is 1 GBP in EUR?",
-        ]
-
-    async def run_workflow(self) -> str | None:
-        """Run the ReAct agent loop and return the final answer.
-
-        Returns:
-            Final answer string produced by the LLM, or None on error.
-        """
-        setup_pretty_logging()
-        question = self.current_prompt or _DEFAULT_QUESTION
-
-        # EventBus subscriber: log every ToolCalledEvent as a structured line
-        class _ToolEventLogger:
-            async def on_event(self, event: AgentEvent) -> None:
-                if isinstance(event, ToolCalledEvent):
-                    pass  # already logged by ToolExecutionVertex via ctx.logger
-
-        self.event_bus.subscribe(_ToolEventLogger())
-
-        ctx = Context(connector=self.connector, event_bus=self.event_bus)
-        hooks = LoggingHooks()
-        runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
-        initial = AppState(
+        ),
+        initial_state_factory=lambda q: AppState(
             messages=(
                 {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": question},
+                {"role": "user", "content": q or _DEFAULT_QUESTION},
             )
-        )
-        final = cast(AppState, await runner.run(initial))
-        return final.final_answer
+        ),
+    )
 
 
 if __name__ == "__main__":
-    ShowcaseApp().cli(__doc__, name=__name__)
+    _app.cli(__doc__, name=__name__)

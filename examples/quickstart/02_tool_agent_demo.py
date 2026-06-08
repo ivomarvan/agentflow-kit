@@ -55,43 +55,32 @@ class DemoPatch:
     answer: str | None = None
 
 
-class ToolAgentDemoApp(AgentApp):
-    """Demonstrates wrapping a ToolAgent as a single StateGraph vertex."""
+_connector = FakeLlmConnector()
+# Queue a plain-text final answer — no tool_calls, so arun() terminates immediately.
+_connector.queue_responses(["50"])
+_agent = ToolAgent(
+    connector=_connector,
+    tools=[],
+    system_prompt="You are a helpful math assistant.",
+    name="demo_agent",
+)
+_agent_vertex = ToolAgentVertex(
+    agent=_agent,
+    question_from_state=lambda state: state.question,  # type: ignore[union-attr]
+    answer_to_patch=lambda ans: DemoPatch(answer=ans),
+)
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.connector = FakeLlmConnector()
-        # Queue a plain-text final answer — no tool_calls, so arun() terminates immediately.
-        self.connector.queue_responses(["50"])
-        self.agent = ToolAgent(
-            connector=self.connector,
-            tools=[],
-            system_prompt="You are a helpful math assistant.",
-            name="demo_agent",
-        )
-        agent_vertex = ToolAgentVertex(
-            agent=self.agent,
-            question_from_state=lambda state: state.question,  # type: ignore[union-attr]
-            answer_to_patch=lambda ans: DemoPatch(answer=ans),
-        )
-        self.graph = StateGraph(
-            start=agent_vertex,
-            transitions=[
-                Transition(agent_vertex, StdSignal.ok, StdEnd),
-            ],
-        )
+_app = AgentApp(
+    doc=__doc__,
+    context=Context(),
+    state_graph=StateGraph(
+        start=_agent_vertex,
+        transitions=[Transition(_agent_vertex, StdSignal.ok, StdEnd)],
+    ),
+    initial_state_factory=lambda _q: DemoState(question="What is 42 + 8?"),
+)
 
-    async def run_workflow(self) -> str | None:
-        """Run the ToolAgent demo graph and print the question and answer."""
-        # ctx.connector is not used by ToolAgentVertex; a fresh FakeLlmConnector suffices.
-        ctx = Context(connector=FakeLlmConnector())
-        runner = StateGraphRunner(graph=self.graph, context=ctx)
-        initial_state = DemoState(question="What is 42 + 8?")
-        final_state: DemoState = await runner.run(initial_state)  # type: ignore[assignment]
-        print(f"Question: {final_state.question}")
-        print(f"Answer: {final_state.answer}")
-        return None
-
+_app._extract_result = lambda state: state.answer or None  # type: ignore[method-assign, attr-defined]
 
 if __name__ == "__main__":
-    ToolAgentDemoApp().cli(__doc__, name=__name__)
+    _app.cli(__doc__, name=__name__)

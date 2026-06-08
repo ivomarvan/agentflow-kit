@@ -129,42 +129,48 @@ class Review(StateVertex):
         return DemoSignal.approved, DemoPatch(messages=("Review: approved.",))
 
 
-class LiveGraphDemoApp(AgentApp):
-    """Demonstrates LiveGraphHooks DOT snapshots with the §2.5 topology."""
+_connector = FakeLlmConnector()
+_graph = StateGraph(
+    start=Research,
+    transitions=[
+        Transition(Research, DemoSignal.ok, Parallel(WriteIntro, WriteBody)),
+        Transition(WriteIntro, StdSignal.done, Review),
+        Transition(WriteBody, StdSignal.done, Review),
+        Transition(Review, DemoSignal.approved, StdEnd),
+    ],
+)
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.connector = FakeLlmConnector()
-        self.graph = StateGraph(
-            start=Research,
-            transitions=[
-                Transition(Research, DemoSignal.ok, Parallel(WriteIntro, WriteBody)),
-                Transition(WriteIntro, StdSignal.done, Review),
-                Transition(WriteBody, StdSignal.done, Review),
-                Transition(Review, DemoSignal.approved, StdEnd),
-            ],
-        )
+_app = AgentApp(
+    doc=__doc__,
+    context=Context(),
+    state_graph=_graph,
+    initial_state_factory=lambda _q: DemoState(),
+)
 
-    async def run_workflow(self) -> str | None:
-        """Run the demo graph and save DOT snapshots for each super-step."""
-        ctx = Context(connector=self.connector)
-        hooks = LiveGraphHooks()
-        runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
-        await runner.run(DemoState())
 
-        output_dir = _PROJECT_ROOT / "nogit_data" / "graphs"
-        output_dir.mkdir(parents=True, exist_ok=True)
+async def _live_graph_run_workflow(self: AgentApp) -> str | None:
+    """Run the demo graph and save DOT snapshots for each super-step."""
+    ctx = Context(llm_connectors={"default": _connector})
+    hooks = LiveGraphHooks()
+    runner = StateGraphRunner(graph=self._state_graph, context=ctx, hooks=hooks)
+    await runner.run(DemoState())
 
-        print(f"\n--- Live Graph Demo: {len(hooks.snapshots)} super-steps recorded ---")
-        for i, (step_num, active_names) in enumerate(hooks.snapshots, start=1):
-            snapshot = hooks.get_snapshot_graph(self.graph, i)
-            dot_src = GraphRenderer.to_dot(snapshot)
-            dot_path = output_dir / f"step_{i}.dot"
-            dot_path.write_text(dot_src, encoding="utf-8")
-            print(f"  Step {step_num}: active={sorted(active_names)} → saved {dot_path}")
+    output_dir = _PROJECT_ROOT / "nogit_data" / "graphs"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-        print("\nDOT files saved to:", output_dir)
+    print(f"\n--- Live Graph Demo: {len(hooks.snapshots)} super-steps recorded ---")
+    for i, (step_num, active_names) in enumerate(hooks.snapshots, start=1):
+        snapshot = hooks.get_snapshot_graph(self._state_graph, i)
+        dot_src = GraphRenderer.to_dot(snapshot)
+        dot_path = output_dir / f"step_{i}.dot"
+        dot_path.write_text(dot_src, encoding="utf-8")
+        print(f"  Step {step_num}: active={sorted(active_names)} → saved {dot_path}")
 
+    print("\nDOT files saved to:", output_dir)
+    return None
+
+
+_app.run_workflow = _live_graph_run_workflow.__get__(_app, AgentApp)  # type: ignore[method-assign]
 
 if __name__ == "__main__":
-    LiveGraphDemoApp().cli(__doc__, name=__name__)
+    _app.cli(__doc__, name=__name__)

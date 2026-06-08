@@ -57,28 +57,21 @@ class Done(StateVertex):
         return StdSignal.done, AppPatch()
 
 
-class HelloWorldApp(AgentApp):
-    """Minimal hello world: Uppercase → Done → StdEnd."""
+_app = AgentApp(
+    doc=__doc__,
+    default_question="hello",
+    context=Context(),
+    state_graph=StateGraph(
+        start=Uppercase,
+        transitions=[
+            Transition(Uppercase, StdSignal.ok, Done),
+            Transition(Done, StdSignal.done, StdEnd),
+        ],
+    ),
+    initial_state_factory=lambda q: AppState(text=q or "hello"),
+)
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.connector = FakeLlmConnector()
-        self.graph = StateGraph(
-            start=Uppercase,
-            transitions=[
-                Transition(Uppercase, StdSignal.ok, Done),
-                Transition(Done, StdSignal.done, StdEnd),
-            ],
-        )
-
-    async def run_workflow(self) -> str | None:
-        """Run the hello world workflow and print the result."""
-        ctx = Context(connector=self.connector)
-        runner = StateGraphRunner(self.graph, ctx)
-        final = await runner.run(AppState(text="hello"))
-        print(final.text)  # HELLO
-        return final.text
-
+_app._extract_result = lambda state: state.text  # type: ignore[method-assign, attr-defined]
 
 if __name__ == "__main__":
-    HelloWorldApp().cli(__doc__, name=__name__)
+    _app.cli(__doc__, name=__name__)

@@ -102,68 +102,73 @@ class Publish(StateVertex):
         return StdSignal.ok, state
 
 
-class HumanInTheLoopApp(AgentApp):
-    """Demonstrates pause/resume checkpointing with a human approval step."""
+# Declarative graph wiring; run_workflow override required for pause/resume demo
+# (run_until + InMemoryCheckpointStore — not supported by generic AgentApp.run_workflow).
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.graph = StateGraph(
-            start=Draft,
-            transitions=[
-                Transition(Draft, StdSignal.ok, HumanReview),
-                Transition(HumanReview, StdSignal.ok, Publish),
-                Transition(Publish, StdSignal.ok, StdEnd),
-            ],
-        )
+_app = AgentApp(
+    doc=__doc__,
+    context=make_fake_context(),
+    state_graph=StateGraph(
+        start=Draft,
+        transitions=[
+            Transition(Draft, StdSignal.ok, HumanReview),
+            Transition(HumanReview, StdSignal.ok, Publish),
+            Transition(Publish, StdSignal.ok, StdEnd),
+        ],
+    ),
+    initial_state_factory=lambda _q: ReviewState(topic="AI Agents in Production"),
+)
 
-    async def run_workflow(self) -> str | None:
-        """Run the human-in-the-loop pause/resume workflow end-to-end."""
-        context = make_fake_context()
-        runner = StateGraphRunner(self.graph, context)
-        store = InMemoryCheckpointStore()
-        run_id = "review-demo-1"
 
-        print("=" * 60)
-        print("Phase 1: Run until HumanReview becomes the active node")
-        print("=" * 60)
+async def _human_in_the_loop_run_workflow(self: AgentApp) -> str | None:
+    """Run the human-in-the-loop pause/resume workflow end-to-end."""
+    context = make_fake_context()
+    runner = StateGraphRunner(self._state_graph, context)
+    store = InMemoryCheckpointStore()
+    run_id = "review-demo-1"
 
-        paused_state: ReviewState = await runner.run_until(
-            ReviewState(topic="AI Agents in Production"),
-            predicate=lambda step, state, active: any(
-                type(n).__name__ == "HumanReview" for n in active
-            ),
-            store=store,
+    print("=" * 60)
+    print("Phase 1: Run until HumanReview becomes the active node")
+    print("=" * 60)
+
+    paused_state: ReviewState = await runner.run_until(
+        ReviewState(topic="AI Agents in Production"),
+        predicate=lambda step, state, active: any(
+            type(n).__name__ == "HumanReview" for n in active
+        ),
+        store=store,
+        run_id=run_id,
+    )
+
+    steps = await store.list_steps(run_id)
+    last_step = steps[-1] if steps else 1
+    print(f"\nPaused after step {last_step}. Waiting for human review.")
+    print(f"Draft preview: {paused_state.draft[:60]}...")
+
+    print("\n[Human] Reviewing draft and approving...")
+    approved_state = dataclasses.replace(paused_state, approved=True)
+
+    await store.save(
+        CheckpointRecord(
             run_id=run_id,
+            step=last_step,
+            state=approved_state,
+            active_node_names=["HumanReview"],
         )
+    )
+    print("[Human] Approval saved to checkpoint store.")
 
-        steps = await store.list_steps(run_id)
-        last_step = steps[-1] if steps else 1
-        print(f"\nPaused after step {last_step}. Waiting for human review.")
-        print(f"Draft preview: {paused_state.draft[:60]}...")
+    print("\n" + "=" * 60)
+    print("Phase 2: Resume from checkpoint")
+    print("=" * 60)
 
-        print("\n[Human] Reviewing draft and approving...")
-        approved_state = dataclasses.replace(paused_state, approved=True)
+    final_state: ReviewState = await runner.resume(store, run_id, from_step=last_step)
 
-        # Overwrite the checkpoint with the human-approved state so that resume()
-        # picks it up and HumanReview sees approved=True.
-        await store.save(
-            CheckpointRecord(
-                run_id=run_id,
-                step=last_step,
-                state=approved_state,
-                active_node_names=["HumanReview"],
-            )
-        )
-        print("[Human] Approval saved to checkpoint store.")
+    print(f"\nWorkflow complete. approved={final_state.approved}")
+    return None
 
-        print("\n" + "=" * 60)
-        print("Phase 2: Resume from checkpoint")
-        print("=" * 60)
 
-        final_state: ReviewState = await runner.resume(store, run_id, from_step=last_step)
-
-        print(f"\nWorkflow complete. approved={final_state.approved}")
-
+_app.run_workflow = _human_in_the_loop_run_workflow.__get__(_app, AgentApp)  # type: ignore[method-assign]
 
 if __name__ == "__main__":
-    HumanInTheLoopApp().cli(__doc__, name=__name__)
+    _app.cli(__doc__, name=__name__)

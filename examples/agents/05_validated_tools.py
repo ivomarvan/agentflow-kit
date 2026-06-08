@@ -239,62 +239,37 @@ class ToolExecutionVertex(StateVertex):
 
 
 # ---------------------------------------------------------------------------
-# App
+# Wiring — declarative AgentApp
 # ---------------------------------------------------------------------------
 
+_connector = LlmConnector(cache=LlmFileCache(__file__))
+_registry = ToolRegistry([ValidatedCalculator(), ValidatedSearchPolicy()])
+_llm_vertex = LlmCallVertex()
+_tool_vertex = ToolExecutionVertex()
 
-class ValidatedToolsApp(AgentApp):
-    """ReAct agent showcasing input validation as guardrails inside tools."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.connector = LlmConnector(cache=LlmFileCache(__file__))
-        self.registry = ToolRegistry([ValidatedCalculator(), ValidatedSearchPolicy()])
-        llm_vertex = LlmCallVertex()
-        tool_vertex = ToolExecutionVertex()
-        self.graph = StateGraph(
-            start=llm_vertex,
-            transitions=[
-                Transition(llm_vertex, ReactSignal.tool_call, tool_vertex),
-                Transition(tool_vertex, StdSignal.ok, llm_vertex),
-                Transition(llm_vertex, ReactSignal.final_answer, StdEnd),
-                Transition(llm_vertex, ReactSignal.max_steps, StdEnd),
-            ],
-        )
-
-    @property
-    def sample_prompts(self) -> list[str]:
-        """Example prompts for the GUI prompt selector."""
-        return [
-            "What is twice the vacation days count in our policy?",
-            "How many sick days do we have, and what is 3 * 7?",
-            "What are the remote work rules? Also compute (10 + 5) * 2.",
-        ]
-
-    async def run_workflow(self) -> str | None:
-        """Run the validated-tools agent and return the final answer.
-
-        Returns:
-            Final answer string from the agent.
-        """
-        setup_pretty_logging()
-        question = self.current_prompt or _DEFAULT_QUESTION
-        ctx = Context(
-            llm_connectors={"default": self.connector},
-            tool_registries={"default": self.registry},
-            event_bus=self.event_bus,
-        )
-        hooks = LoggingHooks()
-        runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
-        initial = ReactState(
-            messages=(
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": question},
-            )
-        )
-        final = cast(ReactState, await runner.run(initial))
-        return final.final_answer
-
+_app = AgentApp(
+    doc=__doc__,
+    system_prompt=_SYSTEM_PROMPT,
+    default_question=_DEFAULT_QUESTION,
+    sample_prompts=[
+        "What is twice the vacation days count in our policy?",
+        "How many sick days do we have, and what is 3 * 7?",
+        "What are the remote work rules? Also compute (10 + 5) * 2.",
+    ],
+    context=Context(
+        llm_connectors={"default": _connector},
+        tool_registries={"default": _registry},
+    ),
+    state_graph=StateGraph(
+        start=_llm_vertex,
+        transitions=[
+            Transition(_llm_vertex, ReactSignal.tool_call, _tool_vertex),
+            Transition(_tool_vertex, StdSignal.ok, _llm_vertex),
+            Transition(_llm_vertex, ReactSignal.final_answer, StdEnd),
+            Transition(_llm_vertex, ReactSignal.max_steps, StdEnd),
+        ],
+    ),
+)
 
 if __name__ == "__main__":
-    ValidatedToolsApp().cli(__doc__, name=__name__)
+    _app.cli(__doc__, name=__name__)

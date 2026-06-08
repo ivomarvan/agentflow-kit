@@ -161,52 +161,32 @@ class EditorVertex(StateVertex):
 
 
 # ---------------------------------------------------------------------------
-# App
+# Wiring — declarative AgentApp
 # ---------------------------------------------------------------------------
 
+_connector = LlmConnector(cache=LlmFileCache(__file__))
 
-class BlogPipelineApp(AgentApp):
-    """Sequential blog pipeline: Researcher → Writer → Editor."""
+_app = AgentApp(
+    doc=__doc__,
+    default_question=_DEFAULT_TOPIC,
+    sample_prompts=[
+        "BSP execution model in AI agents",
+        "How large language models are changing software development",
+        "The rise of autonomous coding agents in 2026",
+    ],
+    context=Context(llm_connectors={"default": _connector}),
+    state_graph=StateGraph(
+        start=ResearcherVertex,
+        transitions=[
+            Transition(ResearcherVertex, StdSignal.ok, WriterVertex),
+            Transition(WriterVertex, StdSignal.ok, EditorVertex),
+            Transition(EditorVertex, StdSignal.ok, StdEnd),
+        ],
+    ),
+    initial_state_factory=lambda q: BlogState(topic=q or _DEFAULT_TOPIC),
+)
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.connector = LlmConnector(cache=LlmFileCache(__file__))
-        self.graph = StateGraph(
-            start=ResearcherVertex,
-            transitions=[
-                Transition(ResearcherVertex, StdSignal.ok, WriterVertex),
-                Transition(WriterVertex, StdSignal.ok, EditorVertex),
-                Transition(EditorVertex, StdSignal.ok, StdEnd),
-            ],
-        )
-
-    @property
-    def sample_prompts(self) -> list[str]:
-        """Example topics for the GUI prompt selector."""
-        return [
-            "BSP execution model in AI agents",
-            "How large language models are changing software development",
-            "The rise of autonomous coding agents in 2026",
-        ]
-
-    async def run_workflow(self) -> str | None:
-        """Run the blog pipeline and print the final edited post.
-
-        Returns:
-            Final blog post string.
-        """
-        setup_pretty_logging()
-        topic = self.current_prompt or _DEFAULT_TOPIC
-        ctx = Context(
-            llm_connectors={"default": self.connector},
-            event_bus=self.event_bus,
-        )
-        hooks = LoggingHooks()
-        runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
-        final = cast(BlogState, await runner.run(BlogState(topic=topic)))
-        print(f"\n=== FINAL BLOG POST ===\n{final.final_post}\n======================")
-        return final.final_post
-
+_app._extract_result = lambda state: state.final_post  # type: ignore[method-assign, attr-defined]
 
 if __name__ == "__main__":
-    BlogPipelineApp().cli(__doc__, name=__name__)
+    _app.cli(__doc__, name=__name__)

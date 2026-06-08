@@ -155,48 +155,39 @@ class Review(StateVertex):
         return CustomSignal.rejected, patch
 
 
-class BriefExampleApp(AgentApp):
-    """Demonstrates the §2.5 Research→Parallel→Review loop with FakeLlmConnector."""
+_connector = FakeLlmConnector()
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.connector = FakeLlmConnector()
-        self.graph = StateGraph(
-            start=Research,
-            transitions=[
-                Transition(Research, CustomSignal.ok, Parallel(WriteIntro, WriteBody)),
-                Transition(WriteIntro, StdSignal.done, Review),
-                Transition(WriteBody, StdSignal.done, Review),
-                Transition(Review, CustomSignal.rejected, Research),
-                Transition(Review, CustomSignal.approved, StdEnd),
-            ],
-        )
+_app = AgentApp(
+    doc=__doc__,
+    sample_prompts=[
+        "Write a short essay about the benefits of AI.",
+        "Summarize the history of machine learning.",
+        "Explain the BSP execution model in 3 sentences.",
+    ],
+    context=Context(),
+    state_graph=StateGraph(
+        start=Research,
+        transitions=[
+            Transition(Research, CustomSignal.ok, Parallel(WriteIntro, WriteBody)),
+            Transition(WriteIntro, StdSignal.done, Review),
+            Transition(WriteBody, StdSignal.done, Review),
+            Transition(Review, CustomSignal.rejected, Research),
+            Transition(Review, CustomSignal.approved, StdEnd),
+        ],
+    ),
+    initial_state_factory=lambda _q: DemoState(),
+)
 
-    @property
-    def sample_prompts(self) -> list[str]:
-        """Return example prompts for the GUI prompt selector."""
-        return [
-            "Write a short essay about the benefits of AI.",
-            "Summarize the history of machine learning.",
-            "Explain the BSP execution model in 3 sentences.",
-        ]
+_app._extract_result = (  # type: ignore[method-assign]
+    lambda state: f"Completed {state.iteration + 1} cycles."
+)
+_app.connector = _connector  # backward compat for e2e tests
 
-    async def run_workflow(self) -> str | None:
-        """Run the §2.5 demo graph to completion and print the summary."""
-        setup_pretty_logging()
 
-        ctx = Context(connector=self.connector)
-        hooks = LoggingHooks()
-        runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
-        final_state: DemoState = await runner.run(DemoState())  # type: ignore[assignment]
-
-        print("\n--- Demo Complete ---")
-        print(f"Total cycles:  {final_state.iteration + 1}")
-        print(f"Messages ({len(final_state.messages)}):")
-        for msg in final_state.messages:
-            print(f"  · {msg}")
-        return f"Completed {final_state.iteration + 1} cycles."
+def BriefExampleApp() -> AgentApp:
+    """Backward-compatible factory returning the module-level app instance."""
+    return _app
 
 
 if __name__ == "__main__":
-    BriefExampleApp().cli(__doc__, name=__name__)
+    _app.cli(__doc__, name=__name__)

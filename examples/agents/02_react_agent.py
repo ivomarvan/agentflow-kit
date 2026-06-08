@@ -272,67 +272,42 @@ class ToolExecutionVertex(StateVertex):
 
 
 # ---------------------------------------------------------------------------
-# App
+# Wiring — declarative AgentApp
 # ---------------------------------------------------------------------------
 
+_connector = LlmConnector(cache=LlmFileCache(__file__))
+_registry = ToolRegistry([
+    SearchPolicy(), Calculator(), GetCurrentDate(), AddDaysToDate(),
+])
+_llm_vertex = LlmCallVertex()
+_tool_vertex = ToolExecutionVertex()
 
-class ReactAgentApp(AgentApp):
-    """Full ReAct agent with policy search, calculator, and date tools."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.connector = LlmConnector(cache=LlmFileCache(__file__))
-        self.registry = ToolRegistry([
-            SearchPolicy(), Calculator(), GetCurrentDate(), AddDaysToDate(),
-        ])
-        llm_vertex = LlmCallVertex()
-        tool_vertex = ToolExecutionVertex()
-        self.graph = StateGraph(
-            start=llm_vertex,
-            transitions=[
-                Transition(llm_vertex, ReactSignal.tool_call, tool_vertex),
-                Transition(tool_vertex, StdSignal.ok, llm_vertex),
-                Transition(llm_vertex, ReactSignal.final_answer, StdEnd),
-                Transition(llm_vertex, ReactSignal.max_steps, StdEnd),
-            ],
-        )
-
-    @property
-    def sample_prompts(self) -> list[str]:
-        """Example prompts for the GUI prompt selector."""
-        return [
-            "What is twice the number of vacation days in our policy?",
-            (
-                "I haven't had vacation yet. "
-                "If I take it all in three days from today, when will it end?"
-            ),
-            "How many remote work days am I allowed per week? And what date will it be in 14 days?",
-        ]
-
-    async def run_workflow(self) -> str | None:
-        """Run the ReAct agent loop and return the final answer.
-
-        Returns:
-            Final answer string from the agent.
-        """
-        setup_pretty_logging()
-        question = self.current_prompt or _DEFAULT_QUESTION
-        ctx = Context(
-            llm_connectors={"default": self.connector},
-            tool_registries={"default": self.registry},
-            event_bus=self.event_bus,
-        )
-        hooks = LoggingHooks()
-        runner = StateGraphRunner(graph=self.graph, context=ctx, hooks=hooks)
-        initial = ReactState(
-            messages=(
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": question},
-            )
-        )
-        final = cast(ReactState, await runner.run(initial))
-        return final.final_answer
-
+_app = AgentApp(
+    doc=__doc__,
+    system_prompt=_SYSTEM_PROMPT,
+    default_question=_DEFAULT_QUESTION,
+    sample_prompts=[
+        "What is twice the number of vacation days in our policy?",
+        (
+            "I haven't had vacation yet. "
+            "If I take it all in three days from today, when will it end?"
+        ),
+        "How many remote work days am I allowed per week? And what date will it be in 14 days?",
+    ],
+    context=Context(
+        llm_connectors={"default": _connector},
+        tool_registries={"default": _registry},
+    ),
+    state_graph=StateGraph(
+        start=_llm_vertex,
+        transitions=[
+            Transition(_llm_vertex, ReactSignal.tool_call, _tool_vertex),
+            Transition(_tool_vertex, StdSignal.ok, _llm_vertex),
+            Transition(_llm_vertex, ReactSignal.final_answer, StdEnd),
+            Transition(_llm_vertex, ReactSignal.max_steps, StdEnd),
+        ],
+    ),
+)
 
 if __name__ == "__main__":
-    ReactAgentApp().cli(__doc__, name=__name__)
+    _app.cli(__doc__, name=__name__)
