@@ -19,14 +19,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { api } from '@/services/api'
 import { useStructureStore } from '@/stores/structure'
 
 const loading = ref(true)
 const structureStore = useStructureStore()
 
+function onIframeMessage(event: MessageEvent) {
+  if (event.data?.type === 'af:nodeClicked') {
+    structureStore.selectNode(event.data.nodeId as string)
+  }
+}
+
 onMounted(async () => {
+  window.addEventListener('message', onIframeMessage)
   try {
     const html = await api.getGraph()
     structureStore.setGraphHtml(html)
@@ -36,6 +43,8 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+onUnmounted(() => window.removeEventListener('message', onIframeMessage))
 </script>
 
 <style scoped>

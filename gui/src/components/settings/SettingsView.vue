@@ -28,7 +28,11 @@
         :id="`param-group-${propKey}`"
         :class="['param-group', { highlighted: highlightedGroup === propKey }]"
       >
-        <h3 class="group-title">{{ propKey }}</h3>
+        <h3
+          class="group-title"
+          style="cursor: pointer"
+          @click="onGroupHeaderClick(propKey)"
+        >{{ propKey }}</h3>
         <JsonForms
           :data="(draftValues[propKey] as Record<string, unknown>) ?? {}"
           :schema="(propSchema as JsonSchema)"
@@ -97,9 +101,24 @@ watch(() => structureStore.selectedNode, async (nodeId) => {
   }
 })
 
+function graphIframe(): HTMLIFrameElement | null {
+  return document.querySelector('iframe.graph-frame')
+}
+
+function onGroupHeaderClick(propKey: string) {
+  graphIframe()?.contentWindow?.postMessage(
+    { type: 'af:highlightNode', nodeId: propKey },
+    '*',
+  )
+}
+
 function onGroupChange(groupKey: string, data: unknown) {
   draftValues.value = { ...draftValues.value, [groupKey]: data }
   hasChanges.value = true
+  graphIframe()?.contentWindow?.postMessage(
+    { type: 'af:updateTooltip', nodeId: groupKey, params: data },
+    '*',
+  )
 }
 
 async function applyChanges() {

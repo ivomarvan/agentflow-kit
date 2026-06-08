@@ -1395,6 +1395,12 @@ _SVG_INJECTION_TEMPLATE = r"""\
   <style type="text/css"><![CDATA[
     a { cursor: pointer; }
     a text { fill: #1565c0; text-decoration: underline; text-decoration-color: #1565c0; }
+    .af-selected > polygon,
+    .af-selected > ellipse,
+    .af-selected > rect {
+      stroke: #f59e0b !important;
+      stroke-width: 2.5px !important;
+    }
   ]]></style>
   <filter id="gv-tt-shadow" x="-10%" y="-10%" width="130%" height="130%">
     <feDropShadow dx="0" dy="3" stdDeviation="5" flood-opacity="0.20"/>
@@ -1520,7 +1526,7 @@ _SVG_INJECTION_TEMPLATE = r"""\
     }
     if (!titleEl) continue;
     var key = titleEl.textContent.trim();
-    if (descs[key]) { g._md = descs[key]; g.style.cursor = "pointer"; }
+    if (descs[key]) { g._md = descs[key]; g._key = key; g.style.cursor = "pointer"; }
     g.removeChild(titleEl);
   }
 
@@ -1628,6 +1634,60 @@ _SVG_INJECTION_TEMPLATE = r"""\
 
   svg.addEventListener("mouseleave", scheduleHide);
 
+  // --- postMessage: node click → parent ---
+  svg.addEventListener("click", function (e) {
+    var el = e.target;
+    while (el && el.tagName !== "svg" && el.tagName !== "SVG") {
+      if (el._key) {
+        window.parent.postMessage({ type: "af:nodeClicked", nodeId: el._key }, "*");
+        return;
+      }
+      el = el.parentElement;
+    }
+  });
+
+  // --- postMessage: parent → iframe (highlightNode, updateTooltip) ---
+  window.addEventListener("message", function (e) {
+    if (!e.data || typeof e.data !== "object") return;
+
+    if (e.data.type === "af:highlightNode") {
+      var targetKey = e.data.nodeId;
+      var allG = svg.querySelectorAll("g");
+      for (var hi = 0; hi < allG.length; hi++) {
+        var hg = allG[hi];
+        hg.classList.remove("af-selected");
+        if (hg._key === targetKey) {
+          hg.classList.add("af-selected");
+          try { hg.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" }); }
+          catch (ex) { /* scrollIntoView may not exist in all SVG contexts */ }
+        }
+      }
+    }
+
+    if (e.data.type === "af:updateTooltip") {
+      var updateKey = e.data.nodeId;
+      var params = e.data.params;
+      if (!params || typeof params !== "object") return;
+      var paramsText = Object.entries(params)
+        .map(function(kv) { return "**" + kv[0] + "**: " + kv[1]; })
+        .join("  \n");
+      var allG2 = svg.querySelectorAll("g");
+      for (var ui = 0; ui < allG2.length; ui++) {
+        var ug = allG2[ui];
+        if (ug._key === updateKey && ug._md) {
+          var md = ug._md;
+          var paramsSection = "\n\n### Current Values\n" + paramsText;
+          if (md.indexOf("### Current Values") >= 0) {
+            ug._md = md.replace(/### Current Values[\s\S]*$/, paramsSection.trim());
+          } else {
+            ug._md = md + paramsSection;
+          }
+          break;
+        }
+      }
+    }
+  });
+
   bindTooltipLinkClicks(ttInner);
 
   // Attempt to load marked.js from CDN for richer Markdown rendering.
@@ -1690,6 +1750,12 @@ _HTML_TEMPLATE = """\
       fill: #1565c0;
       text-decoration: underline;
       text-decoration-color: #1565c0;
+    }
+    #svg-wrap svg .af-selected > polygon,
+    #svg-wrap svg .af-selected > ellipse,
+    #svg-wrap svg .af-selected > rect {
+      stroke: #f59e0b !important;
+      stroke-width: 2.5px !important;
     }
     #tt {
       display: none; position: fixed; z-index: 1000;
@@ -1807,7 +1873,7 @@ _HTML_TEMPLATE = """\
       if (!tel) return;
       const key = tel.textContent.trim();
       const md = descs[key];
-      if (md) { g._md = md; g.style.cursor = "pointer"; }
+      if (md) { g._md = md; g._key = key; g.style.cursor = "pointer"; }
       tel.remove();
     });
 
@@ -1864,6 +1930,55 @@ _HTML_TEMPLATE = """\
     });
 
     svgWrap.addEventListener("mouseleave", scheduleHide);
+
+    // --- postMessage: node click → parent ---
+    svgWrap.addEventListener("click", function (e) {
+      let el = e.target;
+      while (el && el.id !== "svg-wrap") {
+        if (el._key) {
+          window.parent.postMessage({ type: "af:nodeClicked", nodeId: el._key }, "*");
+          return;
+        }
+        el = el.parentElement;
+      }
+    });
+
+    // --- postMessage: parent → iframe (highlightNode, updateTooltip) ---
+    window.addEventListener("message", function (e) {
+      if (!e.data || typeof e.data !== "object") return;
+
+      if (e.data.type === "af:highlightNode") {
+        const targetKey = e.data.nodeId;
+        document.querySelectorAll("#svg-wrap svg g").forEach(function (hg) {
+          hg.classList.remove("af-selected");
+          if (hg._key === targetKey) {
+            hg.classList.add("af-selected");
+            try {
+              hg.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+            } catch (ex) { /* scrollIntoView may not exist in all SVG contexts */ }
+          }
+        });
+      }
+
+      if (e.data.type === "af:updateTooltip") {
+        const updateKey = e.data.nodeId;
+        const params = e.data.params;
+        if (!params || typeof params !== "object") return;
+        const paramsText = Object.entries(params)
+          .map(function (kv) { return "**" + kv[0] + "**: " + kv[1]; })
+          .join("  \n");
+        document.querySelectorAll("#svg-wrap svg g").forEach(function (ug) {
+          if (ug._key !== updateKey || !ug._md) return;
+          const md = ug._md;
+          const paramsSection = "\n\n### Current Values\n" + paramsText;
+          if (md.indexOf("### Current Values") >= 0) {
+            ug._md = md.replace(/### Current Values[\s\S]*$/, paramsSection.trim());
+          } else {
+            ug._md = md + paramsSection;
+          }
+        });
+      }
+    });
   </script>
 </body>
 </html>
