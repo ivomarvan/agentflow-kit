@@ -14,9 +14,9 @@ No __init__ needed — Pydantic generates it automatically with validation.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from agentflow.describable.describable import Describable
 from agentflow.statemachine.signal import StdSignal
@@ -52,6 +52,19 @@ class StateVertex(Describable, BaseModel):
     # Restore Python's identity-based hash (Pydantic sets __hash__=None for mutable models).
     # StateVertex instances are used as dict keys and set members in the graph topology.
     __hash__ = object.__hash__  # type: ignore[assignment]
+
+    model: Annotated[str, Field(
+        description=(
+            "LLM model name (e.g. 'gpt-4o-mini'). "
+            "Empty string = use Context default connector."
+        ),
+        json_schema_extra={"x-model-select": True},
+    )] = ""
+    temperature: Annotated[float, Field(
+        ge=0.0,
+        le=2.0,
+        description="LLM sampling temperature (0 = deterministic, 2 = creative).",
+    )] = 0.2
 
     async def run(self, state: object, ctx: Context) -> tuple[Any, Any]:
         """Execute this vertex for one BSP super-step.
