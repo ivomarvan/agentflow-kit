@@ -154,11 +154,14 @@ class AgentApp(Describable):
         return Graph(root=base_graph.root, edges=extra_edges)
 
     def _build_usage_edges(self) -> list:
-        """Build dashed 'usage' edges from StateVertices to their LLM connector / tool registry.
+        """Build dashed 'usage' edges from StateVertices to tool registries (and legacy connectors).
 
-        Inspects each non-terminal StateVertex for ``connector`` and ``tools`` fields
-        (the standard Pydantic field names for Context lookup keys).  When the field
-        value is a valid key in the bound Context's ``llm_connectors`` or
+        Model-first vertices use ``model`` instead of ``connector``; they do not get
+        LLM usage edges (Inspector edits model directly).  Legacy vertices with a
+        ``connector`` field still receive dashed edges to ``context.<key>``.
+
+        Inspects each non-terminal StateVertex for ``connector`` and ``tools`` fields.
+        When the field value is a valid key in the bound Context's ``llm_connectors`` or
         ``tool_registries`` dict, a directed edge is added from the vertex node to the
         corresponding Context child cluster.
 
@@ -394,59 +397,58 @@ class AgentApp(Describable):
     def get_config_schema(self) -> dict[str, Any]:
         """Return a hierarchical JSON Schema of all configurable parameters.
 
-        Walks three sources in priority order:
+        Walks two sources:
 
-        1. ``context.llm_connectors`` dict — named LLM connectors.
-        2. ``state_graph.vertices`` — all resolved ``StateVertex`` instances
+        1. ``state_graph.vertices`` — all resolved ``StateVertex`` instances
            that expose at least one Pydantic scalar field.
-        3. Direct ``LlmConnector`` attributes on ``self`` — backward-compat
+           The ``model`` field receives an ``enum`` populated from all
+           ``available_models`` lists across configured LLM connectors so
+           the GUI renders a select box.
+           The ``tools`` field receives an ``enum`` from
+           ``context.tool_registries`` keys likewise.
+        2. Direct ``LlmConnector`` attributes on ``self`` — backward-compat
            with the old subclass pattern (``self.connector = LlmConnector(...)``).
 
-        String fields named ``connector`` on vertices receive an ``enum``
-        populated from ``context.llm_connectors`` keys so the GUI renders a
-        select box.  Fields named ``tools`` receive an ``enum`` from
-        ``context.tool_registries`` keys likewise.
+        LLM connectors from ``context.llm_connectors`` are intentionally hidden
+        from the Inspector — users interact with ``model`` on each vertex instead.
 
         Returns:
             JSON-Schema-compatible dict with ``properties`` keyed by component
-            name (connector key or vertex class name).
+            name (vertex class name).
         """
         from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
 
         props: dict[str, Any] = {}
 
-        # 1. Named LLM connectors from Context — use connector.get_config_schema()
-        #    so backend is hidden and model enum is populated dynamically.
-        if self._context is not None:
-            for key, connector in self._context.llm_connectors.items():
-                if isinstance(connector, LlmConnector):
-                    try:
-                        connector.config  # raises NotImplementedError for stubs
-                    except NotImplementedError:
-                        continue
-                    props[key] = connector.get_config_schema()
+        # Collect all available models from configured connectors for the model enum
+        all_models: list[str] = sorted({
+            m
+            for conn in (self._context.llm_connectors.values() if self._context else [])
+            if hasattr(conn, "config")
+            for models_list in (
+                getattr(conn.config, "available_models", {}).values()
+            )
+            for m in models_list
+        })
 
-        # 2. StateVertex instances from graph (skip vertices with no scalar fields)
-        connector_keys: list[str] = (
-            list(self._context.llm_connectors.keys()) if self._context is not None else []
-        )
         tool_keys: list[str] = (
             list(self._context.tool_registries.keys()) if self._context is not None else []
         )
 
+        # StateVertex instances from graph (skip vertices with no scalar fields)
         if self._state_graph is not None:
             for vertex in self._state_graph.vertices:
                 vertex_schema = vertex.get_config_schema()
                 if not vertex_schema.get("properties"):
                     continue
-                # Inject enum values for connector/tools reference fields so
-                # the GUI renders them as select boxes.
                 vertex_props = vertex_schema.get("properties", {})
-                if "connector" in vertex_props and connector_keys:
-                    vertex_props["connector"] = {
-                        **vertex_props["connector"],
-                        "enum": connector_keys,
+                # Inject enum of available models so GUI renders a select box
+                if "model" in vertex_props and all_models:
+                    vertex_props["model"] = {
+                        **vertex_props["model"],
+                        "enum": all_models,
                     }
+                # Inject enum of tool registry keys so GUI renders a select box
                 if "tools" in vertex_props and tool_keys:
                     vertex_props["tools"] = {
                         **vertex_props["tools"],
@@ -454,7 +456,7 @@ class AgentApp(Describable):
                     }
                 props[type(vertex).__name__] = vertex_schema
 
-        # 3. Direct LlmConnector attrs on self (backward compat — old subclass pattern)
+        # Direct LlmConnector attrs on self (backward compat — old subclass pattern)
         seen: set[str] = set(props.keys())
         for attr_name, attr_value in vars(self).items():
             if attr_name.startswith("_") or attr_name in seen:
@@ -499,8 +501,8 @@ class AgentApp(Describable):
         Example return value::
 
             {
-                "economy": {"model": "gpt-4o-mini", "timeout": 120.0},
-                "DeviceWorkerVertex": {"connector": "economy", "max_rounds": 4},
+                "DeviceWorkerVertex": {"model": "gpt-4o-mini", "max_rounds": 4},
+                "SafetyJudgeVertex": {"model": "gemini-3.5-flash", "max_revisions": 2},
             }
 
         Returns:
@@ -510,24 +512,14 @@ class AgentApp(Describable):
 
         result: dict[str, Any] = {}
 
-        # 1. Named LLM connectors from Context
-        if self._context is not None:
-            for key, connector in self._context.llm_connectors.items():
-                if isinstance(connector, LlmConnector):
-                    try:
-                        connector.config
-                    except NotImplementedError:
-                        continue
-                    result[key] = connector.get_param_values()
-
-        # 2. StateVertex instances from graph
+        # StateVertex instances from graph
         if self._state_graph is not None:
             for vertex in self._state_graph.vertices:
                 values = vertex.get_param_values()
                 if values:
                     result[type(vertex).__name__] = values
 
-        # 3. Direct LlmConnector attrs on self (backward compat)
+        # Direct LlmConnector attrs on self (backward compat)
         seen: set[str] = set(result.keys())
         for attr_name, attr_value in vars(self).items():
             if attr_name.startswith("_") or attr_name in seen:
