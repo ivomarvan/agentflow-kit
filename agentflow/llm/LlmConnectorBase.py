@@ -42,18 +42,26 @@ logger = logging.getLogger(__name__)
 def _make_cache_key(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None,
+    *,
+    model: str,
+    temperature: float,
 ) -> str:
-    """Compute a stable SHA-256 cache key for a (messages, tools) pair.
+    """Compute a stable SHA-256 cache key for an LLM call.
+
+    Including model and temperature ensures cache correctness when multiple
+    connectors share one LlmFileCache instance.
 
     Args:
         messages: Full conversation history in OpenAI format.
         tools: Tool schema list, or None.
+        model: Active model name (e.g. 'gpt-4o-mini').
+        temperature: Sampling temperature for this call.
 
     Returns:
         64-character lowercase hex digest.
     """
     payload = json.dumps(
-        {"messages": messages, "tools": tools},
+        {"model": model, "temperature": temperature, "messages": messages, "tools": tools},
         sort_keys=True,
         ensure_ascii=False,
     )
@@ -172,7 +180,8 @@ class LlmConnectorBase(Describable):
             Exception: Backend-specific error on network, auth, or quota failures.
         """
         if self._cache is not None:
-            key = _make_cache_key(messages, tools)
+            effective_model = model_override or self.config.model
+            key = _make_cache_key(messages, tools, model=effective_model, temperature=temperature)
             hit = self._cache.get(key)
             if hit is not None:
                 logger.info("llm_call: model=%s  ← cache hit", self._model_label)
@@ -209,7 +218,8 @@ class LlmConnectorBase(Describable):
             Exception: Backend-specific error on network, auth, or quota failures.
         """
         if self._cache is not None:
-            key = _make_cache_key(messages, tools)
+            effective_model = model_override or self.config.model
+            key = _make_cache_key(messages, tools, model=effective_model, temperature=temperature)
             hit = self._cache.get(key)
             if hit is not None:
                 logger.info("llm_call: model=%s  ← cache hit", self._model_label)
