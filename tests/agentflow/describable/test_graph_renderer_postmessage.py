@@ -35,10 +35,20 @@ def test_html_contains_af_selected_css() -> None:
     """Generated HTML includes amber stroke styling for selected nodes."""
     html = GraphRenderer.to_html(_sample_graph(), with_title=False)
     assert "af-selected" in html
-    assert "#f59e0b" in html
+    assert "g.af-selected path" in html
+    assert "#fefce8" in html
+    assert "#facc15" in html
+    assert "stroke-width: 2px" in html
 
 
 def test_html_sets_g_key_on_nodes() -> None:
     """Node key is preserved on SVG groups for postMessage routing."""
     html = GraphRenderer.to_html(_sample_graph(), with_title=False)
     assert "g._key = key" in html
+
+
+def test_html_postmessage_js_has_no_broken_string_literals() -> None:
+    """Python template must not turn \\n into real newlines inside JS string literals."""
+    html = GraphRenderer.to_html(_sample_graph(), with_title=False)
+    assert 'paramsSection = "\\n\\n### Current Values\\n"' in html
+    assert 'paramsSection = "' + "\n" not in html

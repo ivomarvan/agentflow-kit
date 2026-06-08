@@ -10,6 +10,7 @@
       :srcdoc="structureStore.graphHtml"
       sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
       title="Agent structure graph"
+      @load="onGraphFrameLoad"
     />
 
     <div v-else class="empty-state">
@@ -19,18 +20,41 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { api } from '@/services/api'
 import { useStructureStore } from '@/stores/structure'
 
 const loading = ref(true)
 const structureStore = useStructureStore()
 
+function graphIframe(): HTMLIFrameElement | null {
+  return document.querySelector('iframe.graph-frame')
+}
+
+function postGraphHighlight(nodeId: string | null) {
+  graphIframe()?.contentWindow?.postMessage(
+    { type: 'af:highlightNode', nodeId: nodeId ?? '' },
+    '*',
+  )
+}
+
+function onGraphFrameLoad() {
+  postGraphHighlight(structureStore.selectedNode)
+}
+
 function onIframeMessage(event: MessageEvent) {
   if (event.data?.type === 'af:nodeClicked') {
     structureStore.selectNode(event.data.nodeId as string)
   }
 }
+
+// Keep graph highlight in sync with shared selection (from either pane)
+watch(
+  [() => structureStore.selectedNode, () => structureStore.graphHtml],
+  ([nodeId]) => {
+    if (structureStore.graphHtml) postGraphHighlight(nodeId)
+  },
+)
 
 onMounted(async () => {
   window.addEventListener('message', onIframeMessage)

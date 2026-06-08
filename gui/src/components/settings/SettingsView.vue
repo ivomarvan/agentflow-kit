@@ -26,13 +26,10 @@
         v-for="(propSchema, propKey) in topLevelProperties"
         :key="propKey"
         :id="`param-group-${propKey}`"
-        :class="['param-group', { highlighted: highlightedGroup === propKey }]"
+        :class="['param-group', { highlighted: structureStore.selectedNode === propKey }]"
+        @click="onGroupClick(propKey)"
       >
-        <h3
-          class="group-title"
-          style="cursor: pointer"
-          @click="onGroupHeaderClick(propKey)"
-        >{{ propKey }}</h3>
+        <h3 class="group-title">{{ propKey }}</h3>
         <JsonForms
           :data="(draftValues[propKey] as Record<string, unknown>) ?? {}"
           :schema="(propSchema as JsonSchema)"
@@ -53,12 +50,12 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { JsonForms } from '@jsonforms/vue'
 import type { CoreActions } from '@jsonforms/core'
 import type { JsonSchema } from '@jsonforms/core'
-import { vanillaRenderers } from '@jsonforms/vue-vanilla'
 import { Button } from 'primevue'
 import { api } from '@/services/api'
 import { useStructureStore } from '@/stores/structure'
+import { inspectorRenderers } from '@/renderers'
 
-const renderers = Object.freeze([...vanillaRenderers])
+const renderers = inspectorRenderers
 
 const loading = ref(true)
 const configSchema = ref<Record<string, unknown> | null>(null)
@@ -66,7 +63,6 @@ const configValues = ref<Record<string, unknown>>({})
 const draftValues = ref<Record<string, unknown>>({})
 const hasChanges = ref(false)
 const saveStatus = ref('')
-const highlightedGroup = ref<string | null>(null)
 
 const structureStore = useStructureStore()
 
@@ -89,34 +85,39 @@ onMounted(async () => {
   }
 })
 
-// Scroll to highlighted group when a structure node is selected
+// Scroll param group into view when selection comes from the graph pane
 watch(() => structureStore.selectedNode, async (nodeId) => {
   if (!nodeId) return
   await nextTick()
   const el = document.getElementById(`param-group-${nodeId}`)
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    highlightedGroup.value = nodeId
-    setTimeout(() => { highlightedGroup.value = null }, 2000)
-  }
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 })
+
+function onGroupClick(propKey: string) {
+  structureStore.selectNode(propKey)
+}
 
 function graphIframe(): HTMLIFrameElement | null {
   return document.querySelector('iframe.graph-frame')
 }
 
-function onGroupHeaderClick(propKey: string) {
-  graphIframe()?.contentWindow?.postMessage(
-    { type: 'af:highlightNode', nodeId: propKey },
-    '*',
-  )
+/** Clone plain data for postMessage (JsonForms may pass Vue reactive proxies). */
+function cloneForPostMessage(data: unknown): Record<string, unknown> | null {
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) return null
+  try {
+    return JSON.parse(JSON.stringify(data)) as Record<string, unknown>
+  } catch {
+    return null
+  }
 }
 
 function onGroupChange(groupKey: string, data: unknown) {
   draftValues.value = { ...draftValues.value, [groupKey]: data }
   hasChanges.value = true
+  const params = cloneForPostMessage(data)
+  if (!params) return
   graphIframe()?.contentWindow?.postMessage(
-    { type: 'af:updateTooltip', nodeId: groupKey, params: data },
+    { type: 'af:updateTooltip', nodeId: groupKey, params },
     '*',
   )
 }
@@ -162,13 +163,14 @@ function resetChanges() {
 .param-group {
   margin-bottom: 1.5rem;
   padding: 1rem;
-  border: 1px solid var(--p-content-border-color, #e2e8f0);
+  border: 2px solid var(--p-content-border-color, #e2e8f0);
   border-radius: 8px;
-  transition: background 0.4s;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
 }
 .param-group.highlighted {
-  background: var(--p-yellow-50, #fefce8);
-  border-color: var(--p-yellow-400, #facc15);
+  background: #fefce8;
+  border-color: #facc15;
 }
 .group-title {
   margin: 0 0 0.75rem 0;
@@ -176,5 +178,10 @@ function resetChanges() {
   font-weight: 600;
   text-transform: capitalize;
   color: var(--p-primary-600, #4f46e5);
+}
+/* Vanilla fallback (e.g. textarea until T105-05): hide inline description hints */
+.param-group :deep(.control-description),
+.param-group :deep(.primevue-control-hint) {
+  display: none;
 }
 </style>

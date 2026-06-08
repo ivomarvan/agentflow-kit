@@ -1395,11 +1395,13 @@ _SVG_INJECTION_TEMPLATE = r"""\
   <style type="text/css"><![CDATA[
     a { cursor: pointer; }
     a text { fill: #1565c0; text-decoration: underline; text-decoration-color: #1565c0; }
-    .af-selected > polygon,
-    .af-selected > ellipse,
-    .af-selected > rect {
-      stroke: #f59e0b !important;
-      stroke-width: 2.5px !important;
+    g.af-selected path,
+    g.af-selected polygon,
+    g.af-selected ellipse,
+    g.af-selected rect {
+      fill: #fefce8 !important;
+      stroke: #facc15 !important;
+      stroke-width: 2px !important;
     }
   ]]></style>
   <filter id="gv-tt-shadow" x="-10%" y="-10%" width="130%" height="130%">
@@ -1651,12 +1653,12 @@ _SVG_INJECTION_TEMPLATE = r"""\
     if (!e.data || typeof e.data !== "object") return;
 
     if (e.data.type === "af:highlightNode") {
-      var targetKey = e.data.nodeId;
+      var targetKey = e.data.nodeId || "";
       var allG = svg.querySelectorAll("g");
       for (var hi = 0; hi < allG.length; hi++) {
         var hg = allG[hi];
         hg.classList.remove("af-selected");
-        if (hg._key === targetKey) {
+        if (targetKey && hg._key === targetKey) {
           hg.classList.add("af-selected");
           try { hg.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" }); }
           catch (ex) { /* scrollIntoView may not exist in all SVG contexts */ }
@@ -1751,11 +1753,13 @@ _HTML_TEMPLATE = """\
       text-decoration: underline;
       text-decoration-color: #1565c0;
     }
-    #svg-wrap svg .af-selected > polygon,
-    #svg-wrap svg .af-selected > ellipse,
-    #svg-wrap svg .af-selected > rect {
-      stroke: #f59e0b !important;
-      stroke-width: 2.5px !important;
+    #svg-wrap svg g.af-selected path,
+    #svg-wrap svg g.af-selected polygon,
+    #svg-wrap svg g.af-selected ellipse,
+    #svg-wrap svg g.af-selected rect {
+      fill: #fefce8 !important;
+      stroke: #facc15 !important;
+      stroke-width: 2px !important;
     }
     #tt {
       display: none; position: fixed; z-index: 1000;
@@ -1948,10 +1952,10 @@ _HTML_TEMPLATE = """\
       if (!e.data || typeof e.data !== "object") return;
 
       if (e.data.type === "af:highlightNode") {
-        const targetKey = e.data.nodeId;
+        const targetKey = e.data.nodeId || "";
         document.querySelectorAll("#svg-wrap svg g").forEach(function (hg) {
           hg.classList.remove("af-selected");
-          if (hg._key === targetKey) {
+          if (targetKey && hg._key === targetKey) {
             hg.classList.add("af-selected");
             try {
               hg.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
@@ -1966,13 +1970,13 @@ _HTML_TEMPLATE = """\
         if (!params || typeof params !== "object") return;
         const paramsText = Object.entries(params)
           .map(function (kv) { return "**" + kv[0] + "**: " + kv[1]; })
-          .join("  \n");
+          .join("  \\n");
         document.querySelectorAll("#svg-wrap svg g").forEach(function (ug) {
           if (ug._key !== updateKey || !ug._md) return;
           const md = ug._md;
-          const paramsSection = "\n\n### Current Values\n" + paramsText;
+          const paramsSection = "\\n\\n### Current Values\\n" + paramsText;
           if (md.indexOf("### Current Values") >= 0) {
-            ug._md = md.replace(/### Current Values[\s\S]*$/, paramsSection.trim());
+            ug._md = md.replace(/### Current Values[\\s\\S]*$/, paramsSection.trim());
           } else {
             ug._md = md + paramsSection;
           }

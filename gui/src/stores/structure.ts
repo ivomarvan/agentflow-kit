@@ -2,23 +2,28 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 /**
- * Shared state between StructureView and SettingsView.
+ * Shared selection state between StructureView (graph) and SettingsView (params).
  *
- * When the user selects a graph node (future), `selectedNode` can drive
- * Settings scroll/highlight.
+ * ``selectedNode`` is the single source of truth for linked highlight in both
+ * panes. It persists until the user selects another node or param group.
  */
 export const useStructureStore = defineStore('structure', () => {
-  /** ID of the currently selected graph node (matches a top-level config key). */
+  /** ID of the linked selection (graph node key / top-level config group key). */
   const selectedNode = ref<string | null>(null)
   /** Interactive graph HTML from ``GET /api/graph`` (same as ``graph --browser``). */
   const graphHtml = ref<string | null>(null)
 
   /**
-   * Mark a graph node as selected, triggering Settings scroll/highlight.
-   * @param nodeId - Graphviz node title (maps to top-level config key).
+   * Select a graph node or param group; both Inspector panes stay in sync.
+   * @param nodeId - Graphviz node title (maps to top-level config key when present).
    */
   function selectNode(nodeId: string) {
     selectedNode.value = nodeId
+  }
+
+  /** Clear linked selection in both panes. */
+  function clearSelection() {
+    selectedNode.value = null
   }
 
   /**
@@ -29,5 +34,5 @@ export const useStructureStore = defineStore('structure', () => {
     graphHtml.value = html
   }
 
-  return { selectedNode, graphHtml, selectNode, setGraphHtml }
+  return { selectedNode, graphHtml, selectNode, clearSelection, setGraphHtml }
 })
