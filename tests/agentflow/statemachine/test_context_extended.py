@@ -65,19 +65,19 @@ class TestContextConstruction:
 @pytest.mark.unit
 class TestContextLlm:
     def test_ctx_llm_returns_connector_via_pool(self) -> None:
-        """ctx.llm() returns a connector from the pool."""
+        """ctx.llm() returns a _TrackedConnector wrapping the pool's connector."""
         fake = FakeLlmConnector()
         pool = LlmPool.from_connector(fake)
         ctx = Context(pool=pool)
         result = ctx.llm()
-        assert result is fake
+        assert result._connector is fake
 
     def test_ctx_llm_key_is_ignored(self) -> None:
         """ctx.llm(key='anything') delegates to pool and ignores the key."""
         fake = FakeLlmConnector()
         pool = LlmPool.from_connector(fake)
         ctx = Context(pool=pool)
-        assert ctx.llm("any_key") is fake
+        assert ctx.llm("any_key")._connector is fake
 
 
 # ---------------------------------------------------------------------------
@@ -88,20 +88,20 @@ class TestContextLlm:
 @pytest.mark.unit
 class TestContextLlmForModel:
     def test_llm_for_model_delegates_to_pool(self) -> None:
-        """llm_for_model() returns whatever the pool returns."""
+        """llm_for_model() returns a _TrackedConnector wrapping the pool's connector."""
         fake = FakeLlmConnector()
         pool = LlmPool.from_connector(fake)
         ctx = Context(pool=pool)
         result = ctx.llm_for_model("gpt-4o-mini")
-        assert result is fake
+        assert result._connector is fake
 
     def test_llm_for_model_empty_string_returns_default(self) -> None:
-        """llm_for_model('') returns the default pool connector."""
+        """llm_for_model('') returns a _TrackedConnector wrapping the default pool connector."""
         fake = FakeLlmConnector()
         pool = LlmPool.from_connector(fake)
         ctx = Context(pool=pool)
         result = ctx.llm_for_model("")
-        assert result is fake
+        assert result._connector is fake
 
 
 # ---------------------------------------------------------------------------

@@ -13,7 +13,9 @@ Vertex exceptions are caught by _safe_run and mapped to StdSignal.fail.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -25,6 +27,40 @@ from agentflow.statemachine.topology import StateGraph
 from agentflow.statemachine.vertex import End, StateVertex
 
 _logger = logging.getLogger(__name__)
+
+_MAX_DETAIL_LEN = 250
+
+
+def _detail_from(obj: Any) -> dict[str, str]:
+    """Serialize a dataclass to a display-friendly dict for event tooltips.
+
+    Skips fields that are None, empty strings/lists/dicts, or the UNSET sentinel.
+    Truncates values to _MAX_DETAIL_LEN characters.
+
+    Args:
+        obj: A dataclass instance (state or patch) to serialize.
+
+    Returns:
+        Dict of field_name -> truncated string value (non-empty fields only).
+    """
+    from agentflow.statemachine.state import UNSET
+
+    if not (dataclasses.is_dataclass(obj) and not isinstance(obj, type)):
+        raw = str(obj)
+        return {"value": raw[:_MAX_DETAIL_LEN] + ("…" if len(raw) > _MAX_DETAIL_LEN else "")}
+
+    result: dict[str, str] = {}
+    for f in dataclasses.fields(obj):
+        val = getattr(obj, f.name, None)
+        if val is None or val is UNSET:
+            continue
+        if isinstance(val, str) and not val.strip():
+            continue
+        if isinstance(val, (list, dict, tuple)) and not val:
+            continue
+        raw = str(val)
+        result[f.name] = raw[:_MAX_DETAIL_LEN] + ("…" if len(raw) > _MAX_DETAIL_LEN else "")
+    return result
 
 
 class StateGraphRunner:
@@ -63,12 +99,13 @@ class StateGraphRunner:
         Returns:
             Final state after the last super-step (after End node ran).
         """
-        from agentflow.events import StepEndEvent, StepStartEvent
+        from agentflow.events import RunStatsEvent, StepEndEvent, StepStartEvent
 
         bus = self.context.event_bus
         current_state = initial_state
         active_nodes: list[StateVertex] = [self.graph.resolve_start()]
         step = 0
+        run_start = time.monotonic()
 
         await self.hooks.on_run_start(current_state)
 
@@ -85,7 +122,11 @@ class StateGraphRunner:
             await self.hooks.on_super_step_start(step, current_state, active_nodes)
 
             vertex_names = ", ".join(type(n).__name__ for n in active_nodes)
-            await bus.emit(StepStartEvent(vertex=vertex_names, step=step))
+            await bus.emit(StepStartEvent(
+                vertex=vertex_names,
+                step=step,
+                detail=_detail_from(current_state),
+            ))
 
             # --- PHASE 1: COMPUTE (parallel) ---
             results: list[tuple[Any, Any]] = list(
@@ -102,9 +143,14 @@ class StateGraphRunner:
             ]
             await self.hooks.on_super_step_results(step, node_results)
 
-            for node, (signal, _) in zip(active_nodes, results, strict=True):
+            for node, (signal, patch) in zip(active_nodes, results, strict=True):
                 await bus.emit(
-                    StepEndEvent(vertex=type(node).__name__, step=step, signal=str(signal))
+                    StepEndEvent(
+                        vertex=type(node).__name__,
+                        step=step,
+                        signal=str(signal),
+                        detail=_detail_from(patch),
+                    )
                 )
 
             # --- PHASE 3A: APPLY (per-field reducers) ---
@@ -123,6 +169,19 @@ class StateGraphRunner:
             active_nodes = list(next_set)
 
         await self.hooks.on_run_end(current_state)
+
+        elapsed_ms = (time.monotonic() - run_start) * 1000
+        s = self.context.stats
+        await bus.emit(RunStatsEvent(
+            elapsed_ms=elapsed_ms,
+            total_tokens=s.total_tokens,
+            prompt_tokens=s.prompt_tokens,
+            completion_tokens=s.completion_tokens,
+            llm_calls=s.llm_calls,
+            cache_hits=s.cache_hits,
+            by_model=dict(s.by_model),
+        ))
+
         return current_state
 
     def run_sync(self, initial_state: Any) -> Any:

@@ -51,11 +51,13 @@ class StepStartEvent(AgentEvent):
     Attributes:
         vertex: Name of the active vertex.
         step: Super-step index (0-based).
+        detail: Serialized input state fields for GUI tooltip (field -> truncated value).
     """
 
     event_type: str = "agentflow.step_start"
     vertex: str
     step: int
+    detail: dict[str, str] = Field(default_factory=dict)
 
 
 class StepEndEvent(AgentEvent):
@@ -65,12 +67,54 @@ class StepEndEvent(AgentEvent):
         vertex: Name of the vertex that just ran.
         step: Super-step index (0-based).
         signal: String representation of the routing signal returned.
+        detail: Serialized patch fields for GUI tooltip (field -> truncated value).
     """
 
     event_type: str = "agentflow.step_end"
     vertex: str
     step: int
     signal: str
+    detail: dict[str, str] = Field(default_factory=dict)
+
+
+class ToolCallEvent(AgentEvent):
+    """Emitted by the tracking connector for each tool invocation inside achat_with_tools.
+
+    Attributes:
+        tool_name: Name of the tool that was called.
+        step: Current BSP super-step index when the call was made.
+        inputs: Parsed argument dict passed to the tool.
+        output: String result returned by the tool (truncated to 500 chars).
+    """
+
+    event_type: str = "agentflow.tool_call"
+    tool_name: str
+    step: int = 0
+    inputs: dict[str, str] = Field(default_factory=dict)
+    output: str = ""
+
+
+class RunStatsEvent(AgentEvent):
+    """Emitted by the runner at the end of a run with timing and token usage summary.
+
+    Attributes:
+        elapsed_ms: Total wall-clock time of the run in milliseconds.
+        total_tokens: Sum of all prompt + completion tokens.
+        prompt_tokens: Total prompt tokens.
+        completion_tokens: Total completion tokens.
+        llm_calls: Number of live LLM API calls (cache misses).
+        cache_hits: Number of responses served from cache.
+        by_model: Per-model breakdown: model -> {prompt, completion, total, calls}.
+    """
+
+    event_type: str = "agentflow.run_stats"
+    elapsed_ms: float
+    total_tokens: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    llm_calls: int = 0
+    cache_hits: int = 0
+    by_model: dict[str, dict[str, int]] = Field(default_factory=dict)
 
 
 class QuestionSentEvent(AgentEvent):

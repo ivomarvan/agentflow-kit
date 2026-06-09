@@ -5,15 +5,31 @@
       <button class="log-clear" @click="chatStore.clearLog()" title="Clear log">✕</button>
     </div>
     <div class="log-body" ref="logBodyEl">
-      <div
-        v-for="(line, i) in chatStore.eventLog"
-        :key="i"
-        class="log-line"
-      >
-        <span class="log-time">{{ line.time }}</span>
-        <span :class="['log-tag', tagClass(line.tag)]">{{ line.tag }}</span>
-        <span class="log-text">{{ line.text }}</span>
-      </div>
+      <template v-for="(line, i) in chatStore.eventLog" :key="i">
+        <!-- Stats block rendered as a distinct section -->
+        <div v-if="line.isStats" class="log-stats">
+          <div class="stats-header">
+            <span class="log-seq stats-seq">{{ line.seq }}.</span>
+            <span class="log-time">{{ line.time }}</span>
+            <span class="log-tag tag-stat">STATS</span>
+          </div>
+          <pre class="stats-body">{{ line.detail }}</pre>
+        </div>
+
+        <!-- Normal log line -->
+        <div
+          v-else
+          :class="['log-line', { 'has-detail': !!line.detail }]"
+          :title="line.detail"
+        >
+          <span class="log-seq">{{ line.seq }}.</span>
+          <span class="log-time">{{ line.time }}</span>
+          <span :class="['log-tag', tagClass(line.tag)]">{{ line.tag }}</span>
+          <span class="log-text">{{ line.text }}</span>
+          <span v-if="line.detail" class="detail-hint" title="hover for details">ⓘ</span>
+        </div>
+      </template>
+
       <div v-if="chatStore.eventLog.length === 0" class="log-empty">
         No events yet.
       </div>
@@ -41,6 +57,7 @@ function tagClass(tag: string): string {
   switch (tag) {
     case 'USER':    return 'tag-user'
     case 'STEP':    return 'tag-step'
+    case 'TOOL':    return 'tag-tool'
     case 'DONE':    return 'tag-done'
     case 'ERR':     return 'tag-err'
     case 'DEBUG':   return 'tag-debug'
@@ -103,10 +120,26 @@ function tagClass(tag: string): string {
 }
 .log-line {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.4rem;
   align-items: baseline;
   white-space: pre-wrap;
   word-break: break-word;
+  border-radius: 3px;
+  padding: 0 0.15rem;
+}
+.log-line.has-detail {
+  cursor: help;
+}
+.log-line.has-detail:hover {
+  background: var(--p-surface-hover, rgba(0,0,0,0.04));
+}
+.log-seq {
+  color: var(--p-text-muted-color, #ccc);
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  min-width: 1.8rem;
+  text-align: right;
+  user-select: none;
 }
 .log-time {
   color: var(--p-text-muted-color, #aaa);
@@ -126,6 +159,13 @@ function tagClass(tag: string): string {
   color: var(--p-text-color, #334155);
   flex: 1;
 }
+.detail-hint {
+  flex-shrink: 0;
+  color: var(--p-text-muted-color, #94a3b8);
+  font-size: 0.72rem;
+  font-style: normal;
+  cursor: help;
+}
 .log-empty {
   color: var(--p-text-muted-color, #aaa);
   font-style: italic;
@@ -133,9 +173,37 @@ function tagClass(tag: string): string {
   text-align: center;
 }
 
+/* Stats block */
+.log-stats {
+  border: 1px solid var(--p-content-border-color, #e2e8f0);
+  border-radius: 4px;
+  background: var(--p-surface-section, #f1f5f9);
+  margin: 0.2rem 0;
+  overflow: hidden;
+}
+.stats-header {
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+  padding: 0.1rem 0.3rem;
+  border-bottom: 1px solid var(--p-content-border-color, #e2e8f0);
+}
+.stats-seq { color: var(--p-text-muted-color, #ccc); font-size: 0.68rem; min-width: 1.8rem; text-align: right; }
+.stats-body {
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.73rem;
+  color: var(--p-text-color, #475569);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* tag colour palette */
 .tag-user    { background: #dbeafe; color: #1e40af; }
 .tag-step    { background: #e0e7ff; color: #3730a3; }
+.tag-tool    { background: #fef3c7; color: #92400e; }
+.tag-stat    { background: #f0fdf4; color: #166534; }
 .tag-done    { background: #dcfce7; color: #166534; }
 .tag-err     { background: #fee2e2; color: #991b1b; }
 .tag-debug   { background: #f1f5f9; color: #64748b; }

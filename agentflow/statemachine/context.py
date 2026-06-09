@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json as _json
 import logging
 import uuid
 from collections.abc import Callable
@@ -21,6 +22,108 @@ from agentflow.events import EventBus
 from agentflow.llm.LlmPool import LlmPool
 from agentflow.statemachine.run_stats import RunStats
 from agentflow.tools.ToolRegistry import ToolRegistry
+
+
+class _TrackedConnector:
+    """Thin proxy that records token usage and emits tool-call events.
+
+    Wraps any LlmConnectorBase so that every achat() call updates ctx.stats
+    and every tool execution inside achat_with_tools() emits a ToolCallEvent.
+    All other attributes and methods are forwarded transparently via __getattr__.
+
+    Pattern: Proxy (GoF) — intercepts achat / achat_with_tools; delegates the rest.
+    """
+
+    def __init__(self, connector: Any, model: str, ctx: Context) -> None:
+        # Use object.__setattr__ to avoid infinite __getattr__ recursion.
+        object.__setattr__(self, "_connector", connector)
+        object.__setattr__(self, "_model", model)
+        object.__setattr__(self, "_ctx", ctx)
+
+    # ------------------------------------------------------------------
+    # Intercepted methods
+    # ------------------------------------------------------------------
+
+    async def achat(self, messages: list, tools: list | None = None,
+                    temperature: float = 0.2, model_override: str | None = None) -> Any:
+        """Forward to connector.achat() and record token usage."""
+        ctx: Context = object.__getattribute__(self, "_ctx")
+        connector = object.__getattribute__(self, "_connector")
+        model: str = object.__getattribute__(self, "_model")
+
+        # Check cache before calling to distinguish hit vs. miss.
+        cache = getattr(connector, "_cache", None)
+        cache_hit = False
+        if cache is not None:
+            from agentflow.llm.LlmConnectorBase import _make_cache_key
+            effective_model = model_override or connector.config.model
+            key = _make_cache_key(messages, tools, model=effective_model, temperature=temperature)
+            cache_hit = cache.get(key) is not None
+
+        response = await connector.achat(messages, tools, temperature, model_override)
+        ctx.stats.record(model, response.usage, cache_hit=cache_hit)
+        return response
+
+    async def achat_with_tools(
+        self,
+        messages: list,
+        registry: Any,
+        max_rounds: int = 10,
+        temperature: float = 0.2,
+        log: logging.Logger | None = None,
+    ) -> Any:
+        """Tool-calling loop with per-achat token tracking and ToolCallEvent emission.
+
+        Reimplements LlmConnectorBase.achat_with_tools() so that:
+        - each internal achat() call is tracked via self.achat() (usage recorded)
+        - each tool execution emits a ToolCallEvent on ctx.event_bus
+        """
+        from agentflow.events import ToolCallEvent
+
+        ctx: Context = object.__getattribute__(self, "_ctx")
+        _log = log or logging.getLogger(__name__)
+        current_messages = list(messages)
+
+        for _ in range(max_rounds):
+            response = await self.achat(current_messages, tools=registry.schemas(),
+                                        temperature=temperature)
+            if not response.has_tool_calls:
+                return response
+
+            current_messages.append(response.to_message_dict())
+            for tc in (response.tool_calls or []):
+                try:
+                    args: dict[str, Any] = _json.loads(tc.arguments or "{}")
+                except _json.JSONDecodeError:
+                    args = {}
+                args_fmt = ", ".join(f"{k}={v!r}" for k, v in args.items())
+                _log.info("tool_call: %s(%s)", tc.name, args_fmt)
+                try:
+                    result = registry.execute(tc.name, tc.arguments or "{}")
+                except Exception as exc:
+                    result = f"ERROR: {exc}"
+                _log.info("tool_result: %s → %.120s", tc.name, result)
+
+                await ctx.event_bus.emit(ToolCallEvent(
+                    tool_name=tc.name,
+                    step=ctx.step,
+                    inputs={str(k): str(v) for k, v in args.items()},
+                    output=str(result)[:500],
+                ))
+
+                current_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "name": tc.name,
+                    "content": result,
+                })
+
+        _log.warning("achat_with_tools: max_rounds=%d reached", max_rounds)
+        return await self.achat(current_messages, temperature=temperature)
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate all other attribute access to the wrapped connector."""
+        return getattr(object.__getattribute__(self, "_connector"), name)
 
 
 @dataclass
@@ -60,19 +163,27 @@ class Context(Describable):
     # ------------------------------------------------------------------
 
     def llm_for_model(self, model: str) -> Any:
-        """Return a connector for *model* from the pool.
+        """Return a tracked connector for *model* from the pool.
+
+        The returned connector is wrapped in _TrackedConnector, which records
+        token usage into ctx.stats and emits ToolCallEvent during tool loops.
 
         Args:
             model: LLM model name (e.g. 'gpt-4o-mini'). Empty string uses
                 the environment default connector.
 
         Returns:
-            LLM connector instance ready for ``achat()`` / ``chat()`` calls.
+            _TrackedConnector proxy ready for ``achat()`` / ``achat_with_tools()`` calls.
         """
-        return self.pool.get_connector(model)
+        connector = self.pool.get_connector(model)
+        try:
+            resolved_model = model or connector.config.model
+        except (NotImplementedError, AttributeError):
+            resolved_model = model or type(connector).__name__
+        return _TrackedConnector(connector, resolved_model, self)
 
     def llm(self, key: str = "default") -> Any:
-        """Return the default LLM connector from the pool.
+        """Return the default tracked LLM connector from the pool.
 
         The *key* parameter is accepted for backward compatibility but
         ignored — the pool resolves connectors by model name, not by key.
@@ -82,9 +193,14 @@ class Context(Describable):
             key: Ignored (kept for backward compat with old connector-key API).
 
         Returns:
-            Default LLM connector from the pool.
+            Default tracked connector from the pool.
         """
-        return self.pool.get_connector("")
+        connector = self.pool.get_connector("")
+        try:
+            resolved_model = connector.config.model
+        except (NotImplementedError, AttributeError):
+            resolved_model = type(connector).__name__
+        return _TrackedConnector(connector, resolved_model, self)
 
     # ------------------------------------------------------------------
     # Tool registry access

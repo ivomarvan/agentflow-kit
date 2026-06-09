@@ -21,8 +21,10 @@ from agentflow.events import (
     LoggingEventHandler,
     RunCompleteEvent,
     RunErrorEvent,
+    RunStatsEvent,
     StepEndEvent,
     StepStartEvent,
+    ToolCallEvent,
 )
 from agentflow.llm.cache import LlmCacheBase, LlmFileCache, LlmMemoryCache
 from agentflow.llm.ChatResponse import ChatResponse, ToolCallFunction, ToolCallInfo, UsageInfo
@@ -97,6 +99,8 @@ __all__ = [
     "LoggingEventHandler",
     "StepStartEvent",
     "StepEndEvent",
+    "ToolCallEvent",
+    "RunStatsEvent",
     "LogEvent",
     "RunCompleteEvent",
     "RunErrorEvent",
