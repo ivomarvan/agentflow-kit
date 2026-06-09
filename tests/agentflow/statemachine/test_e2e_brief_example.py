@@ -5,24 +5,17 @@ import pytest
 
 @pytest.mark.unit
 def test_brief_example_runs_to_completion() -> None:
-    """Instantiate BriefExampleApp and run the workflow; assert expected final state.
-
-    Verifies the complete §2.5 graph cycle:
-    - Graph terminates without raising any exception.
-    - Final messages tuple is non-empty (vertices produced output).
-    - iteration equals the expected approval threshold (2 rejections occurred).
-    - The final message indicates approval (review accepted the content).
-    """
+    """Instantiate BriefExampleApp and run the workflow; assert expected final state."""
     import importlib
     from typing import cast
 
     mod = importlib.import_module("examples.quickstart.01_brief_example")
 
     app = mod.BriefExampleApp()
-    # Run run_workflow() directly to capture the final state via the graph runner.
+    from agentflow.llm.LlmPool import LlmPool
     from agentflow.statemachine import Context, StateGraphRunner
 
-    ctx = Context(connector=app.connector)
+    ctx = Context(pool=LlmPool.from_connector(mod._connector))
     runner = StateGraphRunner(graph=app.graph, context=ctx)
     final_state = cast(mod.DemoState, runner.run_sync(mod.DemoState()))
 
@@ -36,20 +29,17 @@ def test_brief_example_runs_to_completion() -> None:
 
 @pytest.mark.unit
 def test_brief_example_message_count_matches_cycles() -> None:
-    """Verify message accumulation: 4 messages per cycle × (APPROVE_AFTER + 1) cycles.
-
-    Each full cycle emits: Research, WriteIntro, WriteBody, Review = 4 messages.
-    The graph runs for _APPROVE_AFTER rejected cycles plus one final approved cycle.
-    """
+    """Verify message accumulation: 4 messages per cycle × (APPROVE_AFTER + 1) cycles."""
     import importlib
     from typing import cast
 
     mod = importlib.import_module("examples.quickstart.01_brief_example")
 
     app = mod.BriefExampleApp()
+    from agentflow.llm.LlmPool import LlmPool
     from agentflow.statemachine import Context, StateGraphRunner
 
-    ctx = Context(connector=app.connector)
+    ctx = Context(pool=LlmPool.from_connector(mod._connector))
     runner = StateGraphRunner(graph=app.graph, context=ctx)
     final_state = cast(mod.DemoState, runner.run_sync(mod.DemoState()))
 
@@ -63,10 +53,7 @@ def test_brief_example_message_count_matches_cycles() -> None:
 
 @pytest.mark.unit
 def test_brief_example_app_graph_is_state_graph() -> None:
-    """Ensure BriefExampleApp.graph is a StateGraph instance constructed without error.
-
-    Edge case: the graph should be fully wired in __init__ without requiring a Context.
-    """
+    """Ensure BriefExampleApp.graph is a StateGraph instance constructed without error."""
     import importlib
 
     from agentflow.statemachine import StateGraph

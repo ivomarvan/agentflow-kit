@@ -1,9 +1,9 @@
 """Shared runtime services injected into every vertex run() call.
 
-Context carries the LLM connector, tool registry, logger, and a unique run
+Context carries the LLM pool, tool registry, logger, and a unique run
 identifier. It also exposes run_sync() to bridge blocking sync code into the
-async BSP loop. For LLM calls, prefer ``await ctx.connector.achat(...)``
-directly — achat() is the preferred async path since Epic E040.
+async BSP loop. For LLM calls, use ``await ctx.llm_for_model(self.model).achat(...)``
+which resolves the appropriate connector from the pool automatically.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from typing import Any
 
 from agentflow.describable.describable import Describable
 from agentflow.events import EventBus
-from agentflow.llm.LlmConnector import LlmConnector
+from agentflow.llm.LlmPool import LlmPool
 from agentflow.statemachine.run_stats import RunStats
 from agentflow.tools.ToolRegistry import ToolRegistry
 
@@ -28,24 +28,23 @@ class Context(Describable):
     """Shared services container injected into every StateVertex.run() call.
 
     Args:
-        connector: LLM connector for all LLM calls within the graph run.
-            Optional; use llm_connectors dict for multi-connector graphs.
+        pool: LLM connector pool; manages connector creation and caching
+            transparently.  Defaults to ``LlmPool.default()`` which uses
+            ``~/.cache/agentflow/llm/agentflow_pool.jsonl``.
         tools: Optional tool registry; None if the graph uses no tools.
         logger: Logger instance; defaults to 'statemachine' logger.
         run_id: Unique identifier for this graph run; auto-generated if omitted.
         event_bus: Domain event bus for publishing step/log/result events.
-        llm_connectors: Named LLM connectors for multi-LLM graphs.
         tool_registries: Named tool registries for multi-registry graphs.
         stats: Accumulated run statistics; updated by LlmConnectorBase.
         step: Current BSP super-step counter; incremented by StateGraphRunner.
     """
 
-    connector: LlmConnector | None = None
+    pool: LlmPool = field(default_factory=LlmPool.default)
     tools: ToolRegistry | None = None
     logger: logging.Logger = field(default_factory=lambda: logging.getLogger("statemachine"))
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     event_bus: EventBus = field(default_factory=EventBus)
-    llm_connectors: dict[str, Any] = field(default_factory=dict)
     tool_registries: dict[str, ToolRegistry] = field(default_factory=dict)
     stats: RunStats = field(default_factory=RunStats)
     step: int = 0
@@ -57,76 +56,39 @@ class Context(Describable):
         object.__setattr__(self, "description", inspect.getdoc(type(self)) or "")
 
     # ------------------------------------------------------------------
-    # Multi-connector / multi-registry access
+    # LLM access via pool
     # ------------------------------------------------------------------
 
-    def llm(self, key: str = "default") -> Any:
-        """Return LLM connector by key from llm_connectors dict.
-
-        Falls back to self.connector for backward compatibility when
-        llm_connectors is empty or does not contain the requested key.
-
-        Args:
-            key: Named connector key; defaults to "default".
-
-        Returns:
-            LLM connector instance.
-
-        Raises:
-            ValueError: If no connector is available under the given key
-                and no fallback connector is set.
-        """
-        if self.llm_connectors:
-            conn = self.llm_connectors.get(key)
-            if conn is None:
-                self.logger.warning(
-                    "LLM connector key=%r not found; falling back to 'default'", key
-                )
-                conn = self.llm_connectors.get("default")
-            if conn is not None:
-                return conn
-        # backward compat: fall back to legacy connector field
-        if self.connector is not None:
-            return self.connector
-        raise ValueError(
-            f"No LLM connector available (key={key!r}). Set llm_connectors in Context."
-        )
-
     def llm_for_model(self, model: str) -> Any:
-        """Return the connector whose active model matches *model*.
-
-        Lookup order:
-        1. Scan llm_connectors.values() for the first connector where
-           conn.config.model == model.
-        2. Fall back to llm() (default connector) when model is empty.
-        3. Create a transient LlmConnector(model=model) when no named
-           connector matches — log a warning so users can add one for caching.
+        """Return a connector for *model* from the pool.
 
         Args:
-            model: LLM model name (e.g. 'gpt-4o-mini'). Empty string uses the
-                default connector.
+            model: LLM model name (e.g. 'gpt-4o-mini'). Empty string uses
+                the environment default connector.
 
         Returns:
-            LLM connector instance.
-
-        Raises:
-            ValueError: Propagated from llm() if no connector is available at all.
+            LLM connector instance ready for ``achat()`` / ``chat()`` calls.
         """
-        if not model:
-            return self.llm()
-        for conn in self.llm_connectors.values():
-            if hasattr(conn, "config") and conn.config.model == model:
-                return conn
-        # No named connector matches — create transient without cache
-        self.logger.warning(
-            "No connector found for model=%r; creating transient connector "
-            "(no cache). Add LlmConnector(model=%r) to Context.llm_connectors "
-            "to enable caching.",
-            model,
-            model,
-        )
-        from agentflow.llm.connectors.LlmConnector import LlmConnector  # avoid circular import
-        return LlmConnector(model=model)
+        return self.pool.get_connector(model)
+
+    def llm(self, key: str = "default") -> Any:
+        """Return the default LLM connector from the pool.
+
+        The *key* parameter is accepted for backward compatibility but
+        ignored — the pool resolves connectors by model name, not by key.
+        Use ``llm_for_model(model)`` in new code.
+
+        Args:
+            key: Ignored (kept for backward compat with old connector-key API).
+
+        Returns:
+            Default LLM connector from the pool.
+        """
+        return self.pool.get_connector("")
+
+    # ------------------------------------------------------------------
+    # Tool registry access
+    # ------------------------------------------------------------------
 
     def get_tools(self, key: str = "default") -> ToolRegistry:
         """Return tool registry by key from tool_registries dict.
@@ -192,26 +154,19 @@ class Context(Describable):
         return await asyncio.to_thread(fn, *args, **kwargs)
 
     # ------------------------------------------------------------------
-    # Describable — expose connectors and registries in composition graph
+    # Describable — expose pool and tool registries in composition graph
     # ------------------------------------------------------------------
 
     def _extra_describable_children(self) -> dict[str, Any]:
-        """Expose LLM connectors and tool registries as nested boxes in the graph.
-
-        Named connectors and registries appear inside the Context box so the
-        full application composition is visible in graph visualisations.
+        """Expose LlmPool and tool registries as nested boxes in the graph.
 
         Returns:
             Dict mapping display name → Describable child instance.
         """
         children: dict[str, Any] = {}
-        # Named connectors from the dict (new API)
-        for name, conn in self.llm_connectors.items():
-            if isinstance(conn, Describable):
-                children[name] = conn
-        # Legacy single connector
-        if self.connector is not None and isinstance(self.connector, Describable):
-            children.setdefault("connector", self.connector)
+        # LLM pool — single box representing all LLM connections
+        if isinstance(self.pool, Describable):
+            children["pool"] = self.pool
         # Named tool registries
         for name, reg in self.tool_registries.items():
             display = f"tools_{name}" if name != "default" else "tools"

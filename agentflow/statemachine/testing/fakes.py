@@ -70,16 +70,23 @@ def make_fake_context(**overrides: Any) -> Context:
     """Create a Context with FakeLlmConnector and sensible test defaults.
 
     Args:
-        **overrides: Any Context field to override
-                     (connector, tools, logger, run_id).
+        **overrides: Any Context field to override (pool, tools, logger, run_id).
+            For backward compat, a ``connector`` key is converted to
+            ``pool=LlmPool.from_connector(connector)`` automatically.
 
     Returns:
         Context instance ready for use in tests without real LLM calls.
     """
+    from agentflow.llm.LlmPool import LlmPool
+
     defaults: dict[str, Any] = {
-        "connector": FakeLlmConnector(),
+        "pool": LlmPool.from_connector(FakeLlmConnector()),
         "logger": logging.getLogger("statemachine.test"),
         "run_id": "test-run-id",
     }
+    # backward compat: connector= kwarg → pool
+    if "connector" in overrides:
+        conn = overrides.pop("connector")
+        overrides.setdefault("pool", LlmPool.from_connector(conn))
     defaults.update(overrides)
     return Context(**defaults)

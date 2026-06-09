@@ -77,7 +77,7 @@ def test_logging_event_handler_is_default() -> None:
 @pytest.mark.unit
 def test_context_has_event_bus() -> None:
     """Context() should have an event_bus attribute of type EventBus."""
-    ctx = Context(connector=FakeLlmConnector())
+    ctx = Context()
     assert hasattr(ctx, "event_bus")
     assert isinstance(ctx.event_bus, EventBus)
 
@@ -85,8 +85,8 @@ def test_context_has_event_bus() -> None:
 @pytest.mark.unit
 def test_context_event_bus_is_independent() -> None:
     """Each Context instance should get its own EventBus."""
-    ctx1 = Context(connector=FakeLlmConnector())
-    ctx2 = Context(connector=FakeLlmConnector())
+    ctx1 = Context()
+    ctx2 = Context()
     assert ctx1.event_bus is not ctx2.event_bus
 
 

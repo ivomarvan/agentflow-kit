@@ -29,7 +29,7 @@ from pydantic import Field
 from agentflow import AgentApp
 from agentflow.llm.cache import LlmFileCache
 from agentflow.llm.ChatResponse import ToolCallInfo
-from agentflow.llm.connectors import LlmConnector
+from agentflow.llm.LlmPool import LlmPool
 from agentflow.logging_config import setup_pretty_logging
 from agentflow.statemachine import (
     Context,
@@ -276,7 +276,6 @@ class ToolExecutionVertex(StateVertex):
 # Wiring — declarative AgentApp
 # ---------------------------------------------------------------------------
 
-_connector = LlmConnector(cache=LlmFileCache(__file__))
 _registry = ToolRegistry([
     SearchPolicy(), Calculator(), GetCurrentDate(), AddDaysToDate(),
 ])
@@ -296,7 +295,7 @@ _app = AgentApp(
         "How many remote work days am I allowed per week? And what date will it be in 14 days?",
     ],
     context=Context(
-        llm_connectors={"default": _connector},
+        pool=LlmPool(cache=LlmFileCache(__file__)),
         tool_registries={"default": _registry},
     ),
     state_graph=StateGraph(

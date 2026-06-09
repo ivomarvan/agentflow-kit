@@ -25,7 +25,7 @@ from pydantic import Field
 from agentflow import AgentApp
 from agentflow.llm.cache import LlmFileCache
 from agentflow.llm.ChatResponse import ToolCallInfo
-from agentflow.llm.connectors import LlmConnector
+from agentflow.llm.LlmPool import LlmPool
 from agentflow.logging_config import setup_pretty_logging
 from agentflow.statemachine import (
     Context,
@@ -223,7 +223,6 @@ class ToolExecutionVertex(StateVertex):
 # Wiring — declarative AgentApp
 # ---------------------------------------------------------------------------
 
-_connector = LlmConnector(model="gpt-4o", cache=LlmFileCache(__file__))
 _registry = ToolRegistry([Calculator(), GetWeather()])
 _llm_vertex = LlmCallVertex()
 _tool_vertex = ToolExecutionVertex()
@@ -238,7 +237,7 @@ _app = AgentApp(
         "Is Prague warmer than New York? Also compute 100 / 4.",
     ],
     context=Context(
-        llm_connectors={"default": _connector},
+        pool=LlmPool(cache=LlmFileCache(__file__)),
         tool_registries={"default": _registry},
     ),
     state_graph=StateGraph(

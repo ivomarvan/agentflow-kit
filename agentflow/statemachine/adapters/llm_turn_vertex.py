@@ -67,7 +67,7 @@ class LlmTurnVertex(StateVertex):  # type: ignore[misc]
             response_to_patch from the ChatResponse.
         """
         messages = self._messages_from_state(state)
-        response = await ctx.connector.achat(
+        response = await ctx.llm_for_model(self.model).achat(
             messages, tools=self._tools, temperature=self._temperature
         )
         return self._ok_signal, self._response_to_patch(response)

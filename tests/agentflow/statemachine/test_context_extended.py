@@ -1,13 +1,15 @@
-"""Tests for the extended Context features added in T103-02."""
+"""Tests for Context dataclass — E107: LlmPool-based connector management."""
 from __future__ import annotations
 
 import logging
 
 import pytest
 
+from agentflow.llm.LlmPool import LlmPool
 from agentflow.llm.connectors.FakeLlmConnector import FakeLlmConnector
 from agentflow.statemachine.context import Context
 from agentflow.statemachine.run_stats import RunStats
+
 
 # ---------------------------------------------------------------------------
 # Construction
@@ -19,21 +21,22 @@ class TestContextConstruction:
     def test_context_no_args_constructs(self) -> None:
         """Context() must work with zero arguments — all fields have defaults."""
         ctx = Context()
-        assert ctx.connector is None
         assert ctx.tools is None
         assert ctx.step == 0
+        assert isinstance(ctx.pool, LlmPool)
 
-    def test_context_connector_kwarg_backward_compat(self) -> None:
-        """Context(connector=fake) is still valid after multi-connector refactor."""
-        fake = FakeLlmConnector()
-        ctx = Context(connector=fake)
-        assert ctx.connector is fake
+    def test_context_pool_kwarg_accepted(self) -> None:
+        """Context(pool=LlmPool()) is valid."""
+        pool = LlmPool()
+        ctx = Context(pool=pool)
+        assert ctx.pool is pool
 
-    def test_context_llm_connectors_dict_works(self) -> None:
-        """Context(llm_connectors={...}) constructs correctly."""
+    def test_context_pool_from_connector_wraps_fake(self) -> None:
+        """LlmPool.from_connector() lets tests inject a fixed connector."""
         fake = FakeLlmConnector()
-        ctx = Context(llm_connectors={"default": fake})
-        assert ctx.llm_connectors["default"] is fake
+        pool = LlmPool.from_connector(fake)
+        ctx = Context(pool=pool)
+        assert ctx.pool is pool
 
     def test_context_stats_is_run_stats_instance(self) -> None:
         """ctx.stats must be a RunStats instance, not None."""
@@ -48,6 +51,11 @@ class TestContextConstruction:
         ctx = Context()
         assert ctx.run_id and isinstance(ctx.run_id, str)
 
+    def test_default_pool_is_llm_pool(self) -> None:
+        """Context() default pool must be an LlmPool instance."""
+        ctx = Context()
+        assert isinstance(ctx.pool, LlmPool)
+
 
 # ---------------------------------------------------------------------------
 # ctx.llm()
@@ -56,32 +64,44 @@ class TestContextConstruction:
 
 @pytest.mark.unit
 class TestContextLlm:
-    def test_ctx_llm_returns_connector_from_dict(self) -> None:
-        """ctx.llm() resolves 'default' key from llm_connectors."""
+    def test_ctx_llm_returns_connector_via_pool(self) -> None:
+        """ctx.llm() returns a connector from the pool."""
         fake = FakeLlmConnector()
-        ctx = Context(llm_connectors={"default": fake})
-        assert ctx.llm() is fake
+        pool = LlmPool.from_connector(fake)
+        ctx = Context(pool=pool)
+        result = ctx.llm()
+        assert result is fake
 
-    def test_ctx_llm_falls_back_to_legacy_connector(self) -> None:
-        """When llm_connectors is empty, ctx.llm() falls back to ctx.connector."""
+    def test_ctx_llm_key_is_ignored(self) -> None:
+        """ctx.llm(key='anything') delegates to pool and ignores the key."""
         fake = FakeLlmConnector()
-        ctx = Context(connector=fake)
-        assert ctx.llm() is fake
+        pool = LlmPool.from_connector(fake)
+        ctx = Context(pool=pool)
+        assert ctx.llm("any_key") is fake
 
-    def test_ctx_llm_missing_key_logs_warning_and_raises(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Requesting a non-existent key (with no fallback) must log a warning and raise."""
-        ctx = Context(llm_connectors={"other": FakeLlmConnector()})
-        with caplog.at_level(logging.WARNING), pytest.raises(ValueError, match="No LLM connector"):
-            ctx.llm("missing_key")
-        assert any("missing_key" in r.message or "not found" in r.message for r in caplog.records)
 
-    def test_ctx_llm_no_connector_raises_value_error(self) -> None:
-        """ctx.llm() with neither dict nor legacy connector must raise ValueError."""
-        ctx = Context()
-        with pytest.raises(ValueError, match="No LLM connector"):
-            ctx.llm()
+# ---------------------------------------------------------------------------
+# ctx.llm_for_model()
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestContextLlmForModel:
+    def test_llm_for_model_delegates_to_pool(self) -> None:
+        """llm_for_model() returns whatever the pool returns."""
+        fake = FakeLlmConnector()
+        pool = LlmPool.from_connector(fake)
+        ctx = Context(pool=pool)
+        result = ctx.llm_for_model("gpt-4o-mini")
+        assert result is fake
+
+    def test_llm_for_model_empty_string_returns_default(self) -> None:
+        """llm_for_model('') returns the default pool connector."""
+        fake = FakeLlmConnector()
+        pool = LlmPool.from_connector(fake)
+        ctx = Context(pool=pool)
+        result = ctx.llm_for_model("")
+        assert result is fake
 
 
 # ---------------------------------------------------------------------------
@@ -126,51 +146,26 @@ class TestContextExceeded:
 
 
 # ---------------------------------------------------------------------------
-# ctx.llm_for_model()
+# LlmPool.from_connector (test helper factory)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestContextLlmForModel:
-    def test_llm_for_model_finds_by_model_name(self) -> None:
-        """llm_for_model() returns the connector whose config.model matches."""
+class TestLlmPoolFromConnector:
+    def test_from_connector_returns_pool(self) -> None:
         fake = FakeLlmConnector()
-        # FakeLlmConnector has no real config, so use a wrapped approach
-        # by patching config attribute for the test
-        from unittest.mock import MagicMock, patch
+        pool = LlmPool.from_connector(fake)
+        assert isinstance(pool, LlmPool)
 
-        mock_config = MagicMock()
-        mock_config.model = "gpt-4o-mini"
-        with patch.object(type(fake), "config", new_callable=lambda: property(lambda self: mock_config)):
-            ctx = Context(llm_connectors={"default": fake})
-            result = ctx.llm_for_model("gpt-4o-mini")
-        assert result is fake
-
-    def test_llm_for_model_falls_back_to_default_when_model_empty(self) -> None:
-        """llm_for_model('') returns the default connector via llm()."""
+    def test_from_connector_always_returns_same_connector(self) -> None:
         fake = FakeLlmConnector()
-        ctx = Context(llm_connectors={"default": fake})
-        result = ctx.llm_for_model("")
-        assert result is fake
+        pool = LlmPool.from_connector(fake)
+        assert pool.get_connector("gpt-4o") is fake
+        assert pool.get_connector("gemini-3.5") is fake
+        assert pool.get_connector("") is fake
 
-    def test_llm_for_model_creates_transient_with_warning(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """llm_for_model() logs a WARNING and creates transient connector when no match."""
-        fake = FakeLlmConnector()
-        # connector has no matching model
-        from unittest.mock import MagicMock, patch
-
-        mock_config = MagicMock()
-        mock_config.model = "other-model"
-        with (
-            caplog.at_level(logging.WARNING),
-            patch.object(type(fake), "config", new_callable=lambda: property(lambda self: mock_config)),
-        ):
-            ctx = Context(llm_connectors={"default": fake})
-            result = ctx.llm_for_model("gpt-4o-mini")
-        # Must have logged a warning about the missing connector
-        assert any("transient" in r.message.lower() or "no connector" in r.message.lower()
-                   for r in caplog.records)
-        # Must return some connector (the transient one)
-        assert result is not None
+    def test_pool_without_cache_returns_connector(self) -> None:
+        """LlmPool(cache=None) constructs without error; get_connector creates connector."""
+        pool = LlmPool(cache=None)
+        # We only test construction — actual LlmConnector creation requires env vars
+        assert isinstance(pool, LlmPool)

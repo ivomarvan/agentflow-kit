@@ -27,7 +27,7 @@ from pydantic import Field
 from agentflow import AgentApp
 from agentflow.llm.cache import LlmFileCache
 from agentflow.llm.ChatResponse import ToolCallInfo
-from agentflow.llm.connectors import LlmConnector
+from agentflow.llm.LlmPool import LlmPool
 from agentflow.logging_config import setup_pretty_logging
 from agentflow.statemachine import (
     Context,
@@ -243,7 +243,6 @@ class ToolExecutionVertex(StateVertex):
 # Wiring — declarative AgentApp
 # ---------------------------------------------------------------------------
 
-_connector = LlmConnector(cache=LlmFileCache(__file__))
 _registry = ToolRegistry([ValidatedCalculator(), ValidatedSearchPolicy()])
 _llm_vertex = LlmCallVertex()
 _tool_vertex = ToolExecutionVertex()
@@ -258,7 +257,7 @@ _app = AgentApp(
         "What are the remote work rules? Also compute (10 + 5) * 2.",
     ],
     context=Context(
-        llm_connectors={"default": _connector},
+        pool=LlmPool(cache=LlmFileCache(__file__)),
         tool_registries={"default": _registry},
     ),
     state_graph=StateGraph(

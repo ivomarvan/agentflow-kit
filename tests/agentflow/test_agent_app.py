@@ -43,7 +43,8 @@ class _MinimalApp(AgentApp):
         self._ran = False
 
     async def run_workflow(self) -> str | None:
-        ctx = Context(connector=self.connector)
+        from agentflow.llm.LlmPool import LlmPool
+        ctx = Context(pool=LlmPool.from_connector(self.connector))
         runner = StateGraphRunner(self.graph, ctx)
         await runner.run(_State(value="test"))
         self._ran = True
@@ -101,17 +102,19 @@ def test_example_app_alias_is_agent_app() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.skip(reason="E107: LLM usage edges removed — model-first vertices use pool, no connector edges")
 def test_usage_llm_edge_label_uses_backend_class_and_model() -> None:
     """Usage LLM edge labels name the inner backend class and configured model."""
     from agentflow.llm.LlmConfig import LlmConfig
     from agentflow.llm.LlmConnector import LlmConnector
 
     connector = LlmConnector(model="gpt-4o-mini")
-    label = AgentApp._usage_llm_edge_label("DeviceWorkerVertex", connector)
+    label = AgentApp._usage_llm_edge_label("DeviceWorkerVertex", connector)  # type: ignore[attr-defined]
     assert label == "DeviceWorkerVertex-OpenAiConnector-gpt-4o-mini"
 
 
 @pytest.mark.unit
+@pytest.mark.skip(reason="E107: LLM usage edges removed — model-first vertices use pool, no connector edges")
 def test_usage_llm_edge_label_for_anthropic_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -120,7 +123,7 @@ def test_usage_llm_edge_label_for_anthropic_backend(
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
     connector = LlmConnector(model="claude-3-5-sonnet")
-    label = AgentApp._usage_llm_edge_label("SafetyJudgeVertex", connector)
+    label = AgentApp._usage_llm_edge_label("SafetyJudgeVertex", connector)  # type: ignore[attr-defined]
     assert label == "SafetyJudgeVertex-AnthropicConnector-claude-3-5-sonnet"
 
 

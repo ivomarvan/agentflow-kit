@@ -154,22 +154,11 @@ class AgentApp(Describable):
         return Graph(root=base_graph.root, edges=extra_edges)
 
     def _build_usage_edges(self) -> list:
-        """Build dashed 'usage' edges from StateVertices to tool registries (and legacy connectors).
+        """Build dashed 'usage' edges from StateVertices to tool registries.
 
-        Model-first vertices use ``model`` instead of ``connector``; they do not get
-        LLM usage edges (Inspector edits model directly).  Legacy vertices with a
-        ``connector`` field still receive dashed edges to ``context.<key>``.
-
-        Inspects each non-terminal StateVertex for ``connector`` and ``tools`` fields.
-        When the field value is a valid key in the bound Context's ``llm_connectors`` or
-        ``tool_registries`` dict, a directed edge is added from the vertex node to the
-        corresponding Context child cluster.
-
-        The target vertex ID mirrors the path produced by
-        ``Context._extra_describable_children()``:
-          - LLM connector  → ``<root>.context.<key>``
-          - Tool registry  → ``<root>.context.tools`` (default) or
-                             ``<root>.context.tools_<key>`` (non-default)
+        Model-first vertices declare ``model`` and look up connectors via the
+        pool — no LLM usage edges are drawn.  Tool edges are drawn when a vertex
+        has a ``tools`` field whose value matches a key in ``tool_registries``.
 
         Returns:
             List of ``Edge`` objects with ``attributes={"usage": True}``.
@@ -187,7 +176,6 @@ class AgentApp(Describable):
         root_id = type(self).__name__
         context_prefix = f"{root_id}.context"
 
-        llm_keys: set[str] = set(self._context.llm_connectors.keys())
         reg_keys: set[str] = set(self._context.tool_registries.keys())
 
         for node in nodes:
@@ -195,19 +183,8 @@ class AgentApp(Describable):
                 continue
             node_vertex_id = node_ids[id(node)]
 
-            connector_val = getattr(node, "connector", None)
-            if isinstance(connector_val, str) and connector_val in llm_keys:
-                llm_connector = self._context.llm_connectors[connector_val]
-                edges.append(Edge(
-                    from_id=node_vertex_id,
-                    to_id=f"{context_prefix}.{connector_val}",
-                    label=AgentApp._usage_llm_edge_label(node_vertex_id, llm_connector),
-                    attributes={"usage": True, "usage_type": "llm"},
-                ))
-
             tools_val = getattr(node, "tools", None)
             if isinstance(tools_val, str) and tools_val in reg_keys:
-                # Mirrors Context._extra_describable_children naming
                 display = "tools" if tools_val == "default" else f"tools_{tools_val}"
                 edges.append(Edge(
                     from_id=node_vertex_id,
@@ -217,23 +194,6 @@ class AgentApp(Describable):
                 ))
 
         return edges
-
-    @staticmethod
-    def _usage_llm_edge_label(vertex_id: str, connector: Any) -> str:
-        """Return the dashed-edge label for a StateVertex → LLM connector link.
-
-        Format: ``<Vertex>-<BackendConnectorClass>-<model>``.
-
-        Args:
-            vertex_id: Topology node identifier (typically the vertex class name).
-            connector: ``LlmConnector`` facade or concrete ``LlmConnectorBase`` instance.
-
-        Returns:
-            Human-readable edge label for graph rendering.
-        """
-        backend = getattr(connector, "_inner", connector)
-        class_name = type(backend).__name__
-        return f"{vertex_id}-{class_name}-{connector.config.model}"
 
     @staticmethod
     def _usage_tools_edge_label(vertex_id: str, registry_key: str) -> str:
@@ -275,9 +235,8 @@ class AgentApp(Describable):
         from agentflow.statemachine.runner import StateGraphRunner
 
         ctx = _Context(
-            llm_connectors=self._context.llm_connectors,
+            pool=self._context.pool,
             tool_registries=self._context.tool_registries,
-            connector=self._context.connector,
             tools=self._context.tools,
             event_bus=self.event_bus,
         )
@@ -402,34 +361,32 @@ class AgentApp(Describable):
         1. ``state_graph.vertices`` — all resolved ``StateVertex`` instances
            that expose at least one Pydantic scalar field.
            The ``model`` field receives an ``enum`` populated from all
-           ``available_models`` lists across configured LLM connectors so
-           the GUI renders a select box.
+           ``available_models`` lists from ``LlmConfig.from_env()`` so the GUI
+           renders a select box.
            The ``tools`` field receives an ``enum`` from
            ``context.tool_registries`` keys likewise.
         2. Direct ``LlmConnector`` attributes on ``self`` — backward-compat
            with the old subclass pattern (``self.connector = LlmConnector(...)``).
-
-        LLM connectors from ``context.llm_connectors`` are intentionally hidden
-        from the Inspector — users interact with ``model`` on each vertex instead.
 
         Returns:
             JSON-Schema-compatible dict with ``properties`` keyed by component
             name (vertex class name).
         """
         from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
+        from agentflow.llm.LlmConfig import LlmConfig
 
         props: dict[str, Any] = {}
 
-        # Collect all available models from configured connectors for the model enum
-        all_models: list[str] = sorted({
-            m
-            for conn in (self._context.llm_connectors.values() if self._context else [])
-            if hasattr(conn, "config")
-            for models_list in (
-                getattr(conn.config, "available_models", {}).values()
-            )
-            for m in models_list
-        })
+        # Collect all available models from env config for the model enum
+        try:
+            env_config = LlmConfig.from_env()
+            all_models: list[str] = sorted({
+                m
+                for models_list in env_config.available_models.values()
+                for m in models_list
+            })
+        except Exception:
+            all_models = []
 
         tool_keys: list[str] = (
             list(self._context.tool_registries.keys()) if self._context is not None else []
@@ -539,13 +496,12 @@ class AgentApp(Describable):
         Routes to the correct component using the same priority as
         ``get_config_schema()``:
 
-        1. Named LLM connector in ``context.llm_connectors``.
-        2. ``StateVertex`` instance looked up by class name in the graph.
-        3. Direct ``LlmConnector`` attribute on ``self`` (backward compat).
+        1. ``StateVertex`` instance looked up by class name in the graph.
+        2. Direct ``LlmConnector`` attribute on ``self`` (backward compat).
 
         Args:
             path: Dot-path string ``"component.param"``,
-                  e.g. ``"economy.model"`` or ``"DeviceWorkerVertex.max_rounds"``.
+                  e.g. ``"DeviceWorkerVertex.max_rounds"``.
             value: New value to assign.  Must pass Pydantic validation.
 
         Raises:
@@ -562,20 +518,7 @@ class AgentApp(Describable):
             )
         component_name, param_name = parts
 
-        # 1. Named LLM connector from Context
-        if self._context is not None:
-            connector = self._context.llm_connectors.get(component_name)
-            if connector is not None and isinstance(connector, LlmConnector):
-                valid_keys = set(connector.get_config_schema().get("properties", {}).keys())
-                if param_name not in valid_keys:
-                    raise KeyError(
-                        f"Unknown config field {param_name!r} on {type(connector).__name__} "
-                        f"(valid: {sorted(valid_keys)})"
-                    )
-                setattr(connector, param_name, value)
-                return
-
-        # 2. StateVertex looked up by class name in graph
+        # 1. StateVertex looked up by class name in graph
         if self._state_graph is not None:
             vertex = self._state_graph._resolver.lookup_by_name(component_name)
             if vertex is not None:
@@ -588,7 +531,7 @@ class AgentApp(Describable):
                 setattr(vertex, param_name, value)
                 return
 
-        # 3. Direct LlmConnector attr on self (backward compat)
+        # 2. Direct LlmConnector attr on self (backward compat)
         child = getattr(self, component_name, None)
         if child is not None and isinstance(child, LlmConnector):
             valid_keys = set(child.get_config_schema().get("properties", {}).keys())

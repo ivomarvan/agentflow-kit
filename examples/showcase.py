@@ -40,7 +40,7 @@ from agentflow import AgentApp
 from agentflow.events import AgentEvent
 from agentflow.llm.cache import LlmFileCache
 from agentflow.llm.ChatResponse import ToolCallInfo
-from agentflow.llm.connectors import LlmConnector
+from agentflow.llm.LlmPool import LlmPool
 from agentflow.llm.LlmConnectorBase import LlmConnectorBase
 from agentflow.logging_config import setup_pretty_logging
 from agentflow.statemachine import (
@@ -290,7 +290,6 @@ class ToolExecutionVertex(StateVertex):
 # Wiring — declarative AgentApp
 # ---------------------------------------------------------------------------
 
-_connector = LlmConnector(cache=LlmFileCache(__file__))
 _registry = ToolRegistry(tools=[GetWeather(), Calculator(), GetExchangeRate()])
 _llm_v = LlmCallVertex(_registry)
 _tool_v = ToolExecutionVertex(_registry)
@@ -305,7 +304,7 @@ _app = AgentApp(
         "Compare weather in Paris and Berlin. What is 1 GBP in EUR?",
     ],
     context=Context(
-        llm_connectors={"default": _connector},
+        pool=LlmPool(cache=LlmFileCache(__file__)),
         tool_registries={"default": _registry},
     ),
     state_graph=StateGraph(
@@ -341,7 +340,7 @@ def ShowcaseApp(connector: LlmConnectorBase | None = None) -> AgentApp:
         default_question=_DEFAULT_QUESTION,
         sample_prompts=_app.sample_prompts,
         context=Context(
-            llm_connectors={"default": connector},
+            pool=LlmPool.from_connector(connector),
             tool_registries={"default": registry},
         ),
         state_graph=StateGraph(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock  # noqa: F401 — used by _make_context in future
 
 import pytest
 import pytest_asyncio  # noqa: F401 — ensures asyncio plugin is active
@@ -11,9 +11,8 @@ from agentflow.statemachine.context import Context
 
 
 def _make_context() -> Context:
-    """Return a Context with a mock connector for testing."""
-    connector = MagicMock()
-    return Context(connector=connector)
+    """Return a Context for testing (no real LLM pool needed for these tests)."""
+    return Context()
 
 
 @pytest.mark.unit

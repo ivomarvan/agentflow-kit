@@ -36,7 +36,7 @@ from pydantic import Field
 from agentflow import AgentApp
 from agentflow.events import AgentEvent
 from agentflow.llm.cache import LlmFileCache
-from agentflow.llm.connectors import LlmConnector
+from agentflow.llm.LlmPool import LlmPool
 from agentflow.statemachine import (
     Context,
     Signal,
@@ -296,10 +296,7 @@ if __name__ == "__main__":
             ),
         ),
         context=Context(
-            llm_connectors={
-                "default": LlmConnector(model="gpt-4o-mini", cache=LlmFileCache(__file__)),
-                "quality": LlmConnector(model="gpt-4o",      cache=LlmFileCache(__file__)),
-            },
+            pool=LlmPool(cache=LlmFileCache(__file__)),
             tool_registries={
                 "default": ToolRegistry([GetWeather(), Calculator(), GetExchangeRate()]),
             },

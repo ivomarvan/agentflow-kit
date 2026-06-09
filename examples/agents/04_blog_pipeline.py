@@ -23,7 +23,7 @@ from pydantic import Field
 
 from agentflow import AgentApp
 from agentflow.llm.cache import LlmFileCache
-from agentflow.llm.connectors import LlmConnector
+from agentflow.llm.LlmPool import LlmPool
 from agentflow.logging_config import setup_pretty_logging
 from agentflow.statemachine import (
     Context,
@@ -177,8 +177,6 @@ class EditorVertex(StateVertex):
 # Wiring — declarative AgentApp
 # ---------------------------------------------------------------------------
 
-_connector = LlmConnector(cache=LlmFileCache(__file__))
-
 _app = AgentApp(
     doc=__doc__,
     default_question=_DEFAULT_TOPIC,
@@ -187,7 +185,7 @@ _app = AgentApp(
         "How large language models are changing software development",
         "The rise of autonomous coding agents in 2026",
     ],
-    context=Context(llm_connectors={"default": _connector}),
+    context=Context(pool=LlmPool(cache=LlmFileCache(__file__))),
     state_graph=StateGraph(
         start=ResearcherVertex,
         transitions=[

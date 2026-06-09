@@ -43,7 +43,7 @@ from pydantic import Field
 
 from agentflow import AgentApp
 from agentflow.llm.cache import LlmFileCache
-from agentflow.llm.connectors import LlmConnector
+from agentflow.llm.LlmPool import LlmPool
 from agentflow.statemachine import (
     Context,
     Signal,
@@ -403,12 +403,7 @@ if __name__ == "__main__":
             ),
         ),
         context=Context(
-            llm_connectors={
-                # economy: used by IntentParser, DeviceWorker, VoiceFormatter
-                "economy": LlmConnector(model="gpt-4o-mini", cache=LlmFileCache(__file__)),
-                # quality: used by SafetyJudge — higher reasoning needed for safety checks
-                "quality": LlmConnector(model="gemini-3.5-flash",      cache=LlmFileCache(__file__)),
-            },
+            pool=LlmPool(cache=LlmFileCache(__file__)),
             tool_registries={
                 "default": ToolRegistry([
                     GetCurrentStatus(), SetTemperature(), ToggleDevice(),

@@ -33,6 +33,7 @@ from agentflow.llm.connectors.LlmConnector import LlmConnector
 from agentflow.llm.connectors.OpenAiConnector import OpenAiConnector
 from agentflow.llm.LlmConfig import OPENAI_COMPATIBLE_BACKENDS, SUPPORTED_BACKENDS, LlmConfig
 from agentflow.llm.LlmConnectorBase import LlmConnectorBase
+from agentflow.llm.LlmPool import LlmPool
 from agentflow.llm.OllamaManager import OllamaManager, OllamaModelInfo
 from agentflow.logging_config import PrettyFormatter, setup_pretty_logging
 from agentflow.statemachine import (
@@ -54,6 +55,8 @@ __all__ = [
     # Connector base & smart connector
     "LlmConnectorBase",
     "LlmConnector",
+    # Pool — transparent connector management
+    "LlmPool",
     # Backend-specific connectors
     "OpenAiConnector",
     "AnthropicConnector",
