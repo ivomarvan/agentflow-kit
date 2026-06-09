@@ -155,7 +155,7 @@ class LlmFileCache(LlmCacheBase):
             return len(self._entries)
 
     # ------------------------------------------------------------------
-    # Describable
+    # Describable — attributes and editable parameters
     # ------------------------------------------------------------------
 
     def _get_own_attributes(self) -> dict[str, Any]:
@@ -164,6 +164,53 @@ class LlmFileCache(LlmCacheBase):
         attrs["size"] = self.size
         attrs["max_size"] = self._max_size
         return attrs
+
+    def get_config_schema(self) -> dict[str, Any]:
+        """Return a JSON Schema exposing ``max_size`` as an editable integer.
+
+        Returns:
+            JSON-Schema dict with a single ``max_size`` property.
+        """
+        return {
+            "type": "object",
+            "title": type(self).__name__,
+            "properties": {
+                "max_size": {
+                    "type": "integer",
+                    "title": "max_size",
+                    "description": "Maximum number of cached responses. "
+                                   "When exceeded, the least-used entry is evicted.",
+                    "minimum": 1,
+                },
+            },
+        }
+
+    def get_param_values(self) -> dict[str, Any]:
+        """Return current editable parameter values.
+
+        Returns:
+            Dict with ``max_size`` → current value.
+        """
+        return {"max_size": self._max_size}
+
+    def set_params(self, **kwargs: Any) -> None:
+        """Update editable parameters.
+
+        Only ``max_size`` is accepted.  The new limit takes effect on the next
+        cache write; existing over-limit entries are NOT evicted immediately.
+
+        Args:
+            **kwargs: Mapping of parameter name → new value.
+
+        Raises:
+            ValueError: If an unknown parameter key is provided.
+        """
+        for key, value in kwargs.items():
+            if key == "max_size":
+                self._max_size = int(value)
+                logger.info("cache max_size updated: file=%s max_size=%d", self._cache_file, self._max_size)
+            else:
+                raise ValueError(f"LlmFileCache.set_params: unknown parameter {key!r}")
 
     # ------------------------------------------------------------------
     # Private — I/O

@@ -41,6 +41,7 @@ from agentflow.statemachine import (
     Context,
     Signal,
     StateGraph,
+    LlmStateVertex,
     StateVertex,
     StdEnd,
     Transition,
@@ -197,7 +198,7 @@ class GetExchangeRate(ToolBase):
 # ---------------------------------------------------------------------------
 
 
-class ResearchVertex(StateVertex):
+class ResearchVertex(LlmStateVertex):
     """Gather facts by calling LLM with tools; tool-calling loop is hidden inside connector.
 
     The entire ReAct loop (LLM → tool calls → LLM …) runs inside achat_with_tools.
@@ -232,7 +233,7 @@ class ResearchVertex(StateVertex):
         return AppSignal.ready, AppPatch(research=response.text)
 
 
-class EvaluateVertex(StateVertex):
+class EvaluateVertex(LlmStateVertex):
     """Assess research quality; extract the final answer or request another research round."""
 
     connector:     Annotated[str, Field(description="LLM connector key from Context.")] = "quality"
@@ -344,7 +345,7 @@ if __name__ == "__main__":
 #
 #    Uživatel definuje parametry jako class-level Annotated atributy:
 #
-#      class ResearchVertex(StateVertex):
+#      class ResearchVertex(LlmStateVertex):
 #          connector:  Annotated[str, Field(description="...")] = "default"
 #          max_rounds: Annotated[int, Field(ge=1, le=20, description="...")] = 5
 #          # Žádný __init__, žádné self.x = x — Pydantic generuje automaticky.

@@ -48,6 +48,7 @@ from agentflow.statemachine import (
     Context,
     Signal,
     StateGraph,
+    LlmStateVertex,
     StateVertex,
     StdEnd,
     Transition,
@@ -209,7 +210,7 @@ class ToggleDevice(ToolBase):
 #     literal when you want visible line breaks in the editor.
 
 
-class IntentParserVertex(StateVertex):
+class IntentParserVertex(LlmStateVertex):
     """Parse and classify the user's voice command before passing it to the Worker."""
 
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
@@ -245,7 +246,7 @@ class IntentParserVertex(StateVertex):
         return SmartHomeSignal.parsed, SmartHomePatch(intent=intent)
 
 
-class DeviceWorkerVertex(StateVertex):
+class DeviceWorkerVertex(LlmStateVertex):
     """Propose device actions using a cheap LLM with tools (tool loop hidden in connector)."""
 
     tools:      Annotated[str, Field(description="Tool registry key from Context.")] = "default"
@@ -291,7 +292,7 @@ class DeviceWorkerVertex(StateVertex):
         )
 
 
-class SafetyJudgeVertex(StateVertex):
+class SafetyJudgeVertex(LlmStateVertex):
     """Validate the action plan against safety rules; approve or reject with reason."""
 
     max_revisions: Annotated[int, Field(ge=1, le=3,
@@ -348,7 +349,7 @@ If UNSAFE: respond exactly with "REJECTED: <specific rule violated and how to fi
         )
 
 
-class VoiceFormatterVertex(StateVertex):
+class VoiceFormatterVertex(LlmStateVertex):
     """Convert the approved action plan into a natural, TTS-optimised voice response."""
 
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).

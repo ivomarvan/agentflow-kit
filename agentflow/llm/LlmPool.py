@@ -139,5 +139,15 @@ class LlmPool(Describable):
         return attrs
 
     def _extra_describable_children(self) -> dict[str, Any]:
-        """Return empty dict — connectors are internal implementation details."""
+        """Expose the cache as a nested box in the graph; hide connectors.
+
+        Connectors are internal implementation details and are NOT shown.
+        Only the shared cache (if set) appears as a nested Describable child.
+
+        Returns:
+            Dict with ``"cache"`` → cache instance when a cache is configured,
+            otherwise empty dict.
+        """
+        if self._cache is not None and isinstance(self._cache, Describable):
+            return {"cache": self._cache}
         return {}

@@ -38,6 +38,7 @@ from agentflow.llm.OllamaManager import OllamaManager, OllamaModelInfo
 from agentflow.logging_config import PrettyFormatter, setup_pretty_logging
 from agentflow.statemachine import (
     EnumSignal,
+    LlmStateVertex,
     ReActPatch,
     ReActSignal,
     ReActState,
@@ -107,6 +108,7 @@ __all__ = [
     "GraphRenderer",
     # State machine
     "EnumSignal",
+    "LlmStateVertex",
     "StdSignal",
     "Signal",
     "ReActState",

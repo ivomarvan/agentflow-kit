@@ -11,9 +11,9 @@
         :id="`param-group-${propKey}`"
         :class="[
           'param-group',
-          { highlighted: structureStore.selectedNode === propKey },
+          { highlighted: isGroupHighlighted(propKey, propSchema) },
         ]"
-        @click="onGroupClick(propKey)"
+        @click="onGroupClick(propKey, propSchema)"
       >
         <h3 class="group-title">{{ propKey }}</h3>
         <ParamGroupForm
@@ -106,12 +106,33 @@ onMounted(async () => {
 watch(() => structureStore.selectedNode, async (nodeId) => {
   if (!nodeId) return
   await nextTick()
-  const el = document.getElementById(`param-group-${nodeId}`)
+  // Try direct key match first, then search by x-graph-node-id annotation
+  let el = document.getElementById(`param-group-${nodeId}`)
+  if (!el) {
+    for (const [propKey, propSchema] of Object.entries(topLevelProperties.value)) {
+      const xNodeId = (propSchema as Record<string, unknown> | undefined)?.['x-graph-node-id']
+      if (xNodeId === nodeId) {
+        el = document.getElementById(`param-group-${propKey}`)
+        break
+      }
+    }
+  }
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 })
 
-function onGroupClick(propKey: string) {
-  structureStore.selectNode(propKey)
+function onGroupClick(propKey: string, propSchema?: unknown) {
+  // Use x-graph-node-id when present so the graph highlights the right node.
+  const xNodeId = (propSchema as Record<string, unknown> | undefined)?.['x-graph-node-id']
+  structureStore.selectNode(typeof xNodeId === 'string' ? xNodeId : propKey)
+}
+
+/** True when the graph's selected node corresponds to this settings group. */
+function isGroupHighlighted(propKey: string, propSchema?: unknown): boolean {
+  const nodeId = structureStore.selectedNode
+  if (!nodeId) return false
+  if (nodeId === propKey) return true
+  const xNodeId = (propSchema as Record<string, unknown> | undefined)?.['x-graph-node-id']
+  return typeof xNodeId === 'string' && nodeId === xNodeId
 }
 
 function graphIframe(): HTMLIFrameElement | null {

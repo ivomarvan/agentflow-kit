@@ -29,6 +29,7 @@ from agentflow.statemachine import (
     Context,
     StateGraph,
     StateGraphRunner,
+    LlmStateVertex,
     StateVertex,
     StdEnd,
     StdSignal,
@@ -77,7 +78,7 @@ class BlogPatch:
 #     literal when you want visible line breaks in the editor.
 
 
-class ResearcherVertex(StateVertex):
+class ResearcherVertex(LlmStateVertex):
     """Collects 3 concise bullet points about the topic via LLM."""
 
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
@@ -108,7 +109,7 @@ class ResearcherVertex(StateVertex):
         return StdSignal.ok, BlogPatch(research_notes=response.text)
 
 
-class WriterVertex(StateVertex):
+class WriterVertex(LlmStateVertex):
     """Turns research bullet points into a 150-word blog post via LLM."""
 
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
@@ -139,7 +140,7 @@ class WriterVertex(StateVertex):
         return StdSignal.ok, BlogPatch(draft=response.text)
 
 
-class EditorVertex(StateVertex):
+class EditorVertex(LlmStateVertex):
     """Polishes the draft for clarity, grammar, and brevity via LLM."""
 
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).

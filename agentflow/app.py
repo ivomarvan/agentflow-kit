@@ -118,6 +118,19 @@ class AgentApp(Describable):
         if context is not None:
             self.context = context
 
+    def _get_own_attributes(self) -> dict[str, Any]:
+        """Exclude internal/infrastructure attributes from tooltip display.
+
+        Hides runtime and GUI-internal fields that are not relevant to users:
+        ``event_bus``, ``gui_script_name``, ``gui_script_doc``, ``current_prompt``.
+        Only application-level configuration is shown.
+        """
+        _HIDDEN = frozenset({
+            "event_bus", "gui_script_name", "gui_script_doc", "current_prompt",
+        })
+        attrs = super()._get_own_attributes()
+        return {k: v for k, v in attrs.items() if k not in _HIDDEN}
+
     def get_graph(self) -> Graph:
         """Build a composite graph: composition tree augmented with topology edges.
 
@@ -374,6 +387,7 @@ class AgentApp(Describable):
         """
         from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
         from agentflow.llm.LlmConfig import LlmConfig
+        from agentflow.llm.LlmPool import LlmPool
 
         props: dict[str, Any] = {}
 
@@ -426,6 +440,28 @@ class AgentApp(Describable):
                 props[attr_name] = attr_value.get_config_schema()
 
         schema = {"type": "object", "title": type(self).__name__, "properties": props}
+
+        # LlmPool cache — expose editable parameters (e.g. max_size on LlmFileCache).
+        # Uses the cache class name as the settings group key so it stays stable.
+        # Annotates x-graph-node-id so SettingsView can highlight the matching graph node.
+        pool = (
+            self._context.pool
+            if self._context is not None and isinstance(self._context.pool, LlmPool)
+            else None
+        )
+        if pool is not None and pool._cache is not None:
+            cache = pool._cache
+            cache_schema = cache.get_config_schema()
+            if cache_schema.get("properties"):
+                # Compute the DOT-safe node ID so the Settings/Graph link works.
+                # Path: {AppClass}.context.pool.cache → safe_id with dots → underscores.
+                from agentflow.describable.graph_renderer import GraphRenderer
+                cache_node_id = GraphRenderer._safe_id(
+                    f"{type(self).__name__}.context.pool.cache"
+                )
+                cache_schema["x-graph-node-id"] = cache_node_id
+                props[type(cache).__name__] = cache_schema
+
         AgentApp._sanitize_gui_schema(schema)
         return schema
 
@@ -466,6 +502,7 @@ class AgentApp(Describable):
             Nested dict: ``{component_name: {field_name: value, ...}, ...}``.
         """
         from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
+        from agentflow.llm.LlmPool import LlmPool
 
         result: dict[str, Any] = {}
 
@@ -487,6 +524,18 @@ class AgentApp(Describable):
                 except NotImplementedError:
                     continue
                 result[attr_name] = attr_value.get_param_values()
+
+        # LlmPool cache — current editable values (e.g. max_size)
+        pool = (
+            self._context.pool
+            if self._context is not None and isinstance(self._context.pool, LlmPool)
+            else None
+        )
+        if pool is not None and pool._cache is not None:
+            cache = pool._cache
+            cache_values = cache.get_param_values()
+            if cache_values:
+                result[type(cache).__name__] = cache_values
 
         return result
 
@@ -510,6 +559,7 @@ class AgentApp(Describable):
             ValueError: If the value fails Pydantic field validation.
         """
         from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
+        from agentflow.llm.LlmPool import LlmPool
 
         parts = path.split(".", 1)
         if len(parts) != 2:
@@ -531,7 +581,19 @@ class AgentApp(Describable):
                 setattr(vertex, param_name, value)
                 return
 
-        # 2. Direct LlmConnector attr on self (backward compat)
+        # 2. LlmPool cache — route by cache class name (e.g. "LlmFileCache")
+        pool = (
+            self._context.pool
+            if self._context is not None and isinstance(self._context.pool, LlmPool)
+            else None
+        )
+        if pool is not None and pool._cache is not None:
+            cache = pool._cache
+            if type(cache).__name__ == component_name:
+                cache.set_params(**{param_name: value})
+                return
+
+        # 3. Direct LlmConnector attr on self (backward compat)
         child = getattr(self, component_name, None)
         if child is not None and isinstance(child, LlmConnector):
             valid_keys = set(child.get_config_schema().get("properties", {}).keys())

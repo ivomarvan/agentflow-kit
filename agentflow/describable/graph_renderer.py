@@ -1394,7 +1394,7 @@ _SVG_INJECTION_TEMPLATE = r"""\
 <defs>
   <style type="text/css"><![CDATA[
     a { cursor: pointer; }
-    a text { fill: #1565c0; text-decoration: underline; text-decoration-color: #1565c0; }
+    a text { fill: inherit; text-decoration: none; }
     g.af-selected path,
     g.af-selected polygon,
     g.af-selected ellipse,
@@ -1416,7 +1416,8 @@ _SVG_INJECTION_TEMPLATE = r"""\
     <div xmlns="http://www.w3.org/1999/xhtml">
       <style type="text/css">
         #gv-tt-inner {
-          font-family: Arial, sans-serif; font-size: 13px; line-height: 1.6;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+          font-size: 13px; line-height: 1.6;
           padding: 12px 14px; box-sizing: border-box; overflow-y: auto;
           height: 430px; border-left: 4px solid #1976d2;
         }
@@ -1608,6 +1609,8 @@ _SVG_INJECTION_TEMPLATE = r"""\
 
   svg.addEventListener("mouseover", function (e) {
     if (tipContains(e.target)) { clearHide(); freezeTip(); return; }
+    // While frozen: cursor is moving toward the tooltip — don't replace with parent hover.
+    if (frozen) { clearHide(); return; }
     var el = e.target;
     while (el && el.tagName !== "svg" && el.tagName !== "SVG") {
       if (el._md) {
@@ -1748,11 +1751,7 @@ _HTML_TEMPLATE = """\
     }
     #svg-wrap svg { max-width: none; height: auto; }
     #svg-wrap svg a { cursor: pointer; }
-    #svg-wrap svg a text {
-      fill: #1565c0;
-      text-decoration: underline;
-      text-decoration-color: #1565c0;
-    }
+    #svg-wrap svg a text { fill: inherit; text-decoration: none; }
     #svg-wrap svg g.af-selected path,
     #svg-wrap svg g.af-selected polygon,
     #svg-wrap svg g.af-selected ellipse,
@@ -1767,6 +1766,7 @@ _HTML_TEMPLATE = """\
       background: white; border-radius: 8px; padding: 16px;
       box-shadow: 0 6px 28px rgba(0,0,0,.22);
       border-left: 4px solid #1976d2;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
       font-size: 13px; line-height: 1.6; pointer-events: none;
     }
     /* When frozen (cursor idle or hovering the panel) the tooltip becomes
@@ -1917,6 +1917,9 @@ _HTML_TEMPLATE = """\
     const svgWrap = document.getElementById("svg-wrap");
 
     svgWrap.addEventListener("mouseover", function(e) {
+      // While the tooltip is frozen (sticky), don't let parent-box hover replace it.
+      // The cursor can move freely toward the tooltip panel without losing content.
+      if (frozen) { clearHide(); return; }
       let el = e.target;
       while (el && el.id !== "svg-wrap") {
         if (el._md) { showTip(el._md, el, e); return; }
@@ -1983,6 +1986,42 @@ _HTML_TEMPLATE = """\
         });
       }
     });
+
+    // --- iframe postMessage tooltip bridge ---
+    // When the page is embedded in an <iframe>, forward tooltip events to the
+    // parent window so the tooltip can be rendered outside iframe boundaries
+    // (position: fixed inside an iframe is clipped to the iframe viewport).
+    const _inIframe = (function() {
+      try { return window.parent !== window; } catch(e) { return false; }
+    })();
+
+    if (_inIframe) {
+      // Override hideTip: also tell parent to hide its overlay
+      const _origHideTip = hideTip;
+      hideTip = function() {
+        _origHideTip();
+        tt.style.display = "none";
+        window.parent.postMessage({ type: "af:tooltip", action: "hide" }, "*");
+      };
+
+      // Override showTip: manage local state but delegate rendering to parent
+      showTip = function(md, source, e) {
+        if (ttSource !== source) {
+          if (frozen) { clearHide(); return; }  // frozen: don't replace with parent hover
+          ttSource = source;
+          frozen = false;
+          tt.style.display = "none";  // keep local tooltip hidden
+          window.parent.postMessage({ type: "af:tooltip", action: "show", md: md, x: e.clientX, y: e.clientY }, "*");
+        }
+        clearHide();
+        if (!frozen) armIdle();
+      };
+
+      // Override placeTip: forward cursor position to parent
+      placeTip = function(e) {
+        window.parent.postMessage({ type: "af:tooltip", action: "move", x: e.clientX, y: e.clientY }, "*");
+      };
+    }
   </script>
 </body>
 </html>

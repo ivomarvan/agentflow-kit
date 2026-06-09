@@ -13,13 +13,13 @@ from typing import TYPE_CHECKING, Any
 
 from agentflow.llm.ChatResponse import ChatResponse
 from agentflow.statemachine.signal import StdSignal
-from agentflow.statemachine.vertex import StateVertex
+from agentflow.statemachine.vertex import LlmStateVertex
 
 if TYPE_CHECKING:
     from agentflow.statemachine.context import Context
 
 
-class LlmTurnVertex(StateVertex):  # type: ignore[misc]
+class LlmTurnVertex(LlmStateVertex):  # type: ignore[misc]
     """Single LLM chat turn as a StateVertex — no ReAct loop.
 
     Calls ctx.connector.achat with messages extracted from state.

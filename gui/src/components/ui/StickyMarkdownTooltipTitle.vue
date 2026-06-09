@@ -84,6 +84,7 @@ function onTitleMove(e: MouseEvent) {
   padding: 16px;
   box-shadow: 0 6px 28px rgba(0, 0, 0, 0.22);
   border-left: 4px solid #1976d2;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   font-size: 13px;
   line-height: 1.6;
   pointer-events: none;

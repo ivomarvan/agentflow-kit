@@ -36,6 +36,7 @@ from agentflow.statemachine import (
     EnumSignal,
     StateGraph,
     StateGraphRunner,
+    LlmStateVertex,
     StateVertex,
     StdEnd,
     StdSignal,
@@ -199,7 +200,7 @@ class ReactSignal(EnumSignal):
 _MAX_STEPS = 10
 
 
-class LlmCallVertex(StateVertex):
+class LlmCallVertex(LlmStateVertex):
     """Calls the LLM and decides whether to invoke a tool or emit a final answer."""
 
     tools: Annotated[str, Field(description="Tool registry key from Context.")] = "default"

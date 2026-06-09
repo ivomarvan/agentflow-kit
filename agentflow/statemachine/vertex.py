@@ -1,15 +1,26 @@
-"""StateVertex and terminal node implementations.
+"""StateVertex, LlmStateVertex, and terminal node implementations.
 
-StateVertex is a Pydantic BaseModel so subclasses can declare configurable
-parameters as class-level Annotated[T, Field(...)] attributes:
+StateVertex is the Pydantic BaseModel base for all graph nodes.
+Subclasses that call ctx.llm_for_model() should inherit from LlmStateVertex,
+which adds model and temperature as configurable parameters.
 
-    class MyVertex(StateVertex):
-        max_steps: Annotated[int, Field(ge=1, description="...")] = 10
+Terminal nodes (End, StdEnd) extend StateVertex directly — no LLM fields needed.
+
+Example — pure state-transformation vertex (no LLM):
+
+    class ToolExecutionVertex(StateVertex):
+        tools: Annotated[str, Field(description="Tool registry key.")] = "default"
 
         async def run(self, state, ctx):
-            ...self.max_steps...
+            ...
 
-No __init__ needed — Pydantic generates it automatically with validation.
+Example — LLM vertex with model + temperature:
+
+    class MyLlmVertex(LlmStateVertex):
+        max_steps: Annotated[int, Field(ge=1, description="Max LLM calls.")] = 10
+
+        async def run(self, state, ctx):
+            response = await ctx.llm_for_model(self.model).achat(...)
 """
 from __future__ import annotations
 
@@ -26,21 +37,31 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
+_PYDANTIC_INTERNAL_ATTRS = frozenset({
+    "model_fields",
+    "model_config",
+    "model_fields_set",
+    "__dict__",
+    "__pydantic_fields_set__",
+    "__pydantic_extra__",
+    "__pydantic_private__",
+})
+
 
 class StateVertex(Describable, BaseModel):
-    """Abstract base for all graph nodes.
+    """Abstract base for all graph nodes (no LLM fields).
 
     Subclass and implement run(). Class-level Annotated[T, Field(...)] attributes
     are automatically treated as constructor parameters with validation.
+
+    For vertices that call ctx.llm_for_model(), inherit from LlmStateVertex instead.
 
     All default parameter values must be provided (or the class must be in
     StateGraph.initialized_vertexes) for auto-instantiation to work.
 
     Inherits from Describable so GUI tooling can call get_config_schema(),
     get_param_values(), and set_params() to inspect and edit parameters at
-    runtime.  Because Describable.__init__ accepts **kwargs and forwards them
-    to BaseModel.__init__, cooperative multiple inheritance works without any
-    extra plumbing in StateVertex.
+    runtime.
     """
 
     model_config = ConfigDict(
@@ -53,18 +74,21 @@ class StateVertex(Describable, BaseModel):
     # StateVertex instances are used as dict keys and set members in the graph topology.
     __hash__ = object.__hash__  # type: ignore[assignment]
 
-    model: Annotated[str, Field(
-        description=(
-            "LLM model name (e.g. 'gpt-4o-mini'). "
-            "Empty string = use Context default connector."
-        ),
-        json_schema_extra={"x-model-select": True},
-    )] = ""
-    temperature: Annotated[float, Field(
-        ge=0.0,
-        le=2.0,
-        description="LLM sampling temperature (0 = deterministic, 2 = creative).",
-    )] = 0.2
+    def _get_own_attributes(self) -> dict[str, Any]:
+        """Include Pydantic declared fields in the description/tooltip.
+
+        Pydantic v2 stores field values in __dict__ but the base
+        Describable._get_own_attributes() skips private attrs and Describable
+        children.  Here we explicitly add all Pydantic model fields so that
+        parameters like model, temperature, max_steps etc. appear in tooltips.
+        """
+        attrs = super()._get_own_attributes()
+        for field_name in type(self).model_fields:
+            value = getattr(self, field_name, None)
+            if isinstance(value, Describable):
+                continue
+            attrs[field_name] = value
+        return attrs
 
     async def run(self, state: object, ctx: Context) -> tuple[Any, Any]:
         """Execute this vertex for one BSP super-step.
@@ -73,7 +97,7 @@ class StateVertex(Describable, BaseModel):
 
         Args:
             state: Current immutable state snapshot.
-            ctx:   Shared services (LLM connectors, tools, logger, run_id, stats).
+            ctx:   Shared services (LLM pool, tools, logger, run_id, stats).
 
         Returns:
             Tuple of (EnumSignal, StatePatch).
@@ -84,6 +108,38 @@ class StateVertex(Describable, BaseModel):
         raise NotImplementedError(
             f"{type(self).__name__}.run() must be implemented"
         )
+
+
+class LlmStateVertex(StateVertex):
+    """StateVertex subclass for nodes that call ctx.llm_for_model().
+
+    Adds two Pydantic fields that are configurable via the GUI Inspector:
+
+        model: str      — LLM model name (e.g. 'gpt-4o-mini').
+                          Empty string → use the pool's environment default.
+        temperature: float — Sampling temperature (0 = deterministic, 2 = creative).
+
+    Inherit from this class whenever a vertex issues LLM requests:
+
+        class MyVertex(LlmStateVertex):
+            async def run(self, state, ctx):
+                response = await ctx.llm_for_model(self.model).achat(
+                    messages, temperature=self.temperature
+                )
+    """
+
+    model: Annotated[str, Field(
+        description=(
+            "LLM model name (e.g. 'gpt-4o-mini'). "
+            "Empty string = use Context pool's environment default."
+        ),
+        json_schema_extra={"x-model-select": True},
+    )] = ""
+    temperature: Annotated[float, Field(
+        ge=0.0,
+        le=2.0,
+        description="LLM sampling temperature (0 = deterministic, 2 = creative).",
+    )] = 0.2
 
 
 class End(StateVertex):

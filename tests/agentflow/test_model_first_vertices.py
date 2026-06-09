@@ -8,9 +8,10 @@ import pytest
 from agentflow import AgentApp
 from agentflow.llm.LlmPool import LlmPool
 from agentflow.statemachine import Context, StateGraph, StateVertex, StdEnd, StdSignal, Transition
+from agentflow.statemachine.vertex import LlmStateVertex
 
 
-class _ModelFirstVertex(StateVertex):
+class _ModelFirstVertex(LlmStateVertex):
     """Vertex using inherited model field instead of connector key."""
 
     model: str = "gpt-4o-mini"

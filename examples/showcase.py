@@ -48,6 +48,7 @@ from agentflow.statemachine import (
     EnumSignal,
     StateGraph,
     StateGraphRunner,
+    LlmStateVertex,
     StateVertex,
     StdEnd,
     StdSignal,
@@ -200,7 +201,7 @@ class AppSignal(EnumSignal):
 # ---------------------------------------------------------------------------
 
 
-class LlmCallVertex(StateVertex):
+class LlmCallVertex(LlmStateVertex):
     """Call the LLM and decide whether to invoke tools or emit the final answer.
 
     Routes to ToolExecutionVertex on tool_call, StdEnd on final_answer/max_steps.

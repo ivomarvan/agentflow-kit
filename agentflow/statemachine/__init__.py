@@ -41,13 +41,14 @@ from agentflow.statemachine.runner import StateGraphRunner
 from agentflow.statemachine.signal import EnumSignal, StdSignal
 from agentflow.statemachine.state import UNSET, apply_patches
 from agentflow.statemachine.topology import Parallel, StateGraph, Transition
-from agentflow.statemachine.vertex import End, StateVertex, StdEnd
+from agentflow.statemachine.vertex import End, LlmStateVertex, StateVertex, StdEnd
 
 __all__ = [
     "CheckpointRecord",
     "CheckpointStore",
     "Context",
     "End",
+    "LlmStateVertex",
     "EnumSignal",
     "ReActPatch",
     "ReActSignal",
