@@ -38,6 +38,8 @@ gui = [
     "websockets>=12.0",
     # Syntax-highlighted source viewer for graph tooltip file links (/api/source)
     "pygments>=2.17",
+    # Gemini TTS backend — high-quality speech synthesis via cloud API
+    "google-genai>=1.0",
 ]
 postgres = [
     # Async PostgreSQL driver for PostgresCheckpointStore

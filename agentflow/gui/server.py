@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -93,6 +93,14 @@ class RunRequest(BaseModel):
     """Request body for POST /api/run."""
 
     prompt: str = ""
+
+
+class TtsRequest(BaseModel):
+    """Request body for POST /api/tts."""
+
+    text: str
+    voice: str = "Kore"
+    lang: str = "en-US"
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +255,48 @@ def create_app(agent_app: AgentApp) -> FastAPI:
             List of prompt strings from ``AgentApp.sample_prompts``.
         """
         return app.state.agent_app.sample_prompts
+
+    @app.get("/api/tts/voices")
+    async def tts_voices() -> list[dict[str, str]]:
+        """Return the list of available Gemini TTS voices.
+
+        Returns:
+            List of ``{"name": ..., "label": ...}`` dicts.
+        """
+        from agentflow.gui.tts_service import GEMINI_VOICES
+        return GEMINI_VOICES
+
+    @app.post("/api/tts")
+    async def tts(body: TtsRequest) -> Response:
+        """Synthesise speech via Gemini TTS and return MP3 audio.
+
+        Results are cached on disk so repeated requests for the same
+        (text, voice, lang) tuple are served without API calls.
+
+        Args:
+            body: Contains ``text``, ``voice`` (Gemini voice name), and
+                  ``lang`` (BCP-47 language code).
+
+        Returns:
+            MP3 audio bytes with ``Content-Type: audio/mpeg``.
+
+        Raises:
+            HTTPException 503: If ``GEMINI_API_KEY`` is missing.
+            HTTPException 502: If the Gemini API call fails.
+        """
+        from agentflow.gui.tts_service import GeminiTtsService
+        try:
+            service = GeminiTtsService()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        try:
+            audio = await service.synthesize(
+                text=body.text, voice=body.voice, lang=body.lang
+            )
+        except Exception as exc:
+            logger.error("Gemini TTS error: %s", exc)
+            raise HTTPException(status_code=502, detail=f"TTS synthesis failed: {exc}") from exc
+        return Response(content=audio, media_type="audio/wav")
 
     @app.get("/api/graph")
     async def graph(request: Request) -> HTMLResponse:

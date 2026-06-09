@@ -24,21 +24,26 @@ defineProps<{ message: ChatMessage }>()
 </script>
 
 <style scoped>
-.bubble { max-width: 90%; }
-.bubble.user { align-self: flex-end; }
+.bubble {
+  width: 100%;
+  box-sizing: border-box;
+}
 .bubble-content {
-  padding: 0.6rem 1rem;
-  border-radius: 12px;
-  line-height: 1.5;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .user-content {
   background: var(--p-primary-500, #6366f1);
   color: white;
-  border-bottom-right-radius: 4px;
+  border-bottom-left-radius: 4px;
 }
 .assistant-content {
   background: var(--p-surface-100, #f1f5f9);
-  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
 }
 .running-indicator {
   color: var(--p-text-muted-color, #888);

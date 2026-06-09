@@ -3,7 +3,7 @@
     <h1
       v-if="title"
       class="app-title"
-      :class="{ 'has-doc': !!doc }"
+      :class="{ 'has-doc': true }"
       @mouseover="onTitleOver"
       @mousemove="onTitleMove"
       @mouseleave="onTargetMouseLeave"
@@ -24,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, toRef } from 'vue'
+import { ref, computed } from 'vue'
 import { useStickyMarkdownTooltip } from '@/composables/useStickyMarkdownTooltip'
 
 const props = defineProps<{
@@ -34,7 +34,14 @@ const props = defineProps<{
   doc: string
 }>()
 
-const doc = toRef(props, 'doc')
+// Prepend the title as an h1 heading so the tooltip always shows
+// the script name above the module docstring.
+const docWithTitle = computed(() => {
+  if (!props.doc && !props.title) return ''
+  const heading = props.title ? `# ${props.title}\n\n` : ''
+  return heading + (props.doc ?? '')
+})
+
 const {
   visible,
   frozen,
@@ -45,7 +52,7 @@ const {
   onTargetMouseLeave,
   onPanelMouseEnter,
   onPanelMouseLeave,
-} = useStickyMarkdownTooltip(doc)
+} = useStickyMarkdownTooltip(docWithTitle)
 const panelEl = ref<HTMLElement | null>(null)
 
 function panelWidth(): number {
@@ -67,7 +74,9 @@ function onTitleMove(e: MouseEvent) {
 }
 .app-title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.2;
 }
 .app-title.has-doc {
   cursor: help;
