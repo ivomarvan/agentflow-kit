@@ -63,6 +63,9 @@ class StateGraphRunner:
         Returns:
             Final state after the last super-step (after End node ran).
         """
+        from agentflow.events import StepEndEvent, StepStartEvent
+
+        bus = self.context.event_bus
         current_state = initial_state
         active_nodes: list[StateVertex] = [self.graph.resolve_start()]
         step = 0
@@ -81,6 +84,9 @@ class StateGraphRunner:
             step += 1
             await self.hooks.on_super_step_start(step, current_state, active_nodes)
 
+            vertex_names = ", ".join(type(n).__name__ for n in active_nodes)
+            await bus.emit(StepStartEvent(vertex=vertex_names, step=step))
+
             # --- PHASE 1: COMPUTE (parallel) ---
             results: list[tuple[Any, Any]] = list(
                 await asyncio.gather(
@@ -95,6 +101,11 @@ class StateGraphRunner:
                 for node, (signal, patch) in zip(active_nodes, results, strict=True)
             ]
             await self.hooks.on_super_step_results(step, node_results)
+
+            for node, (signal, _) in zip(active_nodes, results, strict=True):
+                await bus.emit(
+                    StepEndEvent(vertex=type(node).__name__, step=step, signal=str(signal))
+                )
 
             # --- PHASE 3A: APPLY (per-field reducers) ---
             patches = [patch for _, patch in results]

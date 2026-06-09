@@ -46,6 +46,9 @@
         />
         <span v-if="statusText" class="status-text">{{ statusText }}</span>
       </div>
+
+      <!-- Event log panel -->
+      <EventLogPanel />
     </template>
   </div>
 </template>
@@ -54,6 +57,7 @@
 import { ref, onMounted, nextTick, watch } from 'vue'
 import { Button, Message } from 'primevue'
 import MessageBubble from '@/components/chat/MessageBubble.vue'
+import EventLogPanel from '@/components/chat/EventLogPanel.vue'
 import VoiceSettings from './VoiceSettings.vue'
 import { useChatStore } from '@/stores/chat'
 import { api } from '@/services/api'
@@ -171,6 +175,7 @@ async function sendMessage(text: string) {
 .settings-row { flex-shrink: 0; }
 .messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;

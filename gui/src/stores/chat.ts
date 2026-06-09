@@ -13,9 +13,47 @@ export interface ChatMessage {
   run_id: string
 }
 
+/** A single line in the event log panel, shown below the chat. */
+export interface LogLine {
+  time: string     // HH:MM:SS
+  tag: string      // uppercase label shown in the coloured badge
+  text: string     // human-readable message
+  level?: string   // 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' (for log events)
+}
+
+/** Format a WsMessage into a human-readable LogLine, or null to suppress it. */
+function toLogLine(event: WsMessage): LogLine | null {
+  const time = new Date().toLocaleTimeString('en-GB', { hour12: false })
+  const type = event.type as string
+  switch (type) {
+    case 'question_sent':
+      return { time, tag: 'USER', text: `Question: ${event.question as string}` }
+    case 'step_start':
+      return { time, tag: 'STEP', text: `→ ${event.vertex as string} (step ${event.step as number})` }
+    case 'step_end':
+      return { time, tag: 'STEP', text: `✓ ${event.vertex as string} → ${event.signal as string}` }
+    case 'log':
+      return {
+        time, tag: (event.level as string) ?? 'LOG',
+        text: event.message as string,
+        level: (event.level as string)?.toUpperCase(),
+      }
+    case 'run_complete':
+      return { time, tag: 'DONE', text: `Result: ${event.result as string ?? '(none)'}` }
+    case 'run_error':
+      return { time, tag: 'ERR', text: `Error: ${event.message as string}` }
+    case 'ping':
+    case 'pong':
+      return null  // suppress heartbeats from the log
+    default:
+      return { time, tag: type.toUpperCase().slice(0, 6), text: JSON.stringify(event) }
+  }
+}
+
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
   const isRunning = ref(false)
+  const eventLog = ref<LogLine[]>([])
 
   function addUserMessage(content: string): string {
     const id = crypto.randomUUID()
@@ -50,6 +88,8 @@ export const useChatStore = defineStore('chat', () => {
   function appendEvent(msgId: string, event: WsMessage) {
     const msg = messages.value.find(m => m.id === msgId)
     if (msg) msg.events.push(event)
+    const line = toLogLine(event)
+    if (line) eventLog.value.push(line)
   }
 
   function completeMessage(msgId: string, result: string | null) {
@@ -68,5 +108,13 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  return { messages, isRunning, addUserMessage, addAssistantMessage, appendEvent, completeMessage, errorMessage }
+  function clearLog() {
+    eventLog.value = []
+  }
+
+  return {
+    messages, isRunning, eventLog,
+    addUserMessage, addAssistantMessage, appendEvent,
+    completeMessage, errorMessage, clearLog,
+  }
 })

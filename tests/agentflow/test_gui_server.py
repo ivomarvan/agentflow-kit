@@ -210,6 +210,49 @@ async def test_run_returns_409_when_already_running(fastapi_app) -> None:  # typ
 
 
 # ---------------------------------------------------------------------------
+# Run — terminal event buffering (race condition for fast workflows)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_complete_is_buffered_when_workflow_finishes_before_ws_connects(
+    fastapi_app,
+) -> None:
+    """RunCompleteEvent is stored in run_events after _run_workflow completes.
+
+    This verifies the race-condition fix: fast synchronous workflows may finish
+    and emit RunCompleteEvent before the browser WebSocket connects.  The server
+    must buffer all events (including run_complete) so the WS endpoint can
+    deliver a full replay on connect.
+    """
+    import asyncio
+    import uuid
+    from agentflow.gui.server import _run_workflow, RunState
+    from agentflow.gui.ws_hooks import WebSocketEventHandler
+
+    run_state: RunState = fastapi_app.state.run_state
+    run_id = uuid.uuid4().hex
+    run_state.ws_clients[run_id] = []
+    run_state.run_events[run_id] = []
+    ws_handler = WebSocketEventHandler(run_id, run_state)
+    fastapi_app.state.agent_app.event_bus.subscribe(ws_handler)
+
+    await _run_workflow(fastapi_app, run_id, "hello", ws_handler)
+
+    buffered = run_state.run_events.get(run_id, [])
+    assert buffered, "run_events must contain at least the run_complete entry"
+
+    types = [e["type"] for e in buffered]
+    assert "run_complete" in types, f"run_complete missing from buffered events: {types}"
+    assert "question_sent" in types, f"question_sent missing from buffered events: {types}"
+
+    # All payloads must be JSON-safe (no datetime objects)
+    import json
+    for payload in buffered:
+        json.dumps(payload)  # raises TypeError if datetime was not converted
+
+
+# ---------------------------------------------------------------------------
 # Run — happy path (background task fires but we just check the response)
 # ---------------------------------------------------------------------------
 

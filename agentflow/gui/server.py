@@ -61,11 +61,20 @@ class RunState:
         active_run_id: hex run_id of the currently active run, or None.
         is_running: True while a workflow is executing.
         ws_clients: Maps run_id to the list of connected WebSocket objects.
+        terminal_events: Buffers the final JSON payload for each completed run so
+            that a WebSocket client which connects after the run finishes still
+            receives the terminal event.  Entries are keyed by run_id and
+            retained for the lifetime of the server (memory is negligible).
+        run_events: Buffers ALL event payloads emitted during a run (keyed by
+            run_id) so that a late-joining WebSocket client receives a full
+            replay of every event, not only the terminal one.
     """
 
     active_run_id: str | None = None
     is_running: bool = False
     ws_clients: dict[str, list[WebSocket]] = field(default_factory=dict)
+    terminal_events: dict[str, dict] = field(default_factory=dict)
+    run_events: dict[str, list[dict]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +230,8 @@ def create_app(agent_app: AgentApp) -> FastAPI:
         run_id = uuid.uuid4().hex
         run_state.active_run_id = run_id
         run_state.is_running = True
+        run_state.ws_clients[run_id] = []
+        run_state.run_events[run_id] = []  # pre-create buffer for ws_hooks
 
         ws_handler = WebSocketEventHandler(run_id, run_state)
         app.state.agent_app.event_bus.subscribe(ws_handler)
@@ -307,6 +318,10 @@ def create_app(agent_app: AgentApp) -> FastAPI:
         The server sends a ``ping`` frame every 30 s to keep the connection
         alive; clients should respond with ``{"type": "ping"}``.
 
+        If the run already finished before the client connected (race condition
+        for fast synchronous workflows), the buffered terminal event is delivered
+        immediately after the handshake so the client does not spin forever.
+
         Args:
             websocket: The WebSocket connection from FastAPI.
             run_id: The run identifier to subscribe to.
@@ -316,6 +331,17 @@ def create_app(agent_app: AgentApp) -> FastAPI:
         if run_id not in run_state.ws_clients:
             run_state.ws_clients[run_id] = []
         run_state.ws_clients[run_id].append(websocket)
+
+        # Replay all buffered events when the workflow already produced some or all
+        # of its events before this WebSocket was established (race condition for
+        # fast synchronous workflows — question_sent, step_start/end, run_complete
+        # may all arrive before the browser finishes the WebSocket handshake).
+        for payload in run_state.run_events.get(run_id, []):
+            try:
+                await websocket.send_json(payload)
+            except Exception:
+                break  # connection broken during replay — stop sending
+
         try:
             while True:
                 try:
@@ -355,22 +381,63 @@ async def _run_workflow(
     Emits ``RunCompleteEvent`` on success or ``RunErrorEvent`` on failure.
     Clears ``RunState.is_running`` and unsubscribes *ws_handler* in all cases.
 
+    The function yields to the event loop before starting (``asyncio.sleep(0)``)
+    to allow any pending WebSocket upgrade requests to be processed first,
+    preventing a race condition where fast synchronous workflows complete before
+    the client's WebSocket connection is accepted.
+
     Args:
         app: The FastAPI application (for accessing ``app.state``).
         run_id: Unique identifier for this run.
         prompt: User prompt forwarded to ``run_workflow_with_prompt()``.
         ws_handler: Handler to unsubscribe after the run.
     """
-    from agentflow.events import RunCompleteEvent, RunErrorEvent
+    from agentflow.events import RunCompleteEvent, RunErrorEvent, QuestionSentEvent
+    from agentflow.gui.log_handler import EventBusLoggingHandler
 
     agent_app: AgentApp = app.state.agent_app
+    run_state: RunState = app.state.run_state
+
+    # Yield to the event loop so any pending WebSocket upgrade request for
+    # this run_id is accepted before we emit the terminal event.
+    await asyncio.sleep(0)
+
+    # Route Python log messages from the agentflow namespace into the event stream.
+    log_handler = EventBusLoggingHandler(agent_app.event_bus, level=logging.DEBUG)
+    log_handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
+    agentflow_logger = logging.getLogger("agentflow")
+    root_logger = logging.getLogger()
+    agentflow_logger.addHandler(log_handler)
+    # Also capture the application's own loggers (e.g. examples.agents.*)
+    root_logger.addHandler(log_handler)
+
     try:
+        # Announce the question so the event log shows it clearly.
+        await agent_app.event_bus.emit(
+            QuestionSentEvent(run_id=run_id, question=prompt or "(empty)")
+        )
         result = await agent_app.run_workflow_with_prompt(prompt)
-        await agent_app.event_bus.emit(RunCompleteEvent(run_id=run_id, result=result))
+        event = RunCompleteEvent(run_id=run_id, result=result)
+        await agent_app.event_bus.emit(event)
+        # Buffer the terminal payload so late-connecting WS clients still
+        # receive it (race condition for fast synchronous workflows).
+        run_state.terminal_events[run_id] = {
+            "type": "run_complete",
+            "run_id": run_id,
+            **event.model_dump(exclude={"run_id", "event_type"}, mode="json"),
+        }
     except Exception as exc:
         logger.exception("Workflow run_id=%s failed: %s", run_id, exc)
-        await agent_app.event_bus.emit(RunErrorEvent(run_id=run_id, message=str(exc)))
+        event = RunErrorEvent(run_id=run_id, message=str(exc))
+        await agent_app.event_bus.emit(event)
+        run_state.terminal_events[run_id] = {
+            "type": "run_error",
+            "run_id": run_id,
+            **event.model_dump(exclude={"run_id", "event_type"}, mode="json"),
+        }
     finally:
+        agentflow_logger.removeHandler(log_handler)
+        root_logger.removeHandler(log_handler)
         app.state.run_state.is_running = False
         try:
             agent_app.event_bus.unsubscribe(ws_handler)

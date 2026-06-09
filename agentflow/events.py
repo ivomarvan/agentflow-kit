@@ -73,6 +73,17 @@ class StepEndEvent(AgentEvent):
     signal: str
 
 
+class QuestionSentEvent(AgentEvent):
+    """Emitted by the GUI server when the user submits a question.
+
+    Attributes:
+        question: The prompt text submitted by the user.
+    """
+
+    event_type: str = "agentflow.question_sent"
+    question: str
+
+
 class LogEvent(AgentEvent):
     """Log message forwarded from a vertex into the event stream.
 

@@ -39,10 +39,17 @@ class WebSocketEventHandler:
         self._run_state = run_state
 
     async def on_event(self, event: AgentEvent) -> None:
-        """Broadcast *event* to all WebSocket clients for this run.
+        """Broadcast *event* to all WebSocket clients for this run and buffer it.
 
         Builds a JSON payload with ``type`` set to the last dot-separated
         segment of ``event.event_type`` (e.g. ``"step_start"``).
+        Uses ``mode='json'`` on ``model_dump`` so that ``datetime`` fields are
+        serialised to ISO strings rather than left as raw Python objects (which
+        are not JSON-serialisable by ``json.dumps``).
+
+        The payload is also appended to ``run_state.run_events[run_id]`` so that
+        WebSocket clients connecting after the event fires (race condition for
+        fast synchronous workflows) can receive a full replay on connect.
 
         Args:
             event: The domain event to forward.
@@ -50,8 +57,13 @@ class WebSocketEventHandler:
         payload: dict[str, object] = {
             "type": event.event_type.split(".")[-1],
             "run_id": self._run_id,
-            **event.model_dump(exclude={"run_id"}),
+            **event.model_dump(exclude={"run_id"}, mode="json"),
         }
+
+        # Buffer every payload for late-joining WebSocket clients.
+        events_buf = self._run_state.run_events.setdefault(self._run_id, [])
+        events_buf.append(payload)
+
         clients = self._run_state.ws_clients.get(self._run_id, [])
         dead = []
         for ws in clients:

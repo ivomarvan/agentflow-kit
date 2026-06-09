@@ -47,6 +47,9 @@
         <p>Send a message to start a conversation.</p>
       </div>
     </div>
+
+    <!-- Event log panel -->
+    <EventLogPanel />
   </div>
 </template>
 
@@ -54,6 +57,7 @@
 import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import { Button, Textarea, Select } from 'primevue'
 import MessageBubble from './MessageBubble.vue'
+import EventLogPanel from './EventLogPanel.vue'
 import { useChatStore } from '@/stores/chat'
 import { api } from '@/services/api'
 import { connectEventStream, type WsMessage } from '@/services/wsClient'
@@ -149,6 +153,7 @@ async function sendMessage() {
 }
 .messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
