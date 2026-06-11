@@ -96,14 +96,16 @@ function toLogLine(event: WsMessage, seq: number): LogLine | null {
       const cacheHits = (event.cache_hits as number) ?? 0
       const byModel = event.by_model as Record<string, Record<string, number>> | undefined
       const byModelStr = byModel && Object.keys(byModel).length ? formatByModel(byModel) : null
+      const totalCalls = llmCalls + cacheHits
+      const cacheStr = totalCalls > 0 ? `Cache: ${cacheHits}/${totalCalls}` : 'Cache: —'
       const summaryLines = [
         `Time: ${elapsedSec}s`,
         total > 0 ? `Tokens: ${total.toLocaleString()} (prompt=${(event.prompt_tokens as number)?.toLocaleString() ?? 0}, completion=${(event.completion_tokens as number)?.toLocaleString() ?? 0})` : null,
         byModelStr ? `Per model:\n${byModelStr}` : null,
-        `LLM calls: ${llmCalls}  cache hits: ${cacheHits}`,
+        cacheStr,
       ].filter(Boolean).join('\n')
       return {
-        time, tag: 'STAT', text: `Elapsed ${elapsedSec}s · tokens ${total.toLocaleString()}`,
+        time, tag: 'STAT', text: `Elapsed ${elapsedSec}s · tokens ${total.toLocaleString()} · ${cacheStr}`,
         detail: summaryLines,
         seq,
         isStats: true,

@@ -187,6 +187,8 @@ async function sendMessage() {
   }
 
   const msgId = chatStore.addAssistantMessage(response.run_id)
+  // Timer used to disconnect if run_stats never arrives after run_complete.
+  let statsWaitTimer: ReturnType<typeof setTimeout> | null = null
   const disconnect = connectEventStream(
     response.run_id,
     (event: WsMessage) => {
@@ -195,7 +197,10 @@ async function sendMessage() {
         const result = (event.result as string) ?? 'Completed.'
         chatStore.completeMessage(msgId, result)
         chatStore.isRunning = false
-        disconnect()
+        // Delay disconnect so that run_stats (emitted just after run_complete
+        // by the server) can arrive and appear in the event log. Fall back to
+        // an immediate disconnect after 2 s in case stats are never sent.
+        statsWaitTimer = setTimeout(disconnect, 2000)
         if (voiceStore.ttsEnabled && result) {
           if (voiceStore.ttsBackend === 'gemini') {
             geminiTts.speak(result, voiceStore.geminiVoice, voiceStore.ttsLang).catch(
@@ -205,6 +210,10 @@ async function sendMessage() {
             browserTts.speak(result, voiceStore.ttsVoiceName, voiceStore.ttsLang)
           }
         }
+      } else if (event.type === 'run_stats') {
+        // Stats received — cancel the fallback timer and close the connection.
+        if (statsWaitTimer !== null) { clearTimeout(statsWaitTimer); statsWaitTimer = null }
+        disconnect()
       } else if (event.type === 'run_error') {
         chatStore.errorMessage(msgId, (event.message as string) ?? 'Unknown error')
         chatStore.isRunning = false

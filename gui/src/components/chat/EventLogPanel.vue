@@ -5,30 +5,18 @@
       <button class="log-clear" @click="chatStore.clearLog()" title="Clear log">✕</button>
     </div>
     <div class="log-body" ref="logBodyEl">
-      <template v-for="(line, i) in chatStore.eventLog" :key="i">
-        <!-- Stats block rendered as a distinct section -->
-        <div v-if="line.isStats" class="log-stats">
-          <div class="stats-header">
-            <span class="log-seq stats-seq">{{ line.seq }}.</span>
-            <span class="log-time">{{ line.time }}</span>
-            <span class="log-tag tag-stat">STATS</span>
-          </div>
-          <pre class="stats-body">{{ line.detail }}</pre>
-        </div>
-
-        <!-- Normal log line -->
-        <div
-          v-else
-          :class="['log-line', { 'has-detail': !!line.detail }]"
-          :title="line.detail"
-        >
-          <span class="log-seq">{{ line.seq }}.</span>
-          <span class="log-time">{{ line.time }}</span>
-          <span :class="['log-tag', tagClass(line.tag)]">{{ line.tag }}</span>
-          <span class="log-text">{{ line.text }}</span>
-          <span v-if="line.detail" class="detail-hint" title="hover for details">ⓘ</span>
-        </div>
-      </template>
+      <div
+        v-for="(line, i) in chatStore.eventLog"
+        :key="i"
+        :class="['log-line', { 'has-detail': !!line.detail, 'line-stats': line.isStats }]"
+        :title="line.detail"
+      >
+        <span class="log-seq">{{ line.seq }}.</span>
+        <span class="log-time">{{ line.time }}</span>
+        <span :class="['log-tag', tagClass(line.tag)]">{{ line.tag }}</span>
+        <span class="log-text">{{ line.text }}</span>
+        <span v-if="line.detail" class="detail-hint" title="hover for details">ⓘ</span>
+      </div>
 
       <div v-if="chatStore.eventLog.length === 0" class="log-empty">
         No events yet.
@@ -47,9 +35,13 @@ const logBodyEl = ref<HTMLElement | null>(null)
 watch(
   () => chatStore.eventLog.length,
   () => nextTick(() => {
-    if (logBodyEl.value) {
-      logBodyEl.value.scrollTop = logBodyEl.value.scrollHeight
-    }
+    // requestAnimationFrame ensures the browser has painted the new DOM nodes
+    // (including multi-line stats blocks) before we measure scrollHeight.
+    requestAnimationFrame(() => {
+      if (logBodyEl.value) {
+        logBodyEl.value.scrollTop = logBodyEl.value.scrollHeight
+      }
+    })
   }),
 )
 
@@ -78,7 +70,7 @@ function tagClass(tag: string): string {
   background: var(--p-surface-ground, #f8fafc);
   font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
   font-size: 0.78rem;
-  height: 160px;
+  height: 180px;
   flex-shrink: 0;
 }
 .log-header {
@@ -173,30 +165,12 @@ function tagClass(tag: string): string {
   text-align: center;
 }
 
-/* Stats block */
-.log-stats {
-  border: 1px solid var(--p-content-border-color, #e2e8f0);
-  border-radius: 4px;
+/* Stats line — subtle highlight to stand out from normal lines */
+.line-stats {
   background: var(--p-surface-section, #f1f5f9);
-  margin: 0.2rem 0;
-  overflow: hidden;
-}
-.stats-header {
-  display: flex;
-  gap: 0.4rem;
-  align-items: baseline;
-  padding: 0.1rem 0.3rem;
-  border-bottom: 1px solid var(--p-content-border-color, #e2e8f0);
-}
-.stats-seq { color: var(--p-text-muted-color, #ccc); font-size: 0.68rem; min-width: 1.8rem; text-align: right; }
-.stats-body {
-  margin: 0;
-  padding: 0.25rem 0.5rem;
-  font-family: inherit;
-  font-size: 0.73rem;
-  color: var(--p-text-color, #475569);
-  white-space: pre-wrap;
-  word-break: break-word;
+  border-radius: 3px;
+  border-left: 3px solid #86efac;
+  padding-left: 0.25rem !important;
 }
 
 /* tag colour palette */
