@@ -196,7 +196,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Select, ToggleSwitch, SelectButton } from 'primevue'
 import { useVoiceStore } from '@/stores/voice'
 import {
@@ -226,6 +226,9 @@ const backendOptions = [
 interface VoiceOption { label: string; value: string }
 
 const browserVoiceOptions = computed<VoiceOption[]>(() => {
+  // voicesRaw must be read here so Vue tracks it as a reactive dependency.
+  // Without it the computed would not re-run when voices load asynchronously.
+  void voicesRaw.value
   const lang = voiceStore.ttsLang
   return browserTts.getVoicesForLang(lang).map(v => ({
     label: v.localService ? v.name : `★ ${v.name}`,
@@ -248,11 +251,6 @@ onMounted(() => {
     // Some browsers populate voices synchronously
     if (window.speechSynthesis.getVoices().length > 0) voicesLoading.value = false
   }
-})
-
-watch(() => voiceStore.ttsLang, () => {
-  // Clear browser voice selection when language changes so default is used
-  voiceStore.ttsVoiceName = null
 })
 
 async function testTts() {

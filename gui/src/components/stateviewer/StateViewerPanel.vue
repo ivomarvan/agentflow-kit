@@ -20,7 +20,7 @@
             v-for="(subSchema, subName) in fieldSchema.nested_schema"
             :key="subName"
             :class="['room-field', { changed: isChanged(String(fieldName), String(subName)) }]"
-            :title="fieldTooltip(String(fieldName), String(subName), subSchema)"
+            v-tooltip.top="{ value: fieldTooltip(String(fieldName), String(subName), subSchema), showDelay: 350 }"
           >
             <template v-if="subSchema.display?.type === 'icon'">
               <!-- Boolean icon field -->
@@ -60,7 +60,7 @@
             v-for="[fName, fSchema] in flatFields"
             :key="fName"
             :class="['room-field', { changed: isChanged('', fName) }]"
-            :title="`${fSchema.title ?? fName}: ${svStore.stateData?.[fName]}`"
+            v-tooltip.top="{ value: `${fSchema.title ?? fName}: ${svStore.stateData?.[fName]}`, showDelay: 350 }"
           >
             <span v-if="fSchema.display?.icon" class="field-emoji">
               {{ iconEmoji(fSchema.display.icon) }}

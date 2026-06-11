@@ -13,8 +13,7 @@
     <div
       v-show="visible"
       ref="panelEl"
-      class="sticky-tooltip-panel"
-      :class="{ sticky: frozen }"
+      class="md-tooltip-panel"
       :style="panelStyle"
       @mouseenter="onPanelMouseEnter"
       @mouseleave="onPanelMouseLeave"
@@ -30,7 +29,7 @@ import { useStickyMarkdownTooltip } from '@/composables/useStickyMarkdownTooltip
 const props = defineProps<{
   /** Page title shown in the header. */
   title: string
-  /** Markdown shown in the sticky tooltip on hover (empty = no tooltip). */
+  /** Markdown shown in the tooltip on hover (empty = no tooltip). */
   doc: string
 }>()
 
@@ -44,7 +43,6 @@ const docWithTitle = computed(() => {
 
 const {
   visible,
-  frozen,
   panelStyle,
   renderedHtml,
   onTargetMouseOver,
@@ -81,7 +79,7 @@ function onTitleMove(e: MouseEvent) {
 .app-title.has-doc {
   cursor: help;
 }
-.sticky-tooltip-panel {
+.md-tooltip-panel {
   display: block;
   position: fixed;
   z-index: 1000;
@@ -96,30 +94,27 @@ function onTitleMove(e: MouseEvent) {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   font-size: 13px;
   line-height: 1.6;
-  pointer-events: none;
-}
-.sticky-tooltip-panel.sticky {
   pointer-events: auto;
 }
-.sticky-tooltip-panel :deep(h1),
-.sticky-tooltip-panel :deep(h2),
-.sticky-tooltip-panel :deep(h3) {
+.md-tooltip-panel :deep(h1),
+.md-tooltip-panel :deep(h2),
+.md-tooltip-panel :deep(h3) {
   font-weight: bold;
   margin: 0.5em 0 0.2em;
   color: #1976d2;
 }
-.sticky-tooltip-panel :deep(h1) {
+.md-tooltip-panel :deep(h1) {
   font-size: 1.05rem;
   border-bottom: 1px solid #eee;
   padding-bottom: 4px;
 }
-.sticky-tooltip-panel :deep(code) {
+.md-tooltip-panel :deep(code) {
   background: #f0f4f8;
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 0.88em;
 }
-.sticky-tooltip-panel :deep(pre) {
+.md-tooltip-panel :deep(pre) {
   background: #f0f4f8;
   padding: 8px;
   border-radius: 4px;

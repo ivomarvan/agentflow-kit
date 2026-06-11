@@ -38,13 +38,13 @@ from urllib.parse import quote
 if TYPE_CHECKING:
     from agentflow.describable.graph import Edge, Graph, Vertex
 
-from agentflow.describable.tooltip_timing import HIDE_MS, IDLE_MS, OFFSET_X, OFFSET_Y
+from agentflow.describable.tooltip_timing import HIDE_MS, OFFSET_X, OFFSET_Y
 
 _HTML_TIMING_JS = (
-    f"const IDLE_MS = {IDLE_MS}, HIDE_MS = {HIDE_MS}, "
+    f"const HIDE_MS = {HIDE_MS}, "
     f"OFFSET_X = {OFFSET_X}, OFFSET_Y = {OFFSET_Y};"
 )
-_SVG_TIMING_JS = f"var IDLE_MS = {IDLE_MS}, HIDE_MS = {HIDE_MS};"
+_SVG_TIMING_JS = f"var HIDE_MS = {HIDE_MS};"
 
 # Shared JS helpers for Markdown links inside hover tooltip panels.
 _TOOLTIP_LINK_JS = r"""
@@ -1491,31 +1491,28 @@ _SVG_INJECTION_TEMPLATE = r"""\
   var ttG     = document.getElementById("gv-tt");
   var ttInner = document.getElementById("gv-tt-inner");
 
-  // --- Sticky tooltip --------------------------------------------------
-  // The panel follows the cursor while it moves, then "freezes" after a
-  // short idle so the user can move into it and scroll long content.
-  //   IDLE_MS — cursor must rest this long before the panel freezes.
+  // --- Interactive tooltip -----------------------------------------------
+  // The panel follows the cursor while it moves over a node.  When the cursor
+  // leaves a node a grace period (HIDE_MS) starts before the panel hides,
+  // giving the user time to move into the panel.  The panel is always
+  // interactive so its scrollbar can be used at any time.
   //   HIDE_MS — grace period when leaving a node, so the cursor can cross
-  //             the small offset gap into the panel without it vanishing.
+  //             the gap into the panel without it vanishing.
   %%TIMING_JS%%
   var ttSource = null;   // element currently described
-  var frozen = false;    // when true the panel stays put and is scrollable
-  var hideTimer = null, idleTimer = null;
+  var hideTimer = null;
 
   function tipContains(node) {
     while (node) { if (node === ttG) return true; node = node.parentNode; }
     return false;
   }
   function clearHide() { if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } }
-  function clearIdle() { if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; } }
   function hideTip() {
-    clearHide(); clearIdle();
+    clearHide();
     ttG.setAttribute("display", "none");
-    frozen = false; ttSource = null;
+    ttSource = null;
   }
   function scheduleHide() { clearHide(); hideTimer = setTimeout(hideTip, HIDE_MS); }
-  function freezeTip() { frozen = true; }
-  function armIdle() { clearIdle(); idleTimer = setTimeout(freezeTip, IDLE_MS); }
 
   // Attach descriptions to <g> elements; remove all <title> elements so the
   // browser shows no native grey tooltip anywhere in the diagram.
@@ -1608,21 +1605,17 @@ _SVG_INJECTION_TEMPLATE = r"""\
   }
 
   svg.addEventListener("mouseover", function (e) {
-    if (tipContains(e.target)) { clearHide(); freezeTip(); return; }
-    // While frozen: cursor is moving toward the tooltip — don't replace with parent hover.
-    if (frozen) { clearHide(); return; }
+    if (tipContains(e.target)) { clearHide(); return; }
     var el = e.target;
     while (el && el.tagName !== "svg" && el.tagName !== "SVG") {
       if (el._md) {
-        if (ttSource !== el) {       // new target — render, reposition, re-arm
+        if (ttSource !== el) {       // new target — render and reposition
           ttSource = el;
           setTooltipHtml(ttInner, el._md, renderMd);
-          frozen = false;
           ttG.setAttribute("display", "block");
           positionTooltip(e);
         }
         clearHide();
-        if (!frozen) armIdle();
         return;
       }
       el = el.parentElement;
@@ -1631,10 +1624,9 @@ _SVG_INJECTION_TEMPLATE = r"""\
   });
 
   svg.addEventListener("mousemove", function (e) {
-    if (ttG.getAttribute("display") === "none" || frozen) return;
+    if (ttG.getAttribute("display") === "none") return;
     if (tipContains(e.target)) return;
     positionTooltip(e);
-    armIdle();
   });
 
   svg.addEventListener("mouseleave", scheduleHide);
@@ -1767,11 +1759,8 @@ _HTML_TEMPLATE = """\
       box-shadow: 0 6px 28px rgba(0,0,0,.22);
       border-left: 4px solid #1976d2;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-      font-size: 13px; line-height: 1.6; pointer-events: none;
+      font-size: 13px; line-height: 1.6; pointer-events: auto;
     }
-    /* When frozen (cursor idle or hovering the panel) the tooltip becomes
-       interactive so its scrollbar can be used. */
-    #tt.sticky { pointer-events: auto; }
     #tt h1, #tt h2, #tt h3 { font-weight: bold; margin: 0.5em 0 0.2em; color: #1976d2; }
     #tt h1 { font-size: 1.05rem; border-bottom: 1px solid #eee; padding-bottom: 4px; }
     #tt h2 { font-size: 0.95rem; color: #333; }
@@ -1802,16 +1791,16 @@ _HTML_TEMPLATE = """\
     const tt = document.getElementById("tt");
 """ + _TOOLTIP_LINK_JS + """
 
-    // --- Sticky tooltip ---------------------------------------------------
-    // The panel follows the cursor while it moves, then "freezes" after a
-    // short idle so the user can move into it and scroll long content.
-    //   IDLE_MS — cursor must rest this long before the panel freezes.
+    // --- Interactive tooltip -----------------------------------------------
+    // The panel follows the cursor while it moves over a node.  When the cursor
+    // leaves a node a grace period (HIDE_MS) starts before the panel hides,
+    // giving the user time to move into the panel.  The panel is always
+    // interactive (pointer-events: auto) so its scrollbar can be used at any time.
     //   HIDE_MS — grace period when leaving a node, so the cursor can cross
-    //             the small offset gap into the panel without it vanishing.
+    //             the gap into the panel without it vanishing.
     %%TIMING_JS%%
     let ttSource = null;   // element (or "title") currently described
-    let frozen = false;    // when true the panel stays put and is scrollable
-    let hideTimer = null, idleTimer = null;
+    let hideTimer = null;
 
     function renderMd(md) {
       return (typeof marked !== "undefined")
@@ -1819,17 +1808,12 @@ _HTML_TEMPLATE = """\
         : "<pre>" + md.replace(/</g, "&lt;") + "</pre>";
     }
     function clearHide() { if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } }
-    function clearIdle() { if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; } }
     function hideTip() {
-      clearHide(); clearIdle();
+      clearHide();
       tt.style.display = "none";
-      tt.classList.remove("sticky");
-      frozen = false;
       ttSource = null;
     }
     function scheduleHide() { clearHide(); hideTimer = setTimeout(hideTip, HIDE_MS); }
-    function freezeTip() { frozen = true; tt.classList.add("sticky"); }
-    function armIdle() { clearIdle(); idleTimer = setTimeout(freezeTip, IDLE_MS); }
     function placeTip(e) {
       const x = e.clientX + OFFSET_X, y = e.clientY + OFFSET_Y;
       const w = tt.offsetWidth || 420;
@@ -1837,23 +1821,20 @@ _HTML_TEMPLATE = """\
       tt.style.top  = Math.max(8, y) + "px";
     }
     function showTip(md, source, e) {
-      if (ttSource !== source) {     // new target — render, reposition, re-arm
+      if (ttSource !== source) {     // new target — render and reposition
         ttSource = source;
         setTooltipHtml(tt, md, renderMd);
-        tt.classList.remove("sticky");
-        frozen = false;
         tt.style.display = "block";
         placeTip(e);
       }
       clearHide();
-      if (!frozen) armIdle();
     }
 
     bindTooltipLinkClicks(tt);
 
-    // Keep the panel alive and frozen while the cursor is inside it.
-    tt.addEventListener("mouseenter", function() { clearHide(); freezeTip(); });
-    tt.addEventListener("mouseleave", hideTip);
+    // Keep the panel alive while the cursor is inside it.
+    tt.addEventListener("mouseenter", function() { clearHide(); });
+    tt.addEventListener("mouseleave", scheduleHide);
 
     function lookupEdgeMd(titleKey) {
       if (edgeDescs[titleKey]) return edgeDescs[titleKey];
@@ -1917,9 +1898,6 @@ _HTML_TEMPLATE = """\
     const svgWrap = document.getElementById("svg-wrap");
 
     svgWrap.addEventListener("mouseover", function(e) {
-      // While the tooltip is frozen (sticky), don't let parent-box hover replace it.
-      // The cursor can move freely toward the tooltip panel without losing content.
-      if (frozen) { clearHide(); return; }
       let el = e.target;
       while (el && el.id !== "svg-wrap") {
         if (el._md) { showTip(el._md, el, e); return; }
@@ -1931,9 +1909,8 @@ _HTML_TEMPLATE = """\
     });
 
     svgWrap.addEventListener("mousemove", function(e) {
-      if (tt.style.display === "none" || frozen) return;
+      if (tt.style.display === "none") return;
       placeTip(e);
-      armIdle();
     });
 
     svgWrap.addEventListener("mouseleave", scheduleHide);
@@ -1985,6 +1962,35 @@ _HTML_TEMPLATE = """\
           }
         });
       }
+
+      if (e.data.type === "af:setZoom") {
+        const zoom = e.data.zoom;
+        const wrap = document.getElementById("svg-wrap");
+        const svg = wrap && wrap.querySelector("svg");
+        if (!svg || !wrap) return;
+        if (zoom <= 0) {
+          // Reset: remove explicit dimensions so SVG auto-fits the container.
+          svg.style.width = "";
+          svg.style.height = "";
+          wrap.style.justifyContent = "center";
+          wrap.scrollTop = 0;
+          wrap.scrollLeft = 0;
+        } else {
+          // Base = current visible container width (stable regardless of prior zoom).
+          // At natural fit the SVG fills (clientWidth - 2*padding) px, so this
+          // correctly scales from the actual rendered size rather than viewBox pt units.
+          const padding = 48; // 24px left + 24px right from CSS
+          const baseW = Math.max(wrap.clientWidth - padding, 200);
+          const vb = svg.viewBox.baseVal;
+          const aspect = (vb.width && vb.height) ? (vb.width / vb.height) : 1;
+          const newW = baseW * zoom;
+          const newH = newW / aspect;
+          svg.style.width  = newW + "px";
+          svg.style.height = newH + "px";
+          // Align from top-left when zoom > 1 so horizontal scroll starts at the edge.
+          wrap.style.justifyContent = zoom > 1 ? "flex-start" : "center";
+        }
+      }
     });
 
     // --- iframe postMessage tooltip bridge ---
@@ -2007,14 +2013,11 @@ _HTML_TEMPLATE = """\
       // Override showTip: manage local state but delegate rendering to parent
       showTip = function(md, source, e) {
         if (ttSource !== source) {
-          if (frozen) { clearHide(); return; }  // frozen: don't replace with parent hover
           ttSource = source;
-          frozen = false;
           tt.style.display = "none";  // keep local tooltip hidden
           window.parent.postMessage({ type: "af:tooltip", action: "show", md: md, x: e.clientX, y: e.clientY }, "*");
         }
         clearHide();
-        if (!frozen) armIdle();
       };
 
       // Override placeTip: forward cursor position to parent

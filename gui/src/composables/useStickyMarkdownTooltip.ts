@@ -2,24 +2,26 @@ import { marked } from 'marked'
 import { ref, type Ref } from 'vue'
 import {
   TOOLTIP_HIDE_MS,
-  TOOLTIP_IDLE_MS,
   TOOLTIP_OFFSET_X,
   TOOLTIP_OFFSET_Y,
 } from '@/constants/stickyTooltip'
 
 /**
- * Follow-cursor Markdown tooltip that freezes after cursor idle (graph HTML parity).
+ * Interactive follow-cursor Markdown tooltip.
+ *
+ * The panel always has pointer-events enabled so the user can scroll or click
+ * links at any time.  A grace period (TOOLTIP_HIDE_MS) between leaving the
+ * hover target and the panel hiding lets the cursor move from the target into
+ * the panel without the panel disappearing.
  *
  * @param markdown - Reactive Markdown source; empty string hides the tooltip.
  */
 export function useStickyMarkdownTooltip(markdown: Ref<string>) {
   const visible = ref(false)
-  const frozen = ref(false)
   const panelStyle = ref({ left: '0px', top: '0px' })
   const renderedHtml = ref('')
 
   let hideTimer: ReturnType<typeof setTimeout> | null = null
-  let idleTimer: ReturnType<typeof setTimeout> | null = null
   let ttSource: string | null = null
 
   function clearHide() {
@@ -29,33 +31,15 @@ export function useStickyMarkdownTooltip(markdown: Ref<string>) {
     }
   }
 
-  function clearIdle() {
-    if (idleTimer) {
-      clearTimeout(idleTimer)
-      idleTimer = null
-    }
-  }
-
   function hideTip() {
     clearHide()
-    clearIdle()
     visible.value = false
-    frozen.value = false
     ttSource = null
   }
 
   function scheduleHide() {
     clearHide()
     hideTimer = setTimeout(hideTip, TOOLTIP_HIDE_MS)
-  }
-
-  function freezeTip() {
-    frozen.value = true
-  }
-
-  function armIdle() {
-    clearIdle()
-    idleTimer = setTimeout(freezeTip, TOOLTIP_IDLE_MS)
   }
 
   function placeTip(clientX: number, clientY: number, panelWidth: number) {
@@ -78,12 +62,10 @@ export function useStickyMarkdownTooltip(markdown: Ref<string>) {
     if (ttSource !== source) {
       ttSource = source
       renderedHtml.value = marked.parse(md) as string
-      frozen.value = false
       visible.value = true
       placeTip(e.clientX, e.clientY, panelWidth)
     }
     clearHide()
-    if (!frozen.value) armIdle()
   }
 
   function onTargetMouseOver(e: MouseEvent, panelWidth: number) {
@@ -93,9 +75,8 @@ export function useStickyMarkdownTooltip(markdown: Ref<string>) {
   }
 
   function onTargetMouseMove(e: MouseEvent, panelWidth: number) {
-    if (!visible.value || frozen.value) return
+    if (!visible.value) return
     placeTip(e.clientX, e.clientY, panelWidth)
-    armIdle()
   }
 
   function onTargetMouseLeave() {
@@ -104,16 +85,14 @@ export function useStickyMarkdownTooltip(markdown: Ref<string>) {
 
   function onPanelMouseEnter() {
     clearHide()
-    freezeTip()
   }
 
   function onPanelMouseLeave() {
-    hideTip()
+    scheduleHide()
   }
 
   return {
     visible,
-    frozen,
     panelStyle,
     renderedHtml,
     onTargetMouseOver,
