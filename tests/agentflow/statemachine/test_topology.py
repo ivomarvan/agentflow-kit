@@ -13,7 +13,7 @@ from agentflow.statemachine.topology import Parallel, StateGraph, Transition
 from agentflow.statemachine.vertex import StateVertex
 
 # ---------------------------------------------------------------------------
-# Minimal concrete vertices for testing — FakeVertex (T070) not yet available.
+# Minimal concrete vertices for testing — local stand-ins for graph topology tests.
 # ---------------------------------------------------------------------------
 
 
@@ -129,7 +129,7 @@ def test_state_graph_expand_target_single_vertex_returns_singleton_list() -> Non
 @pytest.mark.unit
 def test_state_graph_accepts_class_in_transition_auto_resolves() -> None:
     """StateGraph accepts a bare class in transitions and auto-resolves it to an instance."""
-    # Must not raise — E020 auto-instantiation is now supported.
+    # Must not raise — class-based vertices are auto-instantiated.
     # Both start and from_node use the same class so they share one singleton.
     graph = StateGraph(
         start=_AVertex,
@@ -142,7 +142,7 @@ def test_state_graph_accepts_class_in_transition_auto_resolves() -> None:
 
 
 # ---------------------------------------------------------------------------
-# New tests — E020 auto-instantiation
+# Class-based vertex auto-instantiation
 # ---------------------------------------------------------------------------
 
 

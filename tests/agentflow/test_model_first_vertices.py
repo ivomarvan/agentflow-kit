@@ -1,4 +1,4 @@
-"""Regression tests for E106 model-first vertices (Inspector + graph)."""
+"""Regression tests for model-first vertices (Inspector schema and graph edges)."""
 from __future__ import annotations
 
 from typing import Any

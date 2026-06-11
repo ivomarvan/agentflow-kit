@@ -102,7 +102,7 @@ def test_example_app_alias_is_agent_app() -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.skip(reason="E107: LLM usage edges removed — model-first vertices use pool, no connector edges")
+@pytest.mark.skip(reason="LLM usage edges removed — model-first vertices use pool, no connector edges")
 def test_usage_llm_edge_label_uses_backend_class_and_model() -> None:
     """Usage LLM edge labels name the inner backend class and configured model."""
     from agentflow.llm.LlmConfig import LlmConfig
@@ -114,7 +114,7 @@ def test_usage_llm_edge_label_uses_backend_class_and_model() -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.skip(reason="E107: LLM usage edges removed — model-first vertices use pool, no connector edges")
+@pytest.mark.skip(reason="LLM usage edges removed — model-first vertices use pool, no connector edges")
 def test_usage_llm_edge_label_for_anthropic_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

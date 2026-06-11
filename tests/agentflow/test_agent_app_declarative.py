@@ -1,4 +1,4 @@
-"""Tests for the declarative AgentApp constructor (T103-07)."""
+"""Tests for the declarative AgentApp constructor."""
 from __future__ import annotations
 
 import dataclasses

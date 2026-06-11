@@ -1,4 +1,4 @@
-"""Smoke tests — examples must expose declarative AgentApp instances (E104.T02)."""
+"""Smoke tests — examples must expose declarative AgentApp instances."""
 from __future__ import annotations
 
 import importlib

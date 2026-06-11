@@ -1,4 +1,4 @@
-"""Tests for the extended _make_cache_key function (T106-01)."""
+"""Tests for the extended _make_cache_key function."""
 from __future__ import annotations
 
 import pytest

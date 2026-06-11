@@ -22,9 +22,19 @@ from agentflow.events import (
     RunCompleteEvent,
     RunErrorEvent,
     RunStatsEvent,
+    StateUpdateEvent,
     StepEndEvent,
     StepStartEvent,
     ToolCallEvent,
+)
+from agentflow.gui.state_viewer import (
+    IconHint,
+    PanelHint,
+    RoomHint,
+    extract_display_schema,
+    icon,
+    panel,
+    room,
 )
 from agentflow.llm.cache import LlmCacheBase, LlmFileCache, LlmMemoryCache
 from agentflow.llm.ChatResponse import ChatResponse, ToolCallFunction, ToolCallInfo, UsageInfo
@@ -101,6 +111,7 @@ __all__ = [
     "StepEndEvent",
     "ToolCallEvent",
     "RunStatsEvent",
+    "StateUpdateEvent",
     "LogEvent",
     "RunCompleteEvent",
     "RunErrorEvent",
@@ -118,6 +129,14 @@ __all__ = [
     "ReActState",
     "ReActPatch",
     "ReActSignal",
+    # State viewer DSL
+    "icon",
+    "room",
+    "panel",
+    "IconHint",
+    "RoomHint",
+    "PanelHint",
+    "extract_display_schema",
 ]
 
 # Backward-compatible alias — use AgentApp in new code

@@ -99,7 +99,8 @@ class StateGraphRunner:
         Returns:
             Final state after the last super-step (after End node ran).
         """
-        from agentflow.events import RunStatsEvent, StepEndEvent, StepStartEvent
+        from agentflow.events import StepEndEvent, StepStartEvent
+        from agentflow.statemachine.context import _emit_live_state
 
         bus = self.context.event_bus
         current_state = initial_state
@@ -108,6 +109,9 @@ class StateGraphRunner:
         run_start = time.monotonic()
 
         await self.hooks.on_run_start(current_state)
+
+        # Emit initial world-state if live_state is registered (before first step)
+        await _emit_live_state(self.context)
 
         while active_nodes:
             # End nodes are run last in this step, then the loop exits.
@@ -128,6 +132,10 @@ class StateGraphRunner:
                 detail=_detail_from(current_state),
             ))
 
+            # Reset per-step cache/live counters before each vertex batch.
+            self.context._step_cache_hits = 0
+            self.context._step_llm_calls = 0
+
             # --- PHASE 1: COMPUTE (parallel) ---
             results: list[tuple[Any, Any]] = list(
                 await asyncio.gather(
@@ -144,12 +152,18 @@ class StateGraphRunner:
             await self.hooks.on_super_step_results(step, node_results)
 
             for node, (signal, patch) in zip(active_nodes, results, strict=True):
+                # Step was from cache when some cache hits occurred and no live calls.
+                from_cache = (
+                    self.context._step_cache_hits > 0
+                    and self.context._step_llm_calls == 0
+                )
                 await bus.emit(
                     StepEndEvent(
                         vertex=type(node).__name__,
                         step=step,
                         signal=str(signal),
                         detail=_detail_from(patch),
+                        from_cache=from_cache,
                     )
                 )
 
@@ -171,16 +185,8 @@ class StateGraphRunner:
         await self.hooks.on_run_end(current_state)
 
         elapsed_ms = (time.monotonic() - run_start) * 1000
-        s = self.context.stats
-        await bus.emit(RunStatsEvent(
-            elapsed_ms=elapsed_ms,
-            total_tokens=s.total_tokens,
-            prompt_tokens=s.prompt_tokens,
-            completion_tokens=s.completion_tokens,
-            llm_calls=s.llm_calls,
-            cache_hits=s.cache_hits,
-            by_model=dict(s.by_model),
-        ))
+        # Store elapsed for server.py to include in RunStatsEvent after RunCompleteEvent
+        object.__setattr__(self.context, "_run_elapsed_ms", elapsed_ms)
 
         return current_state
 

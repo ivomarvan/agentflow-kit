@@ -46,7 +46,7 @@ class LlmPool(Describable):
 
     A single shared cache is injected into every connector the pool creates.
     This means all connectors share one cache file, distinguished by model
-    and temperature in the cache key (introduced in E106 T01).
+    and temperature in the cache key, so entries stay distinct per call configuration.
 
     Connectors managed by the pool are NOT ``Describable``; they do not
     appear in the composition graph.  Only the pool itself is visible.

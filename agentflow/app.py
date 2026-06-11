@@ -40,6 +40,7 @@ Pattern: Template Method (GoF) — cli() orchestrates, run_workflow() specialise
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import time
 from collections.abc import Callable
@@ -93,6 +94,7 @@ class AgentApp(Describable):
         context: Context | None = None,
         state_graph: StateGraph | None = None,
         initial_state_factory: Callable[[str], Any] | None = None,
+        live_state: Any = None,
     ) -> None:
         super().__init__()
         self.event_bus: EventBus = EventBus()
@@ -106,6 +108,8 @@ class AgentApp(Describable):
         self._context = context
         self._state_graph = state_graph
         self._initial_state_factory = initial_state_factory
+        self._live_state = live_state
+        """Optional Pydantic BaseModel for live GUI state visualisation (StateViewerPanel)."""
         self._last_ctx: Context | None = None
         self.gui_script_name = ""
         """Entry-point script stem for GUI header; set in ``_cli_start_gui``."""
@@ -252,6 +256,7 @@ class AgentApp(Describable):
             tool_registries=self._context.tool_registries,
             tools=self._context.tools,
             event_bus=self.event_bus,
+            live_state=self._live_state,
         )
         self._last_ctx = ctx
         initial_state = self._build_initial_state(self.current_prompt)
@@ -385,8 +390,8 @@ class AgentApp(Describable):
             JSON-Schema-compatible dict with ``properties`` keyed by component
             name (vertex class name).
         """
-        from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
         from agentflow.llm.LlmConfig import LlmConfig
+        from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
         from agentflow.llm.LlmPool import LlmPool
 
         props: dict[str, Any] = {}
@@ -434,7 +439,7 @@ class AgentApp(Describable):
                 continue
             if isinstance(attr_value, LlmConnector):
                 try:
-                    attr_value.config
+                    _ = attr_value.config
                 except NotImplementedError:
                     continue
                 props[attr_name] = attr_value.get_config_schema()
@@ -484,6 +489,142 @@ class AgentApp(Describable):
             if prop.get("type") == "object" and isinstance(prop.get("properties"), dict):
                 AgentApp._sanitize_gui_schema(prop)
 
+    def _add_describe_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Add ``--case-view`` / ``--framework-view`` to the describe subparser.
+
+        These flags are mutually exclusive.  When neither is supplied the
+        ``describe`` command shows the App View first, then the Framework View.
+
+        Args:
+            parser: The ``describe`` subcommand ``ArgumentParser`` to extend.
+        """
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument(
+            "--case-view",
+            action="store_true",
+            default=False,
+            help=(
+                "Show application-level view: doc, state-graph vertices, "
+                "tools, and transitions."
+            ),
+        )
+        group.add_argument(
+            "--framework-view",
+            action="store_true",
+            default=False,
+            help="Show framework-level view: internal class composition tree (default when combined).",
+        )
+
+    def _cli_describe(self, args: argparse.Namespace) -> None:
+        """Dispatch the ``describe`` subcommand with optional view selection.
+
+        Supports three modes:
+
+        * ``--case-view``: application-level description only.
+        * ``--framework-view``: framework/class-composition description only.
+        * neither: combined view — App View then Framework View, separated by a
+          horizontal rule.
+
+        Args:
+            args: Parsed argument namespace; uses ``format``, ``output_file``,
+                  ``case_view``, and ``framework_view`` attributes.
+        """
+        fmt: str = args.format
+        case_view: bool = getattr(args, "case_view", False)
+        framework_view: bool = getattr(args, "framework_view", False)
+
+        def _framework_text() -> str:
+            if fmt == "json":
+                import json as _json
+                return _json.dumps(self.get_description_dict(), indent=2, ensure_ascii=False)
+            if fmt == "html":
+                return self.get_description_html()
+            return self.get_description_markdown()
+
+        if case_view:
+            content = self._build_case_view_markdown()
+        elif framework_view:
+            content = _framework_text()
+        else:
+            case_part = self._build_case_view_markdown()
+            fw_part = _framework_text()
+            sep = "\n\n---\n\n" if fmt == "markdown" else "\n\n" + "─" * 60 + "\n\n"
+            content = f"## App View\n\n{case_part}{sep}## Framework View\n\n{fw_part}"
+        self._cli_write_output(content, getattr(args, "output_file", None))
+
+    def _build_case_view_markdown(self) -> str:
+        """Build a human-readable Markdown description of the application.
+
+        Shows the application docstring, state-graph vertices with their
+        docstrings, registered tools (per registry), and state-machine
+        transitions.  Equivalent to the ``graph`` command output but in
+        textual form.
+
+        Returns:
+            Multi-line Markdown string covering the application-level view.
+        """
+        import inspect
+
+        from agentflow.statemachine.vertex import End
+
+        lines: list[str] = []
+
+        # Application docstring
+        doc = (self._doc or "").strip()
+        if doc:
+            lines.append(doc)
+            lines.append("")
+
+        # State-graph vertices
+        if self._state_graph is not None:
+            lines.append("### Vertices")
+            nodes = self._state_graph._collect_topology_nodes()
+            node_ids = self._state_graph._build_node_ids(nodes)
+            for node in nodes:
+                node_id = node_ids[id(node)]
+                tags: list[str] = []
+                if node is self._state_graph._start:
+                    tags.append("START")
+                if isinstance(node, End):
+                    tags.append("END")
+                tag_str = f" [{', '.join(tags)}]" if tags else ""
+                node_doc = (inspect.getdoc(type(node)) or "").split("\n")[0]
+                doc_str = f": {node_doc}" if node_doc else ""
+                lines.append(f"- **{node_id}**{tag_str}{doc_str}")
+            lines.append("")
+
+        # Tool registries
+        if self._context is not None and self._context.tool_registries:
+            lines.append("### Tools")
+            for reg_key, registry in self._context.tool_registries.items():
+                if len(self._context.tool_registries) > 1:
+                    lines.append(f"**{reg_key}**:")
+                for tool in registry.tools:
+                    tool_doc = (inspect.getdoc(type(tool)) or "").split("\n")[0]
+                    doc_str = f": {tool_doc}" if tool_doc else ""
+                    lines.append(f"- **{tool.name}**{doc_str}")
+            lines.append("")
+
+        # Transitions
+        if self._state_graph is not None:
+            lines.append("### Transitions")
+            nodes = self._state_graph._collect_topology_nodes()
+            node_ids = self._state_graph._build_node_ids(nodes)
+            for t in self._state_graph._transitions:
+                from_id = node_ids[id(t.from_node)]
+                signal_name = getattr(t.signal, "name", str(t.signal))
+                from agentflow.statemachine.topology import Parallel
+                if isinstance(t.to_target, Parallel):
+                    targets = t.to_target.expand(self._state_graph._resolver)
+                    for branch in targets:
+                        to_id = node_ids[id(branch)]
+                        lines.append(f"- {from_id} --[{signal_name}]--> {to_id}  *(parallel)*")
+                else:
+                    to_id = node_ids[id(t.to_target)]
+                    lines.append(f"- {from_id} --[{signal_name}]--> {to_id}")
+
+        return "\n".join(lines)
+
     def get_config(self) -> dict[str, Any]:
         """Return current values of all configurable parameters as a nested dict.
 
@@ -520,7 +661,7 @@ class AgentApp(Describable):
                 continue
             if isinstance(attr_value, LlmConnector):
                 try:
-                    attr_value.config
+                    _ = attr_value.config
                 except NotImplementedError:
                     continue
                 result[attr_name] = attr_value.get_param_values()

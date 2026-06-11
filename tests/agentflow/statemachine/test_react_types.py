@@ -1,4 +1,4 @@
-"""Tests for ReActState, ReActPatch, ReActSignal, and Signal alias (T103-01)."""
+"""Tests for ReActState, ReActPatch, ReActSignal, and Signal alias."""
 from __future__ import annotations
 
 import dataclasses

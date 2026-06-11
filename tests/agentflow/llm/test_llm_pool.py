@@ -1,4 +1,4 @@
-"""Unit tests for LlmPool — E107."""
+"""Unit tests for LlmPool."""
 from __future__ import annotations
 
 import pytest

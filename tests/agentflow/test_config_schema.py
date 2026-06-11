@@ -1,4 +1,4 @@
-"""Unit tests for T030: Pydantic LlmConfig + AgentApp config schema API."""
+"""Unit tests for Pydantic LlmConfig and AgentApp config schema API."""
 from __future__ import annotations
 
 import pytest

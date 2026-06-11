@@ -28,6 +28,7 @@ Factory usage::
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -35,8 +36,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -442,7 +443,7 @@ async def _run_workflow(
         prompt: User prompt forwarded to ``run_workflow_with_prompt()``.
         ws_handler: Handler to unsubscribe after the run.
     """
-    from agentflow.events import RunCompleteEvent, RunErrorEvent, QuestionSentEvent
+    from agentflow.events import QuestionSentEvent, RunCompleteEvent, RunErrorEvent
     from agentflow.gui.log_handler import EventBusLoggingHandler
 
     agent_app: AgentApp = app.state.agent_app
@@ -476,6 +477,24 @@ async def _run_workflow(
             "run_id": run_id,
             **event.model_dump(exclude={"run_id", "event_type"}, mode="json"),
         }
+
+        # Emit run statistics AFTER run_complete so they appear last in the
+        # event log (user sees stats below the DONE line, always visible).
+        last_ctx = getattr(agent_app, "_last_ctx", None)
+        if last_ctx is not None:
+            from agentflow.events import RunStatsEvent  # noqa: PLC0415
+            s = last_ctx.stats
+            elapsed_ms = getattr(last_ctx, "_run_elapsed_ms", 0.0)
+            await agent_app.event_bus.emit(RunStatsEvent(
+                run_id=run_id,
+                elapsed_ms=elapsed_ms,
+                total_tokens=s.total_tokens,
+                prompt_tokens=s.prompt_tokens,
+                completion_tokens=s.completion_tokens,
+                llm_calls=s.llm_calls,
+                cache_hits=s.cache_hits,
+                by_model=dict(s.by_model),
+            ))
     except Exception as exc:
         logger.exception("Workflow run_id=%s failed: %s", run_id, exc)
         event = RunErrorEvent(run_id=run_id, message=str(exc))
@@ -489,10 +508,8 @@ async def _run_workflow(
         agentflow_logger.removeHandler(log_handler)
         root_logger.removeHandler(log_handler)
         app.state.run_state.is_running = False
-        try:
+        with contextlib.suppress(ValueError):
             agent_app.event_bus.unsubscribe(ws_handler)
-        except ValueError:
-            pass  # already removed
 
 
 # ---------------------------------------------------------------------------

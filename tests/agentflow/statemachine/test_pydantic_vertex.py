@@ -1,4 +1,4 @@
-"""Tests for StateVertex as Pydantic BaseModel (T103-05)."""
+"""Tests for StateVertex as Pydantic BaseModel."""
 from __future__ import annotations
 
 from typing import Annotated, Any

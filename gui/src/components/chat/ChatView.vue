@@ -68,6 +68,9 @@
       </div>
     </div>
 
+    <!-- Live state viewer — shown only when an app with live_state is running -->
+    <StateViewerPanel />
+
     <!-- Event log panel -->
     <EventLogPanel />
   </div>
@@ -78,6 +81,7 @@ import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue'
 import { Textarea, Select } from 'primevue'
 import MessageBubble from './MessageBubble.vue'
 import EventLogPanel from './EventLogPanel.vue'
+import StateViewerPanel from '@/components/stateviewer/StateViewerPanel.vue'
 import { useChatStore } from '@/stores/chat'
 import { useVoiceStore } from '@/stores/voice'
 import { api } from '@/services/api'

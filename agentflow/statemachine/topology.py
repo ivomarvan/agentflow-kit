@@ -4,9 +4,8 @@ Defines the declarative graph structure: Transition edges, Parallel fan-out
 markers, and StateGraph which holds the topology and provides query methods
 used by StateGraphRunner during the BSP Apply&Route phase.
 
-Starting from Epic E020, bare StateVertex subclasses (classes, not instances)
-are accepted everywhere and auto-instantiated via VertexResolver
-(singleton-per-class semantics).
+Bare StateVertex subclasses (classes, not instances) are accepted everywhere
+and auto-instantiated via VertexResolver (singleton-per-class semantics).
 """
 
 from __future__ import annotations

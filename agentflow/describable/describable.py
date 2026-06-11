@@ -639,6 +639,7 @@ class Describable:
             default="markdown",
             help="Output format (default: markdown).",
         )
+        self._add_describe_arguments(p_describe)
         self._add_output_arguments(p_describe)
         command_entries.append((
             "describe",
@@ -720,6 +721,17 @@ class Describable:
             result = self.run()
         if result is not None:
             print(f"\n{result}")
+
+    def _add_describe_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Hook for subclasses to add extra arguments to the ``describe`` subparser.
+
+        Called during ``run_argparse()`` after the standard ``--format`` and
+        before the ``-o/--output`` argument.  The default implementation is a
+        no-op; override in subclasses that need extra describe-mode options.
+
+        Args:
+            parser: The ``describe`` subcommand ``ArgumentParser`` to extend.
+        """
 
     def _cli_describe(self, args: argparse.Namespace) -> None:
         """Dispatch the ``describe`` subcommand."""

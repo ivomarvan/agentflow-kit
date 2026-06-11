@@ -1,4 +1,4 @@
-"""Tests for Context dataclass — E107: LlmPool-based connector management."""
+"""Tests for Context dataclass — LlmPool-based connector management."""
 from __future__ import annotations
 
 import logging

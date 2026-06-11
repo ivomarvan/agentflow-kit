@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -68,6 +68,7 @@ class StepEndEvent(AgentEvent):
         step: Super-step index (0-based).
         signal: String representation of the routing signal returned.
         detail: Serialized patch fields for GUI tooltip (field -> truncated value).
+        from_cache: True when all LLM calls in this step were served from cache.
     """
 
     event_type: str = "agentflow.step_end"
@@ -75,6 +76,7 @@ class StepEndEvent(AgentEvent):
     step: int
     signal: str
     detail: dict[str, str] = Field(default_factory=dict)
+    from_cache: bool = False
 
 
 class ToolCallEvent(AgentEvent):
@@ -115,6 +117,25 @@ class RunStatsEvent(AgentEvent):
     llm_calls: int = 0
     cache_hits: int = 0
     by_model: dict[str, dict[str, int]] = Field(default_factory=dict)
+
+
+class StateUpdateEvent(AgentEvent):
+    """Emitted when the live application world-state changes (e.g. after a tool call).
+
+    The GUI ``StateViewerPanel`` component consumes this event to show a live
+    visualisation of the external state (smart-home room layout, hotel occupancy, …).
+
+    Attributes:
+        state_data: Current state serialised via ``model_dump()``
+            (dict with field names as keys).
+        display_schema: Display schema produced by ``extract_display_schema()``
+            — sent only on the first event of a run to avoid redundant data;
+            ``None`` on subsequent events.
+    """
+
+    event_type: str = "agentflow.state_update"
+    state_data: dict[str, Any] = Field(default_factory=dict)
+    display_schema: dict[str, Any] | None = None
 
 
 class QuestionSentEvent(AgentEvent):

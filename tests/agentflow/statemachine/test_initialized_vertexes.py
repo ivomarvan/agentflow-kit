@@ -1,4 +1,4 @@
-"""Tests for StateGraph.initialized_vertexes feature (T103-03)."""
+"""Tests for StateGraph.initialized_vertexes feature."""
 from __future__ import annotations
 
 from enum import auto

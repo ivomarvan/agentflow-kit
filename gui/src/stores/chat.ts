@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { WsMessage } from '@/services/wsClient'
+import { useStateViewerStore } from '@/stores/stateViewer'
 
 export interface ChatMessage {
   id: string
@@ -60,9 +61,11 @@ function toLogLine(event: WsMessage, seq: number): LogLine | null {
 
     case 'step_end': {
       const detail = formatDetail(event.detail as Record<string, string> | undefined)
+      const fromCache = event.from_cache as boolean | undefined
+      const cacheFlag = fromCache ? ' ⚡cache' : ''
       return {
         time, tag: 'STEP',
-        text: `✓ ${event.vertex as string} → ${event.signal as string}`,
+        text: `✓ ${event.vertex as string}${cacheFlag} → ${event.signal as string}`,
         detail,
         seq,
       }
@@ -82,6 +85,9 @@ function toLogLine(event: WsMessage, seq: number): LogLine | null {
         seq,
       }
     }
+
+    case 'state_update':
+      return null  // shown in StateViewerPanel — not in event log
 
     case 'run_stats': {
       const elapsedSec = ((event.elapsed_ms as number) / 1000).toFixed(1)
@@ -167,6 +173,11 @@ export const useChatStore = defineStore('chat', () => {
   function appendEvent(msgId: string, event: WsMessage) {
     const msg = messages.value.find(m => m.id === msgId)
     if (msg) msg.events.push(event)
+
+    // Forward live state updates to the state viewer store
+    if ((event.type as string) === 'state_update') {
+      useStateViewerStore().handleStateUpdate(event as Record<string, unknown>)
+    }
 
     // Reset the run sequence counter at the start of each new question
     if ((event.type as string) === 'question_sent') {

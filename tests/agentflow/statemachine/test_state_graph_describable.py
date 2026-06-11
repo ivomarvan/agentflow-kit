@@ -1,4 +1,4 @@
-"""Unit tests for StateGraph(Describable) — E060 T010.
+"""Unit tests for StateGraph as a Describable subclass.
 
 Verifies that StateGraph is a proper Describable subclass and that
 get_graph() produces a correct topology Graph (nodes and edges).
@@ -41,7 +41,7 @@ class _Sig(enum.Enum):
 
 @pytest.mark.unit
 def test_state_graph_is_describable_instance() -> None:
-    """StateGraph is an instance of Describable after E060 T010."""
+    """StateGraph is an instance of Describable."""
     graph = StateGraph(start=_A, transitions=[])
     assert isinstance(graph, Describable)
 

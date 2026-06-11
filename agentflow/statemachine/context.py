@@ -24,6 +24,35 @@ from agentflow.statemachine.run_stats import RunStats
 from agentflow.tools.ToolRegistry import ToolRegistry
 
 
+async def _emit_live_state(ctx: Any) -> None:
+    """Emit StateUpdateEvent for ctx.live_state if one is registered.
+
+    Sends the display schema on the first emission of a run (to initialise the
+    GUI widget), then only state_data on subsequent emissions.
+
+    Args:
+        ctx: Context instance — reads live_state and _live_state_schema_sent.
+    """
+    if ctx.live_state is None:
+        return
+    if not hasattr(ctx.live_state, "model_dump"):
+        return
+
+    from agentflow.events import StateUpdateEvent
+    from agentflow.gui.state_viewer import extract_display_schema
+
+    schema_sent: bool = object.__getattribute__(ctx, "_live_state_schema_sent")
+    schema = None
+    if not schema_sent:
+        schema = extract_display_schema(type(ctx.live_state))
+        object.__setattr__(ctx, "_live_state_schema_sent", True)
+
+    await ctx.event_bus.emit(StateUpdateEvent(
+        state_data=ctx.live_state.model_dump(),
+        display_schema=schema,
+    ))
+
+
 class _TrackedConnector:
     """Thin proxy that records token usage and emits tool-call events.
 
@@ -62,6 +91,11 @@ class _TrackedConnector:
 
         response = await connector.achat(messages, tools, temperature, model_override)
         ctx.stats.record(model, response.usage, cache_hit=cache_hit)
+        # Update per-step counters used by runner to set StepEndEvent.from_cache.
+        if cache_hit:
+            ctx._step_cache_hits += 1
+        else:
+            ctx._step_llm_calls += 1
         return response
 
     async def achat_with_tools(
@@ -77,12 +111,16 @@ class _TrackedConnector:
         Reimplements LlmConnectorBase.achat_with_tools() so that:
         - each internal achat() call is tracked via self.achat() (usage recorded)
         - each tool execution emits a ToolCallEvent on ctx.event_bus
+        - after each tool call, if ctx.live_state is set, emits StateUpdateEvent
         """
         from agentflow.events import ToolCallEvent
 
         ctx: Context = object.__getattribute__(self, "_ctx")
         _log = log or logging.getLogger(__name__)
         current_messages = list(messages)
+
+        # Emit initial live state (with schema on first call of the run)
+        await _emit_live_state(ctx)
 
         for _ in range(max_rounds):
             response = await self.achat(current_messages, tools=registry.schemas(),
@@ -110,6 +148,9 @@ class _TrackedConnector:
                     inputs={str(k): str(v) for k, v in args.items()},
                     output=str(result)[:500],
                 ))
+
+                # Emit updated live state after each tool modifies the world
+                await _emit_live_state(ctx)
 
                 current_messages.append({
                     "role": "tool",
@@ -151,12 +192,22 @@ class Context(Describable):
     tool_registries: dict[str, ToolRegistry] = field(default_factory=dict)
     stats: RunStats = field(default_factory=RunStats)
     step: int = 0
+    live_state: Any = None
+    """Optional Pydantic BaseModel instance — updated by tools; emitted as
+    StateUpdateEvent after each tool call to drive the GUI StateViewerPanel."""
 
     def __post_init__(self) -> None:
         # @dataclass generates __init__ without calling super().__init__(), so
         # we initialise the Describable internals manually here.
         object.__setattr__(self, "name", type(self).__name__)
         object.__setattr__(self, "description", inspect.getdoc(type(self)) or "")
+        # Track whether display schema has been sent for live_state in this run.
+        object.__setattr__(self, "_live_state_schema_sent", False)
+        # Elapsed time set by runner.run() at end; read by server.py for RunStatsEvent.
+        object.__setattr__(self, "_run_elapsed_ms", 0.0)
+        # Per-step cache/live call counters reset by runner before each step.
+        object.__setattr__(self, "_step_cache_hits", 0)
+        object.__setattr__(self, "_step_llm_calls", 0)
 
     # ------------------------------------------------------------------
     # LLM access via pool

@@ -1,4 +1,4 @@
-"""Unit tests — system prompts as Pydantic fields on StateVertex subclasses (E105.T01)."""
+"""Unit tests — system prompts as Pydantic fields on StateVertex subclasses."""
 from __future__ import annotations
 
 import importlib

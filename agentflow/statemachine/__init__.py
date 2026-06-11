@@ -1,7 +1,6 @@
 """agentflow.statemachine — declarative state graph orchestration for AI agents.
 
-Public API grows incrementally with each Task of Epic E010-E070 (see roadmap.md).
-Current exports (after E103-T02): Signal, EnumSignal, StdSignal, apply_patches, UNSET, Context,
+Public exports include Signal, EnumSignal, StdSignal, apply_patches, UNSET, Context,
 RunStats, StateVertex, End, StdEnd, RunnerHooks, NoOpHooks, LoggingHooks, RecorderHooks,
 SuperStepRecord, LiveGraphHooks, Transition, Parallel, StateGraph, StateGraphRunner,
 VertexResolver, ToolCallVertex, LlmTurnVertex, ToolAgentVertex,
