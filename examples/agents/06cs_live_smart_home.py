@@ -31,15 +31,12 @@ class HouseState(BaseModel):
 ```
 
 `AgentApp(live_state=_HOUSE, ...)` — GUI automaticky zobrazí vizualizaci.
-
-## Spuštění
-
-```bash
-uv run python examples/agents/06cs_live_smart_home.py run
-uv run python examples/agents/06cs_live_smart_home.py gui
-uv run python examples/agents/06cs_live_smart_home.py graph --browser
-```
 """
+
+# Spuštění:
+#     uv run python examples/agents/06cs_live_smart_home.py run
+#     uv run python examples/agents/06cs_live_smart_home.py gui
+#     uv run python examples/agents/06cs_live_smart_home.py graph --browser
 
 from __future__ import annotations
 

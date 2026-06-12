@@ -9,6 +9,7 @@ export interface ChatMessage {
   content: string
   result: string | null
   isRunning: boolean
+  isError: boolean
   events: WsMessage[]
   timestamp: Date
   run_id: string
@@ -129,14 +130,21 @@ function toLogLine(event: WsMessage, seq: number): LogLine | null {
       }
     }
 
-    case 'log':
+    case 'log': {
+      const fullMessage = (event.message as string) ?? ''
+      const level = ((event.level as string) ?? 'LOG').toUpperCase()
+      // For errors/warnings, show only the first line in the log list; the full
+      // traceback and detail go to the right panel to avoid overwhelming the log.
+      const isError = level === 'ERROR' || level === 'WARNING'
+      const shortText = isError ? fullMessage.split('\n')[0] : fullMessage
       return {
-        time, tag: (event.level as string) ?? 'LOG',
-        text: event.message as string,
-        level: (event.level as string)?.toUpperCase(),
-        detail: { event_type: 'log', level: event.level, message: event.message, logger: event.logger_name },
+        time, tag: level,
+        text: shortText,
+        level,
+        detail: { event_type: 'log', level: event.level, message: fullMessage, logger: event.logger_name },
         seq,
       }
+    }
 
     case 'run_complete':
       return {
@@ -178,6 +186,7 @@ export const useChatStore = defineStore('chat', () => {
       content,
       result: null,
       isRunning: false,
+      isError: false,
       events: [],
       timestamp: new Date(),
       run_id: '',
@@ -193,6 +202,7 @@ export const useChatStore = defineStore('chat', () => {
       content: '',
       result: null,
       isRunning: true,
+      isError: false,
       events: [],
       timestamp: new Date(),
       run_id: runId,
@@ -231,7 +241,8 @@ export const useChatStore = defineStore('chat', () => {
     const msg = messages.value.find(m => m.id === msgId)
     if (msg) {
       msg.isRunning = false
-      msg.result = `Error: ${error}`
+      msg.isError = true
+      msg.result = error
     }
   }
 

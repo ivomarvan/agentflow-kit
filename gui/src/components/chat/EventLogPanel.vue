@@ -25,7 +25,6 @@
           <span class="log-time">{{ line.time }}</span>
           <span :class="['log-tag', tagClass(line.tag)]">{{ line.tag }}</span>
           <span class="log-text">{{ line.text }}</span>
-          <span v-if="line.detail" class="detail-hint">ⓘ</span>
         </div>
 
         <div v-if="chatStore.eventLog.length === 0" class="log-empty">
@@ -195,11 +194,6 @@ function tagClass(tag: string): string {
 .log-text {
   color: var(--p-text-color, #334155);
   flex: 1;
-}
-.detail-hint {
-  flex-shrink: 0;
-  color: var(--p-text-muted-color, #94a3b8);
-  font-size: 0.72rem;
 }
 .log-empty {
   color: var(--p-text-muted-color, #aaa);

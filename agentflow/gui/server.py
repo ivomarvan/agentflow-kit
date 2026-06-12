@@ -453,13 +453,13 @@ async def _run_workflow(
     # this run_id is accepted before we emit the terminal event.
     await asyncio.sleep(0)
 
-    # Route Python log messages from the agentflow namespace into the event stream.
+    # Route Python log messages from the agentflow namespace and all application
+    # loggers into the event stream.  Adding only to root_logger is sufficient:
+    # all child loggers (agentflow.*, examples.*) propagate to root by default,
+    # so a single handler on root_logger avoids double-logging.
     log_handler = EventBusLoggingHandler(agent_app.event_bus, level=logging.DEBUG)
     log_handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
-    agentflow_logger = logging.getLogger("agentflow")
     root_logger = logging.getLogger()
-    agentflow_logger.addHandler(log_handler)
-    # Also capture the application's own loggers (e.g. examples.agents.*)
     root_logger.addHandler(log_handler)
 
     try:
@@ -468,7 +468,9 @@ async def _run_workflow(
             QuestionSentEvent(run_id=run_id, question=prompt or "(empty)")
         )
         result = await agent_app.run_workflow_with_prompt(prompt)
-        event = RunCompleteEvent(run_id=run_id, result=result)
+        last_ctx = getattr(agent_app, "_last_ctx", None)
+        is_error = bool(last_ctx is not None and last_ctx.run_errors)
+        event = RunCompleteEvent(run_id=run_id, result=result, is_error=is_error)
         await agent_app.event_bus.emit(event)
         # Buffer the terminal payload so late-connecting WS clients still
         # receive it (race condition for fast synchronous workflows).
@@ -505,7 +507,6 @@ async def _run_workflow(
             **event.model_dump(exclude={"run_id", "event_type"}, mode="json"),
         }
     finally:
-        agentflow_logger.removeHandler(log_handler)
         root_logger.removeHandler(log_handler)
         app.state.run_state.is_running = False
         with contextlib.suppress(ValueError):

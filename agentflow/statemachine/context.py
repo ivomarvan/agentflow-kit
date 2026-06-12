@@ -226,6 +226,10 @@ class Context(Describable):
     live_state: Any = None
     """Optional Pydantic BaseModel instance — updated by tools; emitted as
     StateUpdateEvent after each tool call to drive the GUI StateViewerPanel."""
+    run_errors: list[str] = field(default_factory=list)
+    """Accumulated clean error messages from vertex failures (latest last).
+    Populated by StateGraphRunner._safe_run(); read by AgentApp._extract_result()
+    to surface meaningful error text instead of a raw state repr."""
 
     def __post_init__(self) -> None:
         # @dataclass generates __init__ without calling super().__init__(), so

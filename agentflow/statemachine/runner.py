@@ -86,6 +86,36 @@ def _detail_from(obj: Any) -> dict[str, Any]:
     return result
 
 
+def _extract_clean_error(exc: BaseException) -> str:
+    """Extract a human-readable error message from an API or general exception.
+
+    For OpenAI-compatible API errors, prefers the JSON body's ``error.message``
+    field (e.g. from Google/OpenAI 4xx responses).  Handles both dict and list
+    response bodies.  Falls back to the exception's ``message`` attribute and
+    finally to ``str(exc)``.
+
+    Args:
+        exc: The caught exception to extract a message from.
+
+    Returns:
+        A short, user-facing error string (no traceback).
+    """
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error", {})
+        if isinstance(error, dict) and "message" in error:
+            return str(error["message"])
+    # Google API wraps the error in a list: [{"error": {"message": "..."}}]
+    if isinstance(body, list) and body and isinstance(body[0], dict):
+        error = body[0].get("error", {})
+        if isinstance(error, dict) and "message" in error:
+            return str(error["message"])
+    msg = getattr(exc, "message", None)
+    if msg:
+        return str(msg)
+    return str(exc)
+
+
 class StateGraphRunner:
     """Executes a StateGraph using the Bulk Synchronous Parallel (BSP) model.
 
@@ -395,6 +425,8 @@ class StateGraphRunner:
         Maps any unexpected exception to (StdSignal.fail, _EmptyPatch()) so that
         a single vertex failure does not crash the entire super-step. Calls
         hooks.on_vertex_error before returning the failure tuple.
+        The clean error message is stored in self.context.run_errors for display
+        in the GUI result (instead of a raw state repr).
 
         Args:
             node: Vertex to execute.
@@ -407,12 +439,15 @@ class StateGraphRunner:
             result: tuple[Any, Any] = await node.run(state, self.context)
             return result
         except Exception as exc:
+            clean_msg = _extract_clean_error(exc)
             _logger.exception(
-                "Vertex failed: node=%s exc_type=%s",
+                "Vertex failed: node=%s Err=%r exc_type=%s",
                 type(node).__name__,
+                clean_msg,
                 type(exc).__name__,
             )
             await self.hooks.on_vertex_error(node, exc)
+            self.context.run_errors.append(clean_msg)
             from agentflow.statemachine.vertex import _EmptyPatch  # noqa: PLC0415
 
             return StdSignal.fail, _EmptyPatch()

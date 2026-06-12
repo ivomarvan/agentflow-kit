@@ -17,13 +17,13 @@ Feature coverage:
   ▸ LlmConnector        — keyed connectors in Context; different connectors per vertex
   ▸ LlmFileCache        — persistent per-script cache
   ▸ AgentEvent          — custom ToolCalledEvent (published inside achat_with_tools hook)
-
-Run:
-    uv run python examples/showcase.py -h           # help (full command grammar)
-    uv run python examples/showcase.py run          # run with real LLM
-    uv run python examples/showcase.py graph --browser
-    uv run python examples/showcase.py gui          # start local GUI server
 """
+
+# Run:
+#     uv run python examples/showcase.wish.py -h           # help (full command grammar)
+#     uv run python examples/showcase.wish.py run          # run with real LLM
+#     uv run python examples/showcase.wish.py graph --browser
+#     uv run python examples/showcase.wish.py gui          # start local GUI server
 
 from __future__ import annotations
 

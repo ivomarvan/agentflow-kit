@@ -7,13 +7,13 @@ Demonstrates all major statemachine features in a single script:
   - Cycle / loop      : Review routes back to Research on needs_revision
   - Custom signal enum: ReviewSignal (approved / needs_revision)
   - Loop termination  : auto-approve after _MAX_REVISIONS Research iterations
-
-Run with:
-    uv run python examples/quickstart/04_parallel_research_loop.py -h           # help
-    uv run python examples/quickstart/04_parallel_research_loop.py run            # run workflow
-    uv run python examples/quickstart/04_parallel_research_loop.py graph --browser
-    uv run python examples/quickstart/04_parallel_research_loop.py graph -o graph.html
 """
+
+# Run:
+#     uv run python examples/quickstart/04_parallel_research_loop.py -h           # help
+#     uv run python examples/quickstart/04_parallel_research_loop.py run            # run workflow
+#     uv run python examples/quickstart/04_parallel_research_loop.py graph --browser
+#     uv run python examples/quickstart/04_parallel_research_loop.py graph -o graph.html
 
 from dataclasses import dataclass
 from enum import Enum

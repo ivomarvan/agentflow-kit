@@ -7,13 +7,13 @@ observation and self-corrects — no special framework support needed.
 Tools with built-in guardrails:
   - ValidatedCalculator   — rejects expressions with non-arithmetic characters
   - ValidatedSearchPolicy — rejects empty or excessively long queries
-
-Run:
-    uv run python examples/agents/05_validated_tools.py -h
-    uv run python examples/agents/05_validated_tools.py run
-    uv run python examples/agents/05_validated_tools.py gui
-    uv run python examples/agents/05_validated_tools.py graph --browser
 """
+
+# Run:
+#     uv run python examples/agents/05_validated_tools.py -h
+#     uv run python examples/agents/05_validated_tools.py run
+#     uv run python examples/agents/05_validated_tools.py gui
+#     uv run python examples/agents/05_validated_tools.py graph --browser
 
 import json
 import operator

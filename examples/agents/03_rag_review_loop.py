@@ -7,13 +7,13 @@ Demonstrates a pure-Python state machine without a real LLM:
 
 The loop runs until the draft is approved or Review.max_attempts is reached.
 FakeLlmConnector is used to satisfy the Context API — no LLM calls are made.
-
-Run:
-    uv run python examples/agents/03_rag_review_loop.py -h
-    uv run python examples/agents/03_rag_review_loop.py run
-    uv run python examples/agents/03_rag_review_loop.py gui
-    uv run python examples/agents/03_rag_review_loop.py graph --browser
 """
+
+# Run:
+#     uv run python examples/agents/03_rag_review_loop.py -h
+#     uv run python examples/agents/03_rag_review_loop.py run
+#     uv run python examples/agents/03_rag_review_loop.py gui
+#     uv run python examples/agents/03_rag_review_loop.py graph --browser
 
 from dataclasses import dataclass
 from enum import auto

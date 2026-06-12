@@ -4,12 +4,12 @@ Accepts a user prompt and responds: "Slyšel jsem <prompt>."
 
 Purpose: test the VoiceBot tab (STT → workflow → TTS) without
 requiring any LLM API keys.
-
-Run:
-    uv run python examples/agents/08_echo_voicebot.py run
-    uv run python examples/agents/08_echo_voicebot.py gui
-    uv run python examples/agents/08_echo_voicebot.py graph --browser
 """
+
+# Run:
+#     uv run python examples/agents/08_echo_voicebot.py run
+#     uv run python examples/agents/08_echo_voicebot.py gui
+#     uv run python examples/agents/08_echo_voicebot.py graph --browser
 
 from __future__ import annotations
 

@@ -1,13 +1,13 @@
 """Hotel booking demo — demonstrates domain events and custom GUI renderer.
 
 The FakeLlmConnector simulates booking requests so no real LLM API key is needed.
-
-Run with:
-    uv run python examples/hotel_booking/hotel_booking_app.py -h       # help
-    uv run python examples/hotel_booking/hotel_booking_app.py run      # run workflow
-    uv run python examples/hotel_booking/hotel_booking_app.py graph --browser
-    uv run python examples/hotel_booking/hotel_booking_app.py gui      # GUI server
 """
+
+# Run:
+#     uv run python examples/hotel_booking/hotel_booking_app.py -h       # help
+#     uv run python examples/hotel_booking/hotel_booking_app.py run      # run workflow
+#     uv run python examples/hotel_booking/hotel_booking_app.py graph --browser
+#     uv run python examples/hotel_booking/hotel_booking_app.py gui      # GUI server
 
 from __future__ import annotations
 

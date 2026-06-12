@@ -7,13 +7,13 @@ Graph topology:
     ToolAgentVertex ──ok──> StdEnd
 
 FakeLlmConnector is used so no real API key is needed.
-
-Run with:
-    uv run python examples/quickstart/02_tool_agent_demo.py -h           # help
-    uv run python examples/quickstart/02_tool_agent_demo.py run        # run workflow
-    uv run python examples/quickstart/02_tool_agent_demo.py graph --browser
-    uv run python examples/quickstart/02_tool_agent_demo.py graph -o graph.html
 """
+
+# Run:
+#     uv run python examples/quickstart/02_tool_agent_demo.py -h           # help
+#     uv run python examples/quickstart/02_tool_agent_demo.py run        # run workflow
+#     uv run python examples/quickstart/02_tool_agent_demo.py graph --browser
+#     uv run python examples/quickstart/02_tool_agent_demo.py graph -o graph.html
 
 import dataclasses
 

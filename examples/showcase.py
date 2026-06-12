@@ -18,13 +18,13 @@ Feature coverage:
   ▸ setup_pretty_logging() — hierarchical indented console output
   ▸ sample_prompts     — example prompts for the GUI prompt selector
   ▸ Injectable connector — pass any LlmConnectorBase (e.g. FakeLlmConnector)
-
-Run:
-    uv run python examples/showcase.py -h           # help (full command grammar)
-    uv run python examples/showcase.py run          # run with real LLM
-    uv run python examples/showcase.py graph --browser
-    uv run python examples/showcase.py gui          # start local GUI server
 """
+
+# Run:
+#     uv run python examples/showcase.py -h           # help (full command grammar)
+#     uv run python examples/showcase.py run          # run with real LLM
+#     uv run python examples/showcase.py graph --browser
+#     uv run python examples/showcase.py gui          # start local GUI server
 
 from __future__ import annotations
 

@@ -211,10 +211,13 @@ class RunCompleteEvent(AgentEvent):
 
     Attributes:
         result: Optional summary string returned by run_workflow().
+        is_error: True when the result is an error message extracted from a vertex
+            failure (e.g. an LLM API error), so the GUI can style it accordingly.
     """
 
     event_type: str = "agentflow.run_complete"
     result: str | None = None
+    is_error: bool = False
 
 
 class RunErrorEvent(AgentEvent):

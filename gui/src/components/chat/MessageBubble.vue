@@ -1,9 +1,9 @@
 <template>
   <div :class="['bubble', message.role]">
-    <span :class="['bubble-tag', message.role === 'user' ? 'tag-user' : 'tag-asst']">
-      {{ message.role === 'user' ? 'USER' : 'ASST' }}
+    <span :class="['bubble-tag', message.role === 'user' ? 'tag-user' : (message.isError ? 'tag-err' : 'tag-asst')]">
+      {{ message.role === 'user' ? 'USER' : (message.isError ? 'ERR' : 'ASST') }}
     </span>
-    <span class="bubble-text">
+    <span :class="['bubble-text', { 'bubble-error': message.isError }]">
       <template v-if="message.role === 'user'">{{ message.content }}</template>
       <template v-else>
         <span v-if="message.isRunning" class="running-indicator">
@@ -49,12 +49,21 @@ defineProps<{ message: ChatMessage }>()
 }
 .tag-user { background: #dbeafe; color: #1e40af; }
 .tag-asst { background: #e0e7ff; color: #3730a3; }
+.tag-err  { background: #fee2e2; color: #991b1b; }
 
 .bubble-text {
   flex: 1;
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--p-text-color, #334155);
+}
+.bubble-error {
+  color: #991b1b;
+  background: #fff1f2;
+  border-left: 3px solid #fca5a5;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0 4px 4px 0;
+  font-weight: 500;
 }
 
 .running-indicator {

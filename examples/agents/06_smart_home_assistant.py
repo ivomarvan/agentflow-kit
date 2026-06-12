@@ -23,15 +23,12 @@ If the Judge rejects an unsafe plan, the Worker revises and resubmits (max 2 ret
 - Two LLM connector tiers (economy vs quality)
 - Typed state without `cast()`, `ctx.stats` after run
 - Declarative `AgentApp` with `run` / `graph` / `gui`
-
-## Run
-
-```bash
-uv run python examples/agents/06_smart_home_assistant.py run
-uv run python examples/agents/06_smart_home_assistant.py graph --browser
-uv run python examples/agents/06_smart_home_assistant.py -h
-```
 """
+
+# Run:
+#     uv run python examples/agents/06_smart_home_assistant.py run
+#     uv run python examples/agents/06_smart_home_assistant.py graph --browser
+#     uv run python examples/agents/06_smart_home_assistant.py -h
 
 from __future__ import annotations
 

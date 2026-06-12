@@ -8,13 +8,13 @@ Tools:
   - Calculator      — safe arithmetic evaluator
   - GetCurrentDate  — returns today's date in a requested format
   - AddDaysToDate   — adds N days to a given date
-
-Run:
-    uv run python examples/agents/02_react_agent.py -h
-    uv run python examples/agents/02_react_agent.py run
-    uv run python examples/agents/02_react_agent.py gui
-    uv run python examples/agents/02_react_agent.py graph --browser
 """
+
+# Run:
+#     uv run python examples/agents/02_react_agent.py -h
+#     uv run python examples/agents/02_react_agent.py run
+#     uv run python examples/agents/02_react_agent.py gui
+#     uv run python examples/agents/02_react_agent.py graph --browser
 
 import json
 import operator

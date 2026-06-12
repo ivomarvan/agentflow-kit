@@ -239,7 +239,11 @@ async function sendMessage() {
       chatStore.appendEvent(msgId, event)
       if (event.type === 'run_complete') {
         const result = (event.result as string) ?? 'Completed.'
-        chatStore.completeMessage(msgId, result)
+        if (event.is_error) {
+          chatStore.errorMessage(msgId, result)
+        } else {
+          chatStore.completeMessage(msgId, result)
+        }
         chatStore.isRunning = false
         // Delay disconnect so run_stats (emitted just after run_complete) can arrive.
         statsWaitTimer = setTimeout(disconnect, 2000)

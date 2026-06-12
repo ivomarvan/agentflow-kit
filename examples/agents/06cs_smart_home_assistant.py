@@ -21,15 +21,12 @@ Pokud Judge plán zamítne, Worker ho opraví (max 2 pokusy).
 - Dvě úrovně LLM konektorů (ekonomická vs. kvalitní)
 - Typovaný stav bez `cast()`, `ctx.stats` po dokončení
 - Deklarativní `AgentApp` s příkazy `run` / `graph` / `gui`
-
-## Spuštění
-
-```bash
-uv run python examples/agents/06cs_smart_home_assistant.py run
-uv run python examples/agents/06cs_smart_home_assistant.py graph --browser
-uv run python examples/agents/06cs_smart_home_assistant.py -h
-```
 """
+
+# Spuštění:
+#     uv run python examples/agents/06cs_smart_home_assistant.py run
+#     uv run python examples/agents/06cs_smart_home_assistant.py graph --browser
+#     uv run python examples/agents/06cs_smart_home_assistant.py -h
 
 from __future__ import annotations
 

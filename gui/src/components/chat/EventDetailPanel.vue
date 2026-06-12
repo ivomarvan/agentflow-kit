@@ -103,8 +103,96 @@ function renderValue(val: unknown, depth = 0): string {
   return `<span class="rv-other">${esc(String(val))}</span>`
 }
 
+// ── Structured renderer for ERROR/WARNING log events ──────────────────
+
+/** Try to parse a Python repr-like string (single quotes, True/False/None) as JSON. */
+function tryParsePythonLikeJson(s: string): unknown {
+  try { return JSON.parse(s) } catch { /* fall through */ }
+  try {
+    return JSON.parse(
+      s.replace(/'/g, '"')
+        .replace(/\bTrue\b/g, 'true')
+        .replace(/\bFalse\b/g, 'false')
+        .replace(/\bNone\b/g, 'null'),
+    )
+  } catch { return null }
+}
+
+/**
+ * Render a Python log message (possibly with a traceback) as structured HTML
+ * with three collapsible sections: Summary, Python traceback, API error JSON.
+ */
+function renderErrorLog(message: string, logger?: string): string {
+  const lines = message.split('\n')
+  const tbIdx = lines.findIndex(l => l.startsWith('Traceback (most recent call last):'))
+
+  // No traceback — render as plain pre block
+  if (tbIdx === -1) {
+    const src = logger ? `<span class="err-source">${esc(logger)}</span>` : ''
+    return (
+      `<div class="err-section">` +
+      `<div class="err-section-label">Message ${src}</div>` +
+      `<pre class="err-tb-code">${esc(message.trim())}</pre>` +
+      `</div>`
+    )
+  }
+
+  const summaryLines = lines.slice(0, tbIdx).filter(l => l.trim())
+  const tbLines = lines.slice(tbIdx)
+  const lastLine = tbLines[tbLines.length - 1] ?? ''
+
+  // Try to extract API error JSON from the last exception line.
+  // Pattern: "ExcType: Error code: NNN - [{...}]" or "ExcType: ... - {'key': ...}"
+  let apiErrorHtml = ''
+  const jsonMatch = lastLine.match(/- (\[?\{.+\}\]?)$/)
+  if (jsonMatch) {
+    const parsed = tryParsePythonLikeJson(jsonMatch[1])
+    if (parsed !== null && typeof parsed === 'object') {
+      apiErrorHtml = (
+        `<div class="err-section err-api-section">` +
+        `<div class="err-section-label">API error response</div>` +
+        `<div class="err-api-body">${renderValue(parsed)}</div>` +
+        `</div>`
+      )
+    }
+  }
+
+  // Remove the JSON part from the last traceback line for cleaner display
+  const tbClean = jsonMatch
+    ? [...tbLines.slice(0, -1), lastLine.slice(0, jsonMatch.index).trim()].join('\n')
+    : tbLines.join('\n')
+
+  const srcBadge = logger ? `<span class="err-source">${esc(logger)}</span>` : ''
+  const summaryHtml = summaryLines.length
+    ? (
+      `<div class="err-section">` +
+      `<div class="err-section-label">Summary ${srcBadge}</div>` +
+      `<div class="err-summary-body">${summaryLines.map(l => `<div>${esc(l)}</div>`).join('')}</div>` +
+      `</div>`
+    )
+    : ''
+
+  const tbHtml = (
+    `<div class="err-section">` +
+    `<div class="err-section-label">Python traceback</div>` +
+    `<pre class="err-tb-code">${esc(tbClean.trim())}</pre>` +
+    `</div>`
+  )
+
+  return summaryHtml + tbHtml + apiErrorHtml
+}
+
 const renderedHtml = computed(() => {
   if (!props.selected?.detail) return '<span class="rv-null">(no detail)</span>'
+  const detail = props.selected.detail as Record<string, unknown>
+  // Specialised renderer for log events at ERROR/WARNING level
+  if (
+    detail.event_type === 'log' &&
+    (detail.level === 'ERROR' || detail.level === 'WARNING') &&
+    typeof detail.message === 'string'
+  ) {
+    return renderErrorLog(detail.message, detail.logger as string | undefined)
+  }
   return renderValue(props.selected.detail)
 })
 
@@ -295,4 +383,56 @@ function tagClass(tag: string): string {
 .tag-info    { background: #e0f2fe; color: #0369a1; }
 .tag-warning { background: #fef9c3; color: #92400e; }
 .tag-other   { background: #f3e8ff; color: #6b21a8; }
+
+/* ── Structured error log sections ────────────────────────────────── */
+:deep(.err-section) {
+  margin-bottom: 0.8rem;
+}
+:deep(.err-section-label) {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+:deep(.err-source) {
+  font-weight: 400;
+  font-style: italic;
+  text-transform: none;
+  color: #94a3b8;
+}
+:deep(.err-summary-body) {
+  font-size: 0.82rem;
+  color: #991b1b;
+  font-weight: 500;
+  background: #fff1f2;
+  border-left: 3px solid #fca5a5;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0 4px 4px 0;
+}
+:deep(.err-tb-code) {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  padding: 0.6rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre;
+  word-break: normal;
+  margin: 0;
+}
+:deep(.err-api-section) {
+  margin-top: 0.4rem;
+}
+:deep(.err-api-body) {
+  background: #fefce8;
+  border-left: 3px solid #fde047;
+  padding: 0.4rem 0.5rem;
+  border-radius: 0 4px 4px 0;
+}
 </style>

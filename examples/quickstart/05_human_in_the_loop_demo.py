@@ -7,13 +7,13 @@ The graph is paused before HumanReview executes via run_until().
 A simulated human updates the state (approved=True) and saves it back to
 the checkpoint store.  resume() then picks up from that checkpoint and
 completes the workflow.
-
-Run with:
-    uv run python examples/quickstart/05_human_in_the_loop_demo.py -h           # help
-    uv run python examples/quickstart/05_human_in_the_loop_demo.py run          # run workflow
-    uv run python examples/quickstart/05_human_in_the_loop_demo.py graph --browser
-    uv run python examples/quickstart/05_human_in_the_loop_demo.py graph -o graph.html
 """
+
+# Run:
+#     uv run python examples/quickstart/05_human_in_the_loop_demo.py -h           # help
+#     uv run python examples/quickstart/05_human_in_the_loop_demo.py run          # run workflow
+#     uv run python examples/quickstart/05_human_in_the_loop_demo.py graph --browser
+#     uv run python examples/quickstart/05_human_in_the_loop_demo.py graph -o graph.html
 
 import dataclasses
 from dataclasses import dataclass

@@ -290,7 +290,11 @@ class AgentApp(Describable):
     def _extract_result(self, final_state: Any) -> str | None:
         """Extract a result string from the final graph state.
 
-        Tries common field names in priority order; falls back to ``str(final_state)``.
+        If the runner recorded any vertex errors during this run (stored in
+        ``_last_ctx.run_errors``), the last error message is returned so that
+        the chat view surfaces a meaningful message instead of a raw state repr.
+        Otherwise tries common field names in priority order; falls back to
+        ``str(final_state)``.
 
         Args:
             final_state: State object returned by ``StateGraphRunner.run()``.
@@ -298,6 +302,9 @@ class AgentApp(Describable):
         Returns:
             Result string, or None if final_state is None.
         """
+        # Surface the last vertex error as the result when the run failed.
+        if self._last_ctx is not None and self._last_ctx.run_errors:
+            return self._last_ctx.run_errors[-1]
         for field_name in ("final_response", "final_answer", "result", "output"):
             val = getattr(final_state, field_name, None)
             if val:

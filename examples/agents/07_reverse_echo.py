@@ -6,12 +6,12 @@ word's characters also reversed:
     "ABC DEF"  →  "FED CBA"
 
 Purpose: test the Chat tab without requiring any LLM API keys.
-
-Run:
-    uv run python examples/agents/07_reverse_echo.py run
-    uv run python examples/agents/07_reverse_echo.py gui
-    uv run python examples/agents/07_reverse_echo.py graph --browser
 """
+
+# Run:
+#     uv run python examples/agents/07_reverse_echo.py run
+#     uv run python examples/agents/07_reverse_echo.py gui
+#     uv run python examples/agents/07_reverse_echo.py graph --browser
 
 from __future__ import annotations
 

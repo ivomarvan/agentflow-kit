@@ -3,13 +3,13 @@
 Builds the Research → Parallel(WriteIntro, WriteBody) → Review → StdEnd graph
 using FakeVertex subclasses, runs it with LiveGraphHooks, and saves one DOT
 snapshot per super-step to nogit_data/graphs/step_N.dot.
-
-Run with:
-    uv run python examples/quickstart/03_live_graph_demo.py -h           # help
-    uv run python examples/quickstart/03_live_graph_demo.py run        # run workflow
-    uv run python examples/quickstart/03_live_graph_demo.py graph --browser
-    uv run python examples/quickstart/03_live_graph_demo.py graph -o graph.html
 """
+
+# Run:
+#     uv run python examples/quickstart/03_live_graph_demo.py -h           # help
+#     uv run python examples/quickstart/03_live_graph_demo.py run        # run workflow
+#     uv run python examples/quickstart/03_live_graph_demo.py graph --browser
+#     uv run python examples/quickstart/03_live_graph_demo.py graph -o graph.html
 
 import operator
 from dataclasses import dataclass

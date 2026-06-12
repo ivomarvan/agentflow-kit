@@ -21,15 +21,12 @@ If the Judge rejects the plan, the Worker revises it (max 2 retries).
 - Two LLM connector tiers (economy vs quality)
 - Typed state without `cast()`, `ctx.stats` after run
 - Declarative `AgentApp` with `run` / `graph` / `gui`
-
-## Run
-
-```bash
-uv run python examples/agents/06en_smart_home_assistant.py run
-uv run python examples/agents/06en_smart_home_assistant.py graph --browser
-uv run python examples/agents/06en_smart_home_assistant.py -h
-```
 """
+
+# Run:
+#     uv run python examples/agents/06en_smart_home_assistant.py run
+#     uv run python examples/agents/06en_smart_home_assistant.py graph --browser
+#     uv run python examples/agents/06en_smart_home_assistant.py -h
 
 from __future__ import annotations
 
