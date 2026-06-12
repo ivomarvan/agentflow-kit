@@ -1,84 +1,124 @@
 <template>
-  <div class="chat-view">
-    <!-- Sample prompts -->
-    <div v-if="sampleOptions.length > 1" class="sample-prompts">
-      <label for="sample-select" class="label">Try:</label>
-      <Select
-        id="sample-select"
-        v-model="selectedSample"
-        :options="sampleOptions"
-        option-label="label"
-        option-value="value"
-        placeholder="— type your own —"
-        class="sample-select"
-      />
-    </div>
+  <div class="chat-view-root">
+    <Splitter layout="vertical" class="chat-splitter">
 
-    <!-- Input area — textarea is full width, both action buttons overlaid inside -->
-    <div class="input-area">
-      <div class="textarea-wrapper">
-        <Textarea
-          v-model="promptInput"
-          :placeholder="isListening ? 'Listening…' : 'Type your message… (Enter to send, Shift+Enter for newline)'"
-          :rows="2"
-          :disabled="chatStore.isRunning"
-          :class="['prompt-textarea', { listening: isListening }]"
-          auto-resize
-          @keydown.enter.exact.prevent="sendMessage"
-        />
-        <!-- Action buttons row — bottom-right of the textarea -->
-        <div class="input-btns">
-          <!-- Mic — only when STT is available -->
-          <button
-            v-if="sttAvailable"
-            :class="['icon-btn', 'mic-btn', { active: isListening }]"
-            :title="isListening ? 'Stop listening' : 'Speak your message'"
-            :disabled="chatStore.isRunning && !isListening"
-            type="button"
-            @click="toggleListening"
-          >
-            <i :class="isListening ? 'pi pi-stop-circle' : 'pi pi-microphone'" />
-          </button>
+      <!-- ── TOP PANEL: conversation history + live state + input ── -->
+      <SplitterPanel :size="65" :minSize="25" class="chat-pane chat-top-pane">
+        <div class="chat-pane-inner">
 
-          <!-- Send -->
-          <button
-            :class="['icon-btn', 'send-btn', { running: chatStore.isRunning }]"
-            :title="chatStore.isRunning ? 'Running…' : 'Send (Enter)'"
-            :disabled="chatStore.isRunning || !promptInput.trim()"
-            type="button"
-            @click="sendMessage"
-          >
-            <i :class="chatStore.isRunning ? 'pi pi-spin pi-spinner' : 'pi pi-chevron-right'" />
-          </button>
+          <!-- Panel header — consistent style with Event Log -->
+          <div class="pane-header">
+            <span
+              class="pane-title"
+              v-tooltip.right="{
+                value: 'Conversation history — all questions and answers in this session. ' +
+                       'Enter to send, Shift+Enter for a new line.',
+                showDelay: 400
+              }"
+            >💬 Conversation</span>
+          </div>
+
+          <!-- Content area below the header -->
+          <div class="chat-pane-content">
+
+            <!-- Input area — placed above messages for a question-first layout -->
+            <div class="input-area">
+              <div class="textarea-wrapper">
+                <Textarea
+                  v-model="promptInput"
+                  :placeholder="isListening ? 'Listening…' : 'Select or Say or Type your message… (Enter to send, Shift+Enter for newline)'"
+                  :rows="2"
+                  :disabled="chatStore.isRunning"
+                  :class="['prompt-textarea', { listening: isListening }, `btns-${inputBtnsCount}`]"
+                  auto-resize
+                  @keydown.enter.exact.prevent="sendMessage"
+                />
+                <div class="input-btns">
+                  <!-- Sample prompts dropdown — only when samples are available -->
+                  <button
+                    v-if="hasSamples"
+                    class="icon-btn samples-btn"
+                    title="Sample prompts — click to pick a pre-made question"
+                    type="button"
+                    @click="toggleSamplesMenu"
+                  >
+                    <i class="pi pi-list" />
+                  </button>
+
+                  <!-- Mic — only when STT is available -->
+                  <button
+                    v-if="sttAvailable"
+                    :class="['icon-btn', 'mic-btn', { active: isListening }]"
+                    :title="isListening ? 'Stop listening' : 'Speak your message'"
+                    :disabled="chatStore.isRunning && !isListening"
+                    type="button"
+                    @click="toggleListening"
+                  >
+                    <i :class="isListening ? 'pi pi-stop-circle' : 'pi pi-microphone'" />
+                  </button>
+
+                  <!-- Send -->
+                  <button
+                    :class="['icon-btn', 'send-btn', { running: chatStore.isRunning }]"
+                    :title="chatStore.isRunning ? 'Running…' : 'Send (Enter)'"
+                    :disabled="chatStore.isRunning || !promptInput.trim()"
+                    type="button"
+                    @click="sendMessage"
+                  >
+                    <i :class="chatStore.isRunning ? 'pi pi-spin pi-spinner' : 'pi pi-chevron-right'" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Conversation history -->
+            <div class="messages" ref="messagesEl">
+              <div
+                v-for="msg in chatStore.messages"
+                :key="msg.id"
+                :class="['message', msg.role]"
+              >
+                <MessageBubble :message="msg" />
+              </div>
+              <div v-if="chatStore.messages.length === 0" class="empty-state">
+                Send a message to start a conversation.
+              </div>
+            </div>
+
+            <!-- Live state viewer — shown only when an agent with live_state is running -->
+            <StateViewerPanel />
+
+          </div><!-- .chat-pane-content -->
+
         </div>
-      </div>
-    </div>
+      </SplitterPanel>
 
-    <!-- Conversation history -->
-    <div class="messages" ref="messagesEl">
-      <div
-        v-for="msg in chatStore.messages"
-        :key="msg.id"
-        :class="['message', msg.role]"
-      >
-        <MessageBubble :message="msg" />
-      </div>
-      <div v-if="chatStore.messages.length === 0" class="empty-state">
-        <p>Send a message to start a conversation.</p>
-      </div>
-    </div>
+      <!-- ── BOTTOM PANEL: event log ── -->
+      <SplitterPanel :size="35" :minSize="12" class="chat-pane chat-bottom-pane">
+        <EventLogPanel />
+      </SplitterPanel>
 
-    <!-- Live state viewer — shown only when an app with live_state is running -->
-    <StateViewerPanel />
+    </Splitter>
 
-    <!-- Event log panel -->
-    <EventLogPanel />
+    <!-- Sample prompts popover (teleported to body by PrimeVue) -->
+    <Popover ref="samplesPopover">
+      <ul class="samples-list">
+        <li
+          v-for="sample in samples"
+          :key="sample"
+          class="samples-list-item"
+          @click="selectSample(sample)"
+        >
+          {{ sample }}
+        </li>
+      </ul>
+    </Popover>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue'
-import { Textarea, Select } from 'primevue'
+import { Textarea, Popover, Splitter, SplitterPanel } from 'primevue'
 import MessageBubble from './MessageBubble.vue'
 import EventLogPanel from './EventLogPanel.vue'
 import StateViewerPanel from '@/components/stateviewer/StateViewerPanel.vue'
@@ -93,26 +133,26 @@ import {
   GeminiTTS,
 } from '@/services/speech'
 
-interface SampleOption { label: string; value: string }
-
 const chatStore  = useChatStore()
 const voiceStore = useVoiceStore()
 
-const promptInput   = ref('')
-const samples       = ref<string[]>([])
-const selectedSample = ref('')
-const messagesEl    = ref<HTMLElement | null>(null)
-const isListening   = ref(false)
+const promptInput    = ref('')
+const samples        = ref<string[]>([])
+const messagesEl     = ref<HTMLElement | null>(null)
+const isListening    = ref(false)
+const samplesPopover = ref()
 
 const sttAvailable = ref(isSpeechApiSupported())
 let stt: SpeechToText | null = null
 const browserTts = new TextToSpeech()
 const geminiTts  = new GeminiTTS()
 
-const sampleOptions = computed<SampleOption[]>(() => [
-  { label: '— type your own —', value: '' },
-  ...samples.value.map(s => ({ label: s, value: s })),
-])
+const hasSamples = computed(() => samples.value.length > 0)
+
+/** Number of visible action buttons — drives textarea padding-right class. */
+const inputBtnsCount = computed(() =>
+  1 + (sttAvailable.value ? 1 : 0) + (hasSamples.value ? 1 : 0)
+)
 
 onMounted(async () => {
   try { samples.value = await api.getSamples() } catch { samples.value = [] }
@@ -129,13 +169,22 @@ onUnmounted(() => {
 
 watch(() => voiceStore.sttLang, lang => stt?.setLang(lang))
 
-watch(selectedSample, val => { promptInput.value = val })
-
 watch(() => chatStore.messages.length, () => {
   nextTick(() => {
     messagesEl.value?.scrollTo({ top: messagesEl.value.scrollHeight, behavior: 'smooth' })
   })
 })
+
+// ── Sample prompts popover ──────────────────────────────────────────
+
+function toggleSamplesMenu(event: MouseEvent) {
+  samplesPopover.value?.toggle(event)
+}
+
+function selectSample(sample: string) {
+  promptInput.value = sample
+  samplesPopover.value?.hide()
+}
 
 // ── STT ────────────────────────────────────────────────────────────
 
@@ -150,13 +199,11 @@ function toggleListening() {
 
   stt.start(
     (result) => {
-      // Final transcript: put in textarea
       promptInput.value = result.transcript
       isListening.value = false
       if (voiceStore.autoSend) sendMessage()
     },
     () => {
-      // Recognition session ended (silence / timeout)
       isListening.value = false
     },
     (err) => {
@@ -164,7 +211,6 @@ function toggleListening() {
       isListening.value = false
     },
     (interim) => {
-      // Live preview: update textarea while user is speaking
       promptInput.value = interim
     },
   )
@@ -176,7 +222,6 @@ async function sendMessage() {
   const text = promptInput.value.trim()
   if (!text || chatStore.isRunning) return
   promptInput.value = ''
-  selectedSample.value = ''
   chatStore.isRunning = true
   chatStore.addUserMessage(text)
 
@@ -187,7 +232,6 @@ async function sendMessage() {
   }
 
   const msgId = chatStore.addAssistantMessage(response.run_id)
-  // Timer used to disconnect if run_stats never arrives after run_complete.
   let statsWaitTimer: ReturnType<typeof setTimeout> | null = null
   const disconnect = connectEventStream(
     response.run_id,
@@ -197,9 +241,7 @@ async function sendMessage() {
         const result = (event.result as string) ?? 'Completed.'
         chatStore.completeMessage(msgId, result)
         chatStore.isRunning = false
-        // Delay disconnect so that run_stats (emitted just after run_complete
-        // by the server) can arrive and appear in the event log. Fall back to
-        // an immediate disconnect after 2 s in case stats are never sent.
+        // Delay disconnect so run_stats (emitted just after run_complete) can arrive.
         statsWaitTimer = setTimeout(disconnect, 2000)
         if (voiceStore.ttsEnabled && result) {
           if (voiceStore.ttsBackend === 'gemini') {
@@ -211,7 +253,6 @@ async function sendMessage() {
           }
         }
       } else if (event.type === 'run_stats') {
-        // Stats received — cancel the fallback timer and close the connection.
         if (statsWaitTimer !== null) { clearTimeout(statsWaitTimer); statsWaitTimer = null }
         disconnect()
       } else if (event.type === 'run_error') {
@@ -226,26 +267,84 @@ async function sendMessage() {
 </script>
 
 <style scoped>
-.chat-view {
+.chat-view-root {
+  /* Thin wrapper so Popover teleport doesn't break layout */
+}
+
+.chat-splitter {
+  height: calc(100vh - 130px);
+  min-height: 400px;
+}
+
+/* Both panels need overflow:hidden so the inner scroll works correctly */
+.chat-pane {
+  overflow: hidden;
+}
+
+/* Inner flex layout for the top panel — no outer border, header provides visual anchor */
+.chat-pane-inner {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  height: calc(100vh - 160px);
+  height: 100%;
+  box-sizing: border-box;
+  background: transparent;
 }
-.sample-prompts {
+
+/* Panel header — consistent style with Event Log, no rounded corners (no outer frame) */
+.pane-header {
   display: flex;
-  gap: 0.75rem;
   align-items: center;
-}
-.sample-prompts .label {
-  font-size: 0.85rem;
-  color: var(--p-text-muted-color, #888);
+  padding: 0.25rem 0.6rem;
+  border-bottom: 1px solid var(--p-content-border-color, #e2e8f0);
+  background: var(--p-surface-section, #f1f5f9);
   flex-shrink: 0;
 }
-.sample-select { flex: 1; min-width: 0; }
+.pane-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--p-text-muted-color, #888);
+  cursor: default;
+}
+
+/* Scrollable content area below the header */
+.chat-pane-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 0.4rem 0.5rem;
+  gap: 0.4rem;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--p-surface-card, #fff);
+}
+
+/* ── Messages ─────────────────────────────────────────────────────── */
+
+.messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.3rem 0.4rem;
+}
+.empty-state {
+  color: var(--p-text-muted-color, #aaa);
+  font-style: italic;
+  margin: auto;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+/* ── Input area ───────────────────────────────────────────────────── */
 
 .input-area {
   display: flex;
+  flex-shrink: 0;
 }
 
 /* Wrapper gives textarea a positioning context for the overlaid buttons */
@@ -255,19 +354,22 @@ async function sendMessage() {
 }
 .prompt-textarea {
   width: 100%;
-  /* Reserve space for two icon buttons (mic + send) in bottom-right corner */
-  padding-right: 4.6rem !important;
+  /* Default: send button only; btns-N classes widen the right gutter */
+  padding-right: 2.8rem !important;
   transition: box-shadow 0.2s;
 }
+.prompt-textarea.btns-2 { padding-right: 4.6rem !important; }
+.prompt-textarea.btns-3 { padding-right: 6.8rem !important; }
 .prompt-textarea.listening {
   box-shadow: 0 0 0 2px #ef4444;
 }
 
-/* Row of action buttons — positioned in the bottom-right of the textarea */
+/* Row of action buttons — vertically centred on the right edge of the textarea */
 .input-btns {
   position: absolute;
   right: 0.4rem;
-  bottom: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   gap: 0.3rem;
   align-items: center;
@@ -291,6 +393,17 @@ async function sendMessage() {
 .icon-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+/* Samples: neutral grey */
+.samples-btn {
+  background: var(--p-surface-200, #e2e8f0);
+  color: var(--p-text-color, #334155);
+  opacity: 0.7;
+}
+.samples-btn:hover:not(:disabled) {
+  opacity: 1;
+  background: var(--p-surface-300, #cbd5e1);
 }
 
 /* Mic: neutral grey, red when active */
@@ -326,28 +439,25 @@ async function sendMessage() {
   opacity: 1;
 }
 
-.messages {
-  flex: 1;
-  min-height: 0;
+/* Sample prompts popover list */
+.samples-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+  max-width: min(28rem, 80vw);
+  max-height: 20rem;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 0.5rem;
-  border: 1px solid var(--p-content-border-color, #e2e8f0);
-  border-radius: 8px;
 }
-.message.user {
-  margin-right: 1.5rem;
-  margin-left: 0;
+.samples-list-item {
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--p-text-color, #334155);
 }
-.message.assistant {
-  margin-left: 1.5rem;
-  margin-right: 0;
-}
-.empty-state {
-  text-align: center;
-  color: var(--p-text-muted-color, #aaa);
-  margin: auto;
+.samples-list-item:hover {
+  background: var(--p-primary-50, #eef2ff);
+  color: var(--p-primary-color, #6366f1);
 }
 </style>

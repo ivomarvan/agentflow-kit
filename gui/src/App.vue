@@ -1,17 +1,38 @@
 <template>
   <div class="app-container">
-    <div class="app-header">
-      <StickyMarkdownTooltipTitle
-        :title="appInfo?.name ?? 'agentflow GUI'"
-        :doc="appInfo?.doc ?? ''"
-      />
-    </div>
     <Tabs v-model:value="activeTab">
-      <TabList>
-        <Tab value="chat">💬 Chat</Tab>
-        <Tab value="inspector">🔍 Inspector</Tab>
-        <Tab value="settings">⚙️ Settings</Tab>
-      </TabList>
+      <!-- Title and tab selector share one responsive row -->
+      <div class="app-top-row">
+        <StickyMarkdownTooltipTitle
+          :title="appInfo?.name ?? 'agentflow GUI'"
+          :doc="appInfo?.doc ?? ''"
+        />
+        <div class="tab-list-wrapper">
+          <TabList>
+            <Tab
+              value="chat"
+              v-tooltip.bottom="{
+                value: 'Conversation with the agent — type questions, receive answers, view run events',
+                showDelay: 500
+              }"
+            >💬 Chat</Tab>
+            <Tab
+              value="inspector"
+              v-tooltip.bottom="{
+                value: 'Agent graph and parameters — visualize the graph, inspect and edit vertex configuration',
+                showDelay: 500
+              }"
+            >🔍 Inspector</Tab>
+            <Tab
+              value="settings"
+              v-tooltip.bottom="{
+                value: 'Application preferences — voice input/output, STT/TTS language and other settings',
+                showDelay: 500
+              }"
+            >⚙️ Settings</Tab>
+          </TabList>
+        </div>
+      </div>
       <TabPanels>
         <TabPanel value="chat">
           <ChatView />
@@ -55,7 +76,18 @@ onMounted(async () => {
   padding: 0.4rem 1rem 0.5rem;
   font-family: system-ui, sans-serif;
 }
-.app-header {
-  margin-bottom: 0.3rem;
+
+/* Title + tabs on one line; wraps to two lines on narrow screens */
+.app-top-row {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+/* Tab list fills remaining space next to the title */
+.tab-list-wrapper {
+  flex: 1;
+  min-width: 0;
 }
 </style>

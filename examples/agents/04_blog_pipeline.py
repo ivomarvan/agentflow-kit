@@ -81,6 +81,11 @@ class BlogPatch:
 class ResearcherVertex(LlmStateVertex):
     """Collects 3 concise bullet points about the topic via LLM."""
 
+    model: Annotated[str, Field(
+        description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "deepseek-v4-flash"
+
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for the researcher role when gathering topic facts.",
@@ -112,6 +117,11 @@ class ResearcherVertex(LlmStateVertex):
 class WriterVertex(LlmStateVertex):
     """Turns research bullet points into a 150-word blog post via LLM."""
 
+    model: Annotated[str, Field(
+        description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "deepseek-v4-flash"
+
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for the writer role when drafting the blog post.",
@@ -142,6 +152,11 @@ class WriterVertex(LlmStateVertex):
 
 class EditorVertex(LlmStateVertex):
     """Polishes the draft for clarity, grammar, and brevity via LLM."""
+
+    model: Annotated[str, Field(
+        description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "deepseek-v4-flash"
 
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(

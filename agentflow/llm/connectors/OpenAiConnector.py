@@ -11,6 +11,7 @@ of the application never depends on the openai SDK types directly.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from openai import AsyncOpenAI, OpenAI
@@ -104,15 +105,7 @@ class OpenAiConnector(LlmConnectorBase):
             self._config.backend, model, len(messages), len(tools) if tools else 0,
         )
 
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-        }
-        if tools:
-            kwargs["tools"] = tools
-            kwargs["tool_choice"] = "auto"
-
+        kwargs = self._build_chat_kwargs(model, messages, tools, temperature)
         resp = self._client.chat.completions.create(**kwargs)
         response = self._parse_response(resp.choices[0].message, resp.usage)
 
@@ -153,15 +146,7 @@ class OpenAiConnector(LlmConnectorBase):
             self._config.backend, model, len(messages), len(tools) if tools else 0,
         )
 
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-        }
-        if tools:
-            kwargs["tools"] = tools
-            kwargs["tool_choice"] = "auto"
-
+        kwargs = self._build_chat_kwargs(model, messages, tools, temperature)
         resp = await self._async_client.chat.completions.create(**kwargs)
         response = self._parse_response(resp.choices[0].message, resp.usage)
 
@@ -174,6 +159,54 @@ class OpenAiConnector(LlmConnectorBase):
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_reasoning_model(model: str) -> bool:
+        """Return True for OpenAI reasoning models that do not accept ``temperature``.
+
+        The ``o1``, ``o3``, ``o4`` (and future ``oN``) series use a different
+        inference mechanism and reject the ``temperature`` parameter with a
+        400 BadRequestError.  The pattern matches any model whose name starts
+        with ``o`` followed by a digit (e.g. ``o1``, ``o1-mini``, ``o3-mini``).
+
+        Args:
+            model: Model name string.
+
+        Returns:
+            ``True`` when the model does not support ``temperature``.
+        """
+        return bool(re.match(r"^o\d", model))
+
+    def _build_chat_kwargs(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        temperature: float,
+    ) -> dict[str, Any]:
+        """Assemble the kwargs dict for a ``chat.completions.create`` call.
+
+        Omits ``temperature`` for reasoning models that reject the parameter.
+
+        Args:
+            model: Resolved model name (after override).
+            messages: OpenAI-format message list.
+            tools: Optional tool definitions; adds ``tool_choice`` when present.
+            temperature: Sampling temperature (ignored for reasoning models).
+
+        Returns:
+            Keyword argument dict ready to unpack into ``create(**kwargs)``.
+        """
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+        }
+        if not self._is_reasoning_model(model):
+            kwargs["temperature"] = temperature
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = "auto"
+        return kwargs
 
     @staticmethod
     def _build_client(config: LlmConfig) -> OpenAI:

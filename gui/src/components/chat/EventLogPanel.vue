@@ -1,7 +1,13 @@
 <template>
   <div class="event-log">
     <div class="log-header">
-      <span class="log-title">Event log</span>
+      <span
+        class="log-title"
+        v-tooltip.right="{
+          value: 'Detailed run trace — tool calls, LLM steps, timing, and errors for each agent run',
+          showDelay: 400
+        }"
+      >Event log</span>
       <button class="log-clear" @click="chatStore.clearLog()" title="Clear log">✕</button>
     </div>
     <div class="log-body" ref="logBodyEl">
@@ -65,13 +71,11 @@ function tagClass(tag: string): string {
 .event-log {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--p-content-border-color, #e2e8f0);
-  border-radius: 8px;
   background: var(--p-surface-ground, #f8fafc);
   font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
   font-size: 0.78rem;
-  height: 180px;
-  flex-shrink: 0;
+  height: 100%;
+  box-sizing: border-box;
 }
 .log-header {
   display: flex;
@@ -80,7 +84,6 @@ function tagClass(tag: string): string {
   padding: 0.25rem 0.6rem;
   border-bottom: 1px solid var(--p-content-border-color, #e2e8f0);
   background: var(--p-surface-section, #f1f5f9);
-  border-radius: 8px 8px 0 0;
 }
 .log-title {
   font-size: 0.72rem;
@@ -89,6 +92,7 @@ function tagClass(tag: string): string {
   letter-spacing: 0.05em;
   color: var(--p-text-muted-color, #888);
   font-family: inherit;
+  cursor: default;
 }
 .log-clear {
   background: none;

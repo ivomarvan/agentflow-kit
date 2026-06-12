@@ -396,14 +396,20 @@ class AgentApp(Describable):
 
         props: dict[str, Any] = {}
 
-        # Collect all available models from env config for the model enum
+        # Collect all available models via dynamic API discovery (token-free GET /v1/models).
+        # Falls back to env-var lists and _DEFAULT_MODELS when APIs are unreachable.
+        env_config = None
         try:
             env_config = LlmConfig.from_env()
+            discovered = LlmConfig.discover_available_models()
             all_models: list[str] = sorted({
                 m
-                for models_list in env_config.available_models.values()
+                for models_list in discovered.values()
                 for m in models_list
             })
+            # Always include the active env default so it appears in the dropdown
+            if env_config.model and env_config.model not in all_models:
+                all_models = sorted(all_models + [env_config.model])
         except Exception:
             all_models = []
 
@@ -642,8 +648,16 @@ class AgentApp(Describable):
         Returns:
             Nested dict: ``{component_name: {field_name: value, ...}, ...}``.
         """
+        from agentflow.llm.LlmConfig import LlmConfig
         from agentflow.llm.LlmConnectorBase import LlmConnectorBase as LlmConnector
         from agentflow.llm.LlmPool import LlmPool
+
+        # Resolve the active env default model so that vertices with model=""
+        # display a meaningful name in the GUI instead of a blank dropdown.
+        try:
+            env_default_model = LlmConfig.from_env().model
+        except Exception:
+            env_default_model = ""
 
         result: dict[str, Any] = {}
 
@@ -652,6 +666,8 @@ class AgentApp(Describable):
             for vertex in self._state_graph.vertices:
                 values = vertex.get_param_values()
                 if values:
+                    if env_default_model and values.get("model") == "":
+                        values = {**values, "model": env_default_model}
                     result[type(vertex).__name__] = values
 
         # Direct LlmConnector attrs on self (backward compat)

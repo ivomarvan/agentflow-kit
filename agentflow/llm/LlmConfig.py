@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,13 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Module-level cache for discover_available_models()
+# ---------------------------------------------------------------------------
+_discover_cache: dict[str, list[str]] = {}
+_discover_cache_time: float = 0.0
+_DISCOVER_CACHE_TTL: float = 300.0  # 5 minutes — avoids hammering remote APIs
 
 # ---------------------------------------------------------------------------
 # Backend registry
@@ -50,7 +58,7 @@ _DEFAULT_MODELS: dict[str, str] = {
     "openai": "gpt-4o-mini",
     "gemini": "gemini-3.5-flash",
     "ollama": "qwen2.5:1.5b",  # lightweight default — works on modest hardware
-    "deepseek": "deepseek-chat",
+    "deepseek": "deepseek-v4-flash",
     "anthropic": "claude-haiku-4-5",
 }
 
@@ -361,6 +369,111 @@ class LlmConfig(BaseModel):
             "base_url": new_base_url,
             "api_key": new_api_key,
         })
+
+    # ------------------------------------------------------------------
+    # Dynamic model discovery
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _discover_openai_compatible_models(
+        backend: str, api_key: str | None, base_url: str | None
+    ) -> list[str]:
+        """Fetch model list from an OpenAI-compatible ``GET /v1/models`` endpoint.
+
+        This is a pure metadata call — it does **not** consume any tokens.
+
+        Args:
+            backend: Backend name (used only for log messages).
+            api_key: API key; pass ``None`` for keyless backends (ollama).
+            base_url: Base URL override.  Uses the SDK default when ``None``.
+
+        Returns:
+            Sorted list of model ID strings, or empty list on any failure.
+        """
+        try:
+            from openai import OpenAI  # lazy import — keep module startup fast
+
+            client = OpenAI(
+                api_key=api_key or "dummy",  # SDK rejects empty string
+                base_url=base_url,
+                timeout=8,
+                max_retries=0,
+            )
+            models = client.models.list()
+            result = sorted(m.id for m in models.data)
+            logger.debug("Model discovery: backend=%s found=%d", backend, len(result))
+            return result
+        except Exception as exc:
+            logger.debug("Model discovery failed: backend=%s error=%s", backend, exc)
+            return []
+
+    @classmethod
+    def discover_available_models(cls) -> dict[str, list[str]]:
+        """Return available models for every backend by querying their APIs.
+
+        Makes a token-free ``GET /v1/models`` call to each OpenAI-compatible
+        backend that has an API key configured.  Results are cached for
+        ``_DISCOVER_CACHE_TTL`` seconds so repeated GUI refreshes do not
+        hammer remote endpoints.
+
+        The live API response is the **authoritative** source — env-var model
+        lists (``BACKEND_MODELS``) are intentionally not merged so that only
+        models the backend actually supports are shown.
+
+        Fallback chain per backend:
+          1. Live API discovery result (primary source).
+          2. ``_DEFAULT_MODELS`` constant — only when the API is unreachable,
+             so the dropdown is never empty.
+
+        Returns:
+            Dict ``{backend: [model_name, ...]}`` for every backend that has
+            a reachable API or a configured default model.
+        """
+        global _discover_cache, _discover_cache_time  # noqa: PLW0603
+
+        if _discover_cache and (time.monotonic() - _discover_cache_time) < _DISCOVER_CACHE_TTL:
+            logger.debug("discover_available_models: returning cached result")
+            return _discover_cache
+
+        # Ensure .env is loaded before reading API keys
+        env_file = cls._find_env_file(Path(__file__).parent)
+        if env_file and env_file.is_file():
+            load_dotenv(env_file, override=False)
+
+        result: dict[str, list[str]] = {}
+
+        for backend in sorted(OPENAI_COMPATIBLE_BACKENDS):
+            api_key = cls._resolve_api_key(backend)
+            base_url = os.getenv("LLM_BASE_URL") or _DEFAULT_BASE_URLS.get(backend)
+
+            if backend in _API_KEY_ENV_VARS and not api_key:
+                # No key — cannot query live API; fall back to default model only
+                discovered: list[str] = []
+            else:
+                discovered = cls._discover_openai_compatible_models(backend, api_key, base_url)
+
+            if discovered:
+                # Live API is the authoritative source — do not mix in env-var lists
+                result[backend] = discovered
+            else:
+                # API unreachable — fall back to the known default so the dropdown
+                # is never empty and the user can still run a request
+                default = _DEFAULT_MODELS.get(backend)
+                if default:
+                    result[backend] = [default]
+
+        # Anthropic has no public models endpoint — use known default only
+        anthro_default = _DEFAULT_MODELS.get("anthropic")
+        if anthro_default:
+            result["anthropic"] = [anthro_default]
+
+        _discover_cache = result
+        _discover_cache_time = time.monotonic()
+        logger.info(
+            "discover_available_models: %s",
+            {b: len(m) for b, m in result.items()},
+        )
+        return result
 
     # ------------------------------------------------------------------
     # Convenience

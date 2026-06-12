@@ -1,7 +1,13 @@
 <template>
   <div v-if="svStore.hasData" class="state-viewer">
     <div class="sv-header">
-      <span class="sv-title">Live State</span>
+      <span
+        class="sv-title"
+        v-tooltip.right="{
+          value: 'Real-time agent state — fields highlighted in amber changed in the last update',
+          showDelay: 400
+        }"
+      >Live State</span>
     </div>
     <div
       class="sv-grid"
@@ -217,6 +223,7 @@ function isChanged(fieldName: string, subName: string): boolean {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--p-text-muted-color, #888);
+  cursor: default;
 }
 .sv-grid {
   display: grid;

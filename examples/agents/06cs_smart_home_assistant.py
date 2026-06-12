@@ -205,6 +205,11 @@ class ToggleDevice(ToolBase):
 class IntentParserVertex(LlmStateVertex):
     """Rozpozná kategorii uživatelského požadavku před předáním DeviceWorkeru."""
 
+    model: Annotated[str, Field(
+        description="Název LLM modelu (např. 'gpt-4o-mini'). Prázdný = pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "gpt-4o-mini"
+
     system_prompt: Annotated[str, Field(
         description="Instrukce pro klasifikaci záměru uživatele.",
         json_schema_extra={"x-textarea": True},
@@ -236,6 +241,11 @@ class DeviceWorkerVertex(LlmStateVertex):
     Při opakování po zamítnutí se rejection_reason přidá do systémového promptu,
     aby LLM mohl plán opravit.
     """
+
+    model: Annotated[str, Field(
+        description="Název LLM modelu (např. 'gpt-4o-mini'). Prázdný = pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "gpt-4o-mini"
 
     tools:      Annotated[str, Field(description="Klíč registru nástrojů z Contextu.")] = "default"
     max_rounds: Annotated[int, Field(ge=1, le=10, description="Max kol volání nástrojů.")] = 4
@@ -276,6 +286,11 @@ class SafetyJudgeVertex(LlmStateVertex):
 
     Po dosažení max_revisions vynucuje schválení, aby se předešlo nekonečné smyčce.
     """
+
+    model: Annotated[str, Field(
+        description="Název LLM modelu (např. 'gpt-4o-mini'). Prázdný = pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "gemini-3.5-flash"
 
     max_revisions: Annotated[int, Field(ge=1, le=3,
                        description="Max smyček Worker→Judge před vynuceným schválením.")] = 2
@@ -323,6 +338,11 @@ Odpovídej česky.
 
 class VoiceFormatterVertex(LlmStateVertex):
     """Převede schválený plán na krátkou, přirozenou odpověď připravenou pro TTS."""
+
+    model: Annotated[str, Field(
+        description="Název LLM modelu (např. 'gpt-4o-mini'). Prázdný = pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "gpt-4o-mini"
 
     system_prompt: Annotated[str, Field(
         description="Instrukce pro formátování plánu jako hlasové odpovědi.",
@@ -378,10 +398,10 @@ if __name__ == "__main__":
         state_graph=StateGraph(
             start=IntentParserVertex,
             initialized_vertexes=[
-                SafetyJudgeVertex(model="gemini-3.5-flash", max_revisions=2),
-                DeviceWorkerVertex(model="gpt-4o-mini", max_rounds=4),
-                IntentParserVertex(model="gpt-4o-mini"),
-                VoiceFormatterVertex(model="gpt-4o-mini"),
+                SafetyJudgeVertex(max_revisions=2),
+                DeviceWorkerVertex(max_rounds=4),
+                IntentParserVertex(),
+                VoiceFormatterVertex(),
             ],
             transitions=[
                 Transition(IntentParserVertex,  SmartHomeSignal.parsed,   DeviceWorkerVertex),

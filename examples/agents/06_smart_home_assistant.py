@@ -213,6 +213,11 @@ class ToggleDevice(ToolBase):
 class IntentParserVertex(LlmStateVertex):
     """Parse and classify the user's voice command before passing it to the Worker."""
 
+    model: Annotated[str, Field(
+        description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "gpt-4o-mini"
+
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
         description="Instruction for classifying user intent into a category.",
@@ -248,6 +253,11 @@ class IntentParserVertex(LlmStateVertex):
 
 class DeviceWorkerVertex(LlmStateVertex):
     """Propose device actions using a cheap LLM with tools (tool loop hidden in connector)."""
+
+    model: Annotated[str, Field(
+        description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "gpt-4o-mini"
 
     tools:      Annotated[str, Field(description="Tool registry key from Context.")] = "default"
     max_rounds: Annotated[int, Field(ge=1, le=10, description="Max tool-calling rounds.")] = 4
@@ -294,6 +304,11 @@ class DeviceWorkerVertex(LlmStateVertex):
 
 class SafetyJudgeVertex(LlmStateVertex):
     """Validate the action plan against safety rules; approve or reject with reason."""
+
+    model: Annotated[str, Field(
+        description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "gemini-3.5-flash"
 
     max_revisions: Annotated[int, Field(ge=1, le=3,
                        description="Max Worker→Judge retry loops before forcing approval.")] = 2
@@ -351,6 +366,11 @@ If UNSAFE: respond exactly with "REJECTED: <specific rule violated and how to fi
 
 class VoiceFormatterVertex(LlmStateVertex):
     """Convert the approved action plan into a natural, TTS-optimised voice response."""
+
+    model: Annotated[str, Field(
+        description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "gpt-4o-mini"
 
     # x-textarea: multi-line Inspector editor; value remains one str (see block above).
     system_prompt: Annotated[str, Field(
@@ -414,12 +434,10 @@ if __name__ == "__main__":
         state_graph=StateGraph(
             start=IntentParserVertex,
             initialized_vertexes=[
-                SafetyJudgeVertex(model="gemini-3.5-flash", max_revisions=2),
-                DeviceWorkerVertex(model="gpt-4o-mini", max_rounds=4),
-                IntentParserVertex(model="gpt-4o-mini"),
-                VoiceFormatterVertex(model="gpt-4o-mini"),
-                # DeviceWorkerVertex and SafetyJudge explicitly override defaults;
-                # remaining vertices default to model="" → Context default connector
+                SafetyJudgeVertex(max_revisions=2),
+                DeviceWorkerVertex(max_rounds=4),
+                IntentParserVertex(),
+                VoiceFormatterVertex(),
             ],
             transitions=[
                 Transition(IntentParserVertex,  SmartHomeSignal.parsed,   DeviceWorkerVertex),

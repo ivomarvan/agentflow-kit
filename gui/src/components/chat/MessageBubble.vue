@@ -1,19 +1,17 @@
 <template>
   <div :class="['bubble', message.role]">
-    <!-- User bubble -->
-    <template v-if="message.role === 'user'">
-      <div class="bubble-content user-content">{{ message.content }}</div>
-    </template>
-
-    <!-- Assistant bubble -->
-    <template v-else>
-      <div class="bubble-content assistant-content">
+    <span :class="['bubble-tag', message.role === 'user' ? 'tag-user' : 'tag-asst']">
+      {{ message.role === 'user' ? 'USER' : 'ASST' }}
+    </span>
+    <span class="bubble-text">
+      <template v-if="message.role === 'user'">{{ message.content }}</template>
+      <template v-else>
         <span v-if="message.isRunning" class="running-indicator">
           <i class="pi pi-spin pi-spinner" /> Running…
         </span>
-        <span v-else class="result-text">{{ message.result ?? 'Completed.' }}</span>
-      </div>
-    </template>
+        <template v-else>{{ message.result ?? 'Completed.' }}</template>
+      </template>
+    </span>
   </div>
 </template>
 
@@ -25,26 +23,40 @@ defineProps<{ message: ChatMessage }>()
 
 <style scoped>
 .bubble {
-  width: 100%;
-  box-sizing: border-box;
+  display: flex;
+  gap: 0.45rem;
+  align-items: baseline;
+  padding: 0.1rem 0.15rem;
+  border-radius: 3px;
+  font-size: 0.86rem;
+  line-height: 1.5;
 }
-.bubble-content {
-  padding: 0.45rem 0.9rem;
-  border-radius: 8px;
-  line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.bubble:hover {
+  background: var(--p-surface-hover, rgba(0, 0, 0, 0.04));
 }
-.user-content {
-  background: var(--p-primary-500, #6366f1);
-  color: white;
-  border-bottom-left-radius: 4px;
+
+.bubble-tag {
+  flex-shrink: 0;
+  align-self: flex-start;
+  font-weight: 700;
+  font-size: 0.68rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  margin-top: 0.15rem;
 }
-.assistant-content {
-  background: var(--p-surface-100, #f1f5f9);
-  border-bottom-right-radius: 4px;
+.tag-user { background: #dbeafe; color: #1e40af; }
+.tag-asst { background: #e0e7ff; color: #3730a3; }
+
+.bubble-text {
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--p-text-color, #334155);
 }
+
 .running-indicator {
   color: var(--p-text-muted-color, #888);
   font-style: italic;

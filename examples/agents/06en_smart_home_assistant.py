@@ -204,6 +204,11 @@ class ToggleDevice(ToolBase):
 class IntentParserVertex(LlmStateVertex):
     """Classify the user request into a category before passing it to DeviceWorker."""
 
+    model: Annotated[str, Field(
+        description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "gpt-4o-mini"
+
     system_prompt: Annotated[str, Field(
         description="Instruction for classifying user intent.",
         json_schema_extra={"x-textarea": True},
@@ -234,6 +239,11 @@ class DeviceWorkerVertex(LlmStateVertex):
     On retry the prior rejection_reason is appended to the system prompt so the
     LLM can correct its plan.
     """
+
+    model: Annotated[str, Field(
+        description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "gpt-4o-mini"
 
     tools:      Annotated[str, Field(description="Tool registry key from Context.")] = "default"
     max_rounds: Annotated[int, Field(ge=1, le=10, description="Max tool-calling rounds.")] = 4
@@ -273,6 +283,11 @@ class SafetyJudgeVertex(LlmStateVertex):
 
     Forces approval after max_revisions to prevent an infinite loop.
     """
+
+    model: Annotated[str, Field(
+        description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "gemini-3.5-flash"
 
     max_revisions: Annotated[int, Field(ge=1, le=3,
                        description="Max Worker→Judge loops before forcing approval.")] = 2
@@ -317,6 +332,11 @@ If UNSAFE: respond exactly with "REJECTED: <specific rule violated and how to fi
 
 class VoiceFormatterVertex(LlmStateVertex):
     """Convert the approved action plan into a short, natural TTS-ready reply."""
+
+    model: Annotated[str, Field(
+        description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "gpt-4o-mini"
 
     system_prompt: Annotated[str, Field(
         description="Instruction for formatting the plan as a voice reply.",
@@ -371,10 +391,10 @@ if __name__ == "__main__":
         state_graph=StateGraph(
             start=IntentParserVertex,
             initialized_vertexes=[
-                SafetyJudgeVertex(model="gemini-3.5-flash", max_revisions=2),
-                DeviceWorkerVertex(model="gpt-4o-mini", max_rounds=4),
-                IntentParserVertex(model="gpt-4o-mini"),
-                VoiceFormatterVertex(model="gpt-4o-mini"),
+                SafetyJudgeVertex(max_revisions=2),
+                DeviceWorkerVertex(max_rounds=4),
+                IntentParserVertex(),
+                VoiceFormatterVertex(),
             ],
             transitions=[
                 Transition(IntentParserVertex,  SmartHomeSignal.parsed,   DeviceWorkerVertex),

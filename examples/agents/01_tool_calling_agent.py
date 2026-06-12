@@ -143,6 +143,11 @@ _MAX_STEPS = 7
 class LlmCallVertex(LlmStateVertex):
     """Calls the LLM and decides whether to invoke a tool or emit a final answer."""
 
+    model: Annotated[str, Field(
+        description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
+        json_schema_extra={"x-model-select": True},
+    )] = "gpt-4.1-mini"
+
     tools: Annotated[str, Field(description="Tool registry key from Context.")] = "default"
 
     async def run(self, state: ReactState, ctx: Context) -> tuple[ReactSignal, ReactPatch]:

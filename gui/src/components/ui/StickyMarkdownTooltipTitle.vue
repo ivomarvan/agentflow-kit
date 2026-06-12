@@ -75,6 +75,12 @@ function onTitleMove(e: MouseEvent) {
   font-size: 1rem;
   font-weight: 600;
   line-height: 1.2;
+  /* Thin bubble/badge border to visually separate title from tab bar */
+  border: 1.5px solid var(--p-content-border-color, #dde1e8);
+  border-radius: 6px;
+  padding: 0.18rem 0.65rem;
+  background: var(--p-surface-card, #fff);
+  white-space: nowrap;
 }
 .app-title.has-doc {
   cursor: help;
@@ -92,7 +98,7 @@ function onTitleMove(e: MouseEvent) {
   box-shadow: 0 6px 28px rgba(0, 0, 0, 0.22);
   border-left: 4px solid #1976d2;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
   pointer-events: auto;
 }
