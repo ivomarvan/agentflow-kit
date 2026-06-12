@@ -79,6 +79,7 @@ class _TrackedConnector:
         ctx: Context = object.__getattribute__(self, "_ctx")
         connector = object.__getattribute__(self, "_connector")
         model: str = object.__getattribute__(self, "_model")
+        effective_model = model_override or model
 
         # Check cache before calling to distinguish hit vs. miss.
         cache = getattr(connector, "_cache", None)
@@ -89,6 +90,14 @@ class _TrackedConnector:
             key = _make_cache_key(messages, tools, model=effective_model, temperature=temperature)
             cache_hit = cache.get(key) is not None
 
+        from agentflow.events import LlmCallEvent, LlmResponseEvent
+        await ctx.event_bus.emit(LlmCallEvent(
+            model=effective_model,
+            messages=list(messages),
+            tools=list(tools) if tools else None,
+            temperature=temperature,
+        ))
+
         response = await connector.achat(messages, tools, temperature, model_override)
         ctx.stats.record(model, response.usage, cache_hit=cache_hit)
         # Update per-step counters used by runner to set StepEndEvent.from_cache.
@@ -96,6 +105,28 @@ class _TrackedConnector:
             ctx._step_cache_hits += 1
         else:
             ctx._step_llm_calls += 1
+
+        tool_calls_data = None
+        if response.tool_calls:
+            tool_calls_data = [
+                {"id": tc.id, "name": tc.function.name, "arguments": tc.function.arguments}
+                for tc in response.tool_calls
+            ]
+        usage_data = None
+        if response.usage:
+            usage_data = {
+                "prompt": response.usage.prompt_tokens,
+                "completion": response.usage.completion_tokens,
+                "total": response.usage.total_tokens,
+            }
+        await ctx.event_bus.emit(LlmResponseEvent(
+            model=effective_model,
+            content=response.content,
+            tool_calls=tool_calls_data,
+            usage=usage_data,
+            from_cache=cache_hit,
+        ))
+
         return response
 
     async def achat_with_tools(
@@ -145,8 +176,8 @@ class _TrackedConnector:
                 await ctx.event_bus.emit(ToolCallEvent(
                     tool_name=tc.name,
                     step=ctx.step,
-                    inputs={str(k): str(v) for k, v in args.items()},
-                    output=str(result)[:500],
+                    inputs=args,
+                    output=str(result),
                 ))
 
                 # Emit updated live state after each tool modifies the world

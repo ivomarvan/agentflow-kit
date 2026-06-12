@@ -51,13 +51,13 @@ class StepStartEvent(AgentEvent):
     Attributes:
         vertex: Name of the active vertex.
         step: Super-step index (0-based).
-        detail: Serialized input state fields for GUI tooltip (field -> truncated value).
+        detail: Serialized input state fields for the GUI details panel (field -> full value).
     """
 
     event_type: str = "agentflow.step_start"
     vertex: str
     step: int
-    detail: dict[str, str] = Field(default_factory=dict)
+    detail: dict[str, Any] = Field(default_factory=dict)
 
 
 class StepEndEvent(AgentEvent):
@@ -67,7 +67,7 @@ class StepEndEvent(AgentEvent):
         vertex: Name of the vertex that just ran.
         step: Super-step index (0-based).
         signal: String representation of the routing signal returned.
-        detail: Serialized patch fields for GUI tooltip (field -> truncated value).
+        detail: Serialized patch fields for the GUI details panel (field -> full value).
         from_cache: True when all LLM calls in this step were served from cache.
     """
 
@@ -75,25 +75,67 @@ class StepEndEvent(AgentEvent):
     vertex: str
     step: int
     signal: str
-    detail: dict[str, str] = Field(default_factory=dict)
+    detail: dict[str, Any] = Field(default_factory=dict)
     from_cache: bool = False
 
 
 class ToolCallEvent(AgentEvent):
-    """Emitted by the tracking connector for each tool invocation inside achat_with_tools.
+    """Emitted by the tracking connector for each tool invocation.
 
     Attributes:
         tool_name: Name of the tool that was called.
         step: Current BSP super-step index when the call was made.
-        inputs: Parsed argument dict passed to the tool.
-        output: String result returned by the tool (truncated to 500 chars).
+        inputs: Full argument dict passed to the tool (structured, not truncated).
+        output: Full string result returned by the tool (not truncated).
     """
 
     event_type: str = "agentflow.tool_call"
     tool_name: str
     step: int = 0
-    inputs: dict[str, str] = Field(default_factory=dict)
+    inputs: dict[str, Any] = Field(default_factory=dict)
     output: str = ""
+
+
+class LlmCallEvent(AgentEvent):
+    """Emitted by the tracking connector just before each achat() call.
+
+    Provides full visibility into what is sent to the LLM: the complete
+    message history, the list of tools offered, and the temperature used.
+
+    Attributes:
+        model: Resolved model identifier used for this call.
+        messages: Full OpenAI-format message list sent to the LLM.
+        tools: List of tool schemas offered, or None if no tools.
+        temperature: Sampling temperature forwarded to the backend.
+    """
+
+    event_type: str = "agentflow.llm_call"
+    model: str
+    messages: list[dict[str, Any]] = Field(default_factory=list)
+    tools: list[dict[str, Any]] | None = None
+    temperature: float = 0.2
+
+
+class LlmResponseEvent(AgentEvent):
+    """Emitted by the tracking connector after each achat() call completes.
+
+    Provides full visibility into what the LLM returned: the text content,
+    any tool calls requested, token usage, and whether the result came from cache.
+
+    Attributes:
+        model: Resolved model identifier that produced this response.
+        content: Text content of the response (None when only tool_calls).
+        tool_calls: List of serialised tool call dicts, or None.
+        usage: Token usage breakdown {prompt, completion, total}, or None.
+        from_cache: True when the response was served from the LLM cache.
+    """
+
+    event_type: str = "agentflow.llm_response"
+    model: str
+    content: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+    usage: dict[str, int] | None = None
+    from_cache: bool = False
 
 
 class RunStatsEvent(AgentEvent):

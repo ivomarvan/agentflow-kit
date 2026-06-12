@@ -14,30 +14,15 @@ export interface ChatMessage {
   run_id: string
 }
 
-/** A single line in the event log panel, shown below the chat. */
+/** A single line in the event log panel. */
 export interface LogLine {
-  time: string     // HH:MM:SS
-  tag: string      // uppercase label shown in the coloured badge
-  text: string     // human-readable message
-  level?: string   // 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' (for log events)
-  detail?: string  // tooltip content (newline-separated key: value pairs)
-  seq: number      // sequential number within current run (resets on new question)
-  isStats?: boolean  // true for the RunStats summary block
-}
-
-/** Format detail dict into a readable tooltip string. */
-function formatDetail(detail: Record<string, string> | undefined): string | undefined {
-  if (!detail || Object.keys(detail).length === 0) return undefined
-  return Object.entries(detail)
-    .map(([k, v]) => `${k}: ${v}`)
-    .join('\n')
-}
-
-/** Format per-model token stats into a readable multiline string. */
-function formatByModel(byModel: Record<string, Record<string, number>>): string {
-  return Object.entries(byModel)
-    .map(([model, m]) => `  ${model}: prompt=${m.prompt?.toLocaleString() ?? 0}  completion=${m.completion?.toLocaleString() ?? 0}  (${m.calls ?? 0} calls)`)
-    .join('\n')
+  time: string      // HH:MM:SS
+  tag: string       // uppercase label shown in the coloured badge
+  text: string      // human-readable one-liner
+  level?: string    // 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' (for log events)
+  detail?: unknown  // structured data shown in the details panel (no truncation)
+  seq: number       // sequential number within current run (resets on new question)
+  isStats?: boolean // true for the RunStats summary block
 }
 
 /** Format a WsMessage into a human-readable LogLine, or null to suppress it. */
@@ -47,41 +32,71 @@ function toLogLine(event: WsMessage, seq: number): LogLine | null {
 
   switch (type) {
     case 'question_sent':
-      return { time, tag: 'USER', text: `Question: ${event.question as string}`, seq }
+      return {
+        time, tag: 'USER',
+        text: `Question: ${event.question as string}`,
+        detail: { event_type: 'question_sent', question: event.question },
+        seq,
+      }
 
-    case 'step_start': {
-      const detail = formatDetail(event.detail as Record<string, string> | undefined)
+    case 'step_start':
       return {
         time, tag: 'STEP',
         text: `→ ${event.vertex as string} (step ${event.step as number})`,
-        detail,
+        detail: { event_type: 'step_start', vertex: event.vertex, step: event.step, input_state: event.detail },
         seq,
       }
-    }
 
     case 'step_end': {
-      const detail = formatDetail(event.detail as Record<string, string> | undefined)
       const fromCache = event.from_cache as boolean | undefined
       const cacheFlag = fromCache ? ' ⚡cache' : ''
       return {
         time, tag: 'STEP',
         text: `✓ ${event.vertex as string}${cacheFlag} → ${event.signal as string}`,
-        detail,
+        detail: { event_type: 'step_end', vertex: event.vertex, step: event.step, signal: event.signal, from_cache: fromCache, output_patch: event.detail },
         seq,
       }
     }
 
     case 'tool_call': {
-      const inputs = event.inputs as Record<string, string> | undefined
+      const inputs = event.inputs as Record<string, unknown> | undefined
       const output = event.output as string ?? ''
-      const detail = [
-        inputs && Object.keys(inputs).length ? 'inputs:\n' + Object.entries(inputs).map(([k, v]) => `  ${k}: ${v}`).join('\n') : null,
-        output ? `output:\n  ${output}` : null,
-      ].filter(Boolean).join('\n')
       return {
         time, tag: 'TOOL',
         text: `⚙ ${event.tool_name as string}(${Object.keys(inputs ?? {}).join(', ')})`,
-        detail: detail || undefined,
+        detail: { event_type: 'tool_call', tool_name: event.tool_name, step: event.step, inputs: inputs ?? {}, output },
+        seq,
+      }
+    }
+
+    case 'llm_call': {
+      const model = event.model as string
+      const messages = event.messages as Array<Record<string, unknown>>
+      const tools = event.tools as Array<unknown> | null | undefined
+      const temperature = (event.temperature as number) ?? 0.2
+      return {
+        time, tag: 'LLM',
+        text: `⬆ ${model} (${messages.length} msgs${tools?.length ? `, tools: ${tools.length}` : ''})`,
+        detail: { event_type: 'llm_call', model, temperature, messages, tools: tools ?? null },
+        seq,
+      }
+    }
+
+    case 'llm_response': {
+      const model = event.model as string
+      const content = event.content as string | null
+      const toolCalls = event.tool_calls as Array<Record<string, unknown>> | null
+      const usage = event.usage as Record<string, number> | null
+      const fromCache = (event.from_cache as boolean) ?? false
+      const preview = content
+        ? content.slice(0, 80).replace(/\n/g, ' ') + (content.length > 80 ? '…' : '')
+        : (toolCalls?.length
+            ? `tool_calls: ${toolCalls.map(t => t.name).join(', ')}`
+            : '(empty)')
+      return {
+        time, tag: 'LLM',
+        text: `⬇ ${model}${fromCache ? ' ⚡' : ''}: ${preview}`,
+        detail: { event_type: 'llm_response', model, from_cache: fromCache, usage, content, tool_calls: toolCalls },
         seq,
       }
     }
@@ -94,19 +109,21 @@ function toLogLine(event: WsMessage, seq: number): LogLine | null {
       const total = (event.total_tokens as number) ?? 0
       const llmCalls = (event.llm_calls as number) ?? 0
       const cacheHits = (event.cache_hits as number) ?? 0
-      const byModel = event.by_model as Record<string, Record<string, number>> | undefined
-      const byModelStr = byModel && Object.keys(byModel).length ? formatByModel(byModel) : null
       const totalCalls = llmCalls + cacheHits
       const cacheStr = totalCalls > 0 ? `Cache: ${cacheHits}/${totalCalls}` : 'Cache: —'
-      const summaryLines = [
-        `Time: ${elapsedSec}s`,
-        total > 0 ? `Tokens: ${total.toLocaleString()} (prompt=${(event.prompt_tokens as number)?.toLocaleString() ?? 0}, completion=${(event.completion_tokens as number)?.toLocaleString() ?? 0})` : null,
-        byModelStr ? `Per model:\n${byModelStr}` : null,
-        cacheStr,
-      ].filter(Boolean).join('\n')
       return {
-        time, tag: 'STAT', text: `Elapsed ${elapsedSec}s · tokens ${total.toLocaleString()} · ${cacheStr}`,
-        detail: summaryLines,
+        time, tag: 'STAT',
+        text: `Elapsed ${elapsedSec}s · tokens ${total.toLocaleString()} · ${cacheStr}`,
+        detail: {
+          event_type: 'run_stats',
+          elapsed_s: parseFloat(elapsedSec),
+          total_tokens: total,
+          prompt_tokens: (event.prompt_tokens as number) ?? 0,
+          completion_tokens: (event.completion_tokens as number) ?? 0,
+          llm_calls: llmCalls,
+          cache_hits: cacheHits,
+          by_model: event.by_model,
+        },
         seq,
         isStats: true,
       }
@@ -117,14 +134,25 @@ function toLogLine(event: WsMessage, seq: number): LogLine | null {
         time, tag: (event.level as string) ?? 'LOG',
         text: event.message as string,
         level: (event.level as string)?.toUpperCase(),
+        detail: { event_type: 'log', level: event.level, message: event.message, logger: event.logger_name },
         seq,
       }
 
     case 'run_complete':
-      return { time, tag: 'DONE', text: `Result: ${event.result as string ?? '(none)'}`, seq }
+      return {
+        time, tag: 'DONE',
+        text: `Result: ${(event.result as string) ?? '(none)'}`,
+        detail: { event_type: 'run_complete', result: event.result },
+        seq,
+      }
 
     case 'run_error':
-      return { time, tag: 'ERR', text: `Error: ${event.message as string}`, seq }
+      return {
+        time, tag: 'ERR',
+        text: `Error: ${event.message as string}`,
+        detail: { event_type: 'run_error', message: event.message },
+        seq,
+      }
 
     case 'ping':
     case 'pong':

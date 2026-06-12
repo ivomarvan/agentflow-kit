@@ -79,6 +79,13 @@ class ToolCallVertex(StateVertex):  # type: ignore[misc]
         try:
             args = self._args_from_state(state)
             result: Any = await ctx.run_sync(self._tool.execute, json.dumps(args))
+            from agentflow.events import ToolCallEvent
+            await ctx.event_bus.emit(ToolCallEvent(
+                tool_name=type(self._tool).__name__,
+                step=ctx.step,
+                inputs=args,
+                output=str(result),
+            ))
             return self._ok_signal, self._result_to_patch(result)
         except Exception:
             logger.exception("ToolCallVertex failed: tool=%s", type(self._tool).__name__)

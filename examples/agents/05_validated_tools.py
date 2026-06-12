@@ -225,11 +225,14 @@ class ToolExecutionVertex(StateVertex):
             GUARDRAIL errors are included as normal observations so the LLM
             can self-correct without the graph erroring out.
         """
+        from agentflow.events import ToolCallEvent
+
         registry = ctx.get_tools(self.tools)
         tool_msgs: list[dict[str, Any]] = []
         for tc in state.last_tool_calls:
             ctx.logger.info("tool_call: name=%s", tc.name)
             tool = registry.get(tc.name)
+            args: dict[str, Any] = {}
             if tool is None:
                 result = f"ERROR: unknown tool '{tc.name}'"
             else:
@@ -239,6 +242,12 @@ class ToolExecutionVertex(StateVertex):
                 except Exception as exc:  # noqa: BLE001
                     result = f"ERROR: {exc}"
             ctx.logger.info("tool_result: name=%s result=%.80s", tc.name, result)
+            await ctx.event_bus.emit(ToolCallEvent(
+                tool_name=tc.name,
+                step=ctx.step,
+                inputs=args,
+                output=result,
+            ))
             tool_msgs.append(
                 {"role": "tool", "tool_call_id": tc.id, "name": tc.name, "content": result}
             )

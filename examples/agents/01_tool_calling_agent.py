@@ -200,6 +200,8 @@ class ToolExecutionVertex(StateVertex):
         Returns:
             (StdSignal.ok, patch) with tool result messages appended.
         """
+        from agentflow.events import ToolCallEvent
+
         registry = ctx.get_tools(self.tools)
         tool_msgs: list[dict[str, Any]] = []
         for tc in state.last_tool_calls:
@@ -219,6 +221,12 @@ class ToolExecutionVertex(StateVertex):
                 except Exception as exc:  # noqa: BLE001
                     result = f"ERROR: {exc}"
             ctx.logger.info("tool_result: %s  →  %.120s", tc.name, result)
+            await ctx.event_bus.emit(ToolCallEvent(
+                tool_name=tc.name,
+                step=ctx.step,
+                inputs=args,
+                output=result,
+            ))
             tool_msgs.append(
                 {"role": "tool", "tool_call_id": tc.id, "name": tc.name, "content": result}
             )

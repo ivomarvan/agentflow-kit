@@ -31,25 +31,49 @@ _logger = logging.getLogger(__name__)
 _MAX_DETAIL_LEN = 250
 
 
-def _detail_from(obj: Any) -> dict[str, str]:
-    """Serialize a dataclass to a display-friendly dict for event tooltips.
+def _to_json_safe(val: Any) -> Any:
+    """Recursively convert a Python value to a JSON-serialisable form.
 
-    Skips fields that are None, empty strings/lists/dicts, or the UNSET sentinel.
-    Truncates values to _MAX_DETAIL_LEN characters.
+    Handles dataclasses, Pydantic models, lists, tuples, dicts, and primitives.
+    Objects that cannot be mapped fall back to their ``str()`` representation.
 
     Args:
-        obj: A dataclass instance (state or patch) to serialize.
+        val: Any Python value to convert.
 
     Returns:
-        Dict of field_name -> truncated string value (non-empty fields only).
+        A value that can be serialised with ``json.dumps`` without errors.
+    """
+    if val is None or isinstance(val, (bool, int, float, str)):
+        return val
+    if dataclasses.is_dataclass(val) and not isinstance(val, type):
+        return {f.name: _to_json_safe(getattr(val, f.name)) for f in dataclasses.fields(val)}
+    if isinstance(val, (list, tuple)):
+        return [_to_json_safe(item) for item in val]
+    if isinstance(val, dict):
+        return {str(k): _to_json_safe(v) for k, v in val.items()}
+    if hasattr(val, "model_dump"):
+        return val.model_dump()
+    return str(val)
+
+
+def _detail_from(obj: Any) -> dict[str, Any]:
+    """Serialise a dataclass to a JSON-safe dict for the GUI event details panel.
+
+    All non-empty fields are included with their full (non-truncated) values.
+    Non-JSON-serialisable types are recursively converted via ``_to_json_safe``.
+
+    Args:
+        obj: A dataclass instance (state or patch) to serialise.
+
+    Returns:
+        Dict of field_name -> JSON-safe value (empty and UNSET fields omitted).
     """
     from agentflow.statemachine.state import UNSET
 
     if not (dataclasses.is_dataclass(obj) and not isinstance(obj, type)):
-        raw = str(obj)
-        return {"value": raw[:_MAX_DETAIL_LEN] + ("…" if len(raw) > _MAX_DETAIL_LEN else "")}
+        return {"value": _to_json_safe(obj)}
 
-    result: dict[str, str] = {}
+    result: dict[str, Any] = {}
     for f in dataclasses.fields(obj):
         val = getattr(obj, f.name, None)
         if val is None or val is UNSET:
@@ -58,8 +82,7 @@ def _detail_from(obj: Any) -> dict[str, str]:
             continue
         if isinstance(val, (list, dict, tuple)) and not val:
             continue
-        raw = str(val)
-        result[f.name] = raw[:_MAX_DETAIL_LEN] + ("…" if len(raw) > _MAX_DETAIL_LEN else "")
+        result[f.name] = _to_json_safe(val)
     return result
 
 

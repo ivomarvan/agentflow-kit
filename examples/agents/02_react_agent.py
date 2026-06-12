@@ -206,7 +206,7 @@ class LlmCallVertex(LlmStateVertex):
     model: Annotated[str, Field(
         description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
         json_schema_extra={"x-model-select": True},
-    )] = "gemini-2.0-flash"
+    )] = "models/gemini-3.5-flash"
 
     tools: Annotated[str, Field(description="Tool registry key from Context.")] = "default"
 
@@ -258,11 +258,14 @@ class ToolExecutionVertex(StateVertex):
         Returns:
             (StdSignal.ok, patch) with tool result messages appended.
         """
+        from agentflow.events import ToolCallEvent
+
         registry = ctx.get_tools(self.tools)
         tool_msgs: list[dict[str, Any]] = []
         for tc in state.last_tool_calls:
             ctx.logger.info("tool_call: name=%s", tc.name)
             tool = registry.get(tc.name)
+            args: dict[str, Any] = {}
             if tool is None:
                 result = f"ERROR: unknown tool '{tc.name}'"
             else:
@@ -272,6 +275,12 @@ class ToolExecutionVertex(StateVertex):
                 except Exception as exc:  # noqa: BLE001
                     result = f"ERROR: {exc}"
             ctx.logger.info("tool_result: name=%s result=%.80s", tc.name, result)
+            await ctx.event_bus.emit(ToolCallEvent(
+                tool_name=tc.name,
+                step=ctx.step,
+                inputs=args,
+                output=result,
+            ))
             tool_msgs.append(
                 {"role": "tool", "tool_call_id": tc.id, "name": tc.name, "content": result}
             )
