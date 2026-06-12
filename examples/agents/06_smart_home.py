@@ -24,9 +24,10 @@ If the Judge rejects the plan, the Worker revises it (max 2 retries).
 """
 
 # Run:
-#     uv run python examples/agents/06en_smart_home_assistant.py run
-#     uv run python examples/agents/06en_smart_home_assistant.py graph --browser
-#     uv run python examples/agents/06en_smart_home_assistant.py -h
+#     uv run python examples/agents/06_smart_home.py run
+#     uv run python examples/agents/06_smart_home.py graph --browser
+#     uv run python examples/agents/06_smart_home.py gui
+#     uv run python examples/agents/06_smart_home.py -h
 
 from __future__ import annotations
 
@@ -117,7 +118,10 @@ class SmartHomeSignal(Signal):
 
 
 # ---------------------------------------------------------------------------
-# Tools (stub implementations — replace with real smart home API calls)
+# Tools — stub implementations backed by a plain dict
+#
+# 06_smart_home_live.py subclasses these tools so they mutate a Pydantic
+# HouseState instead, enabling real-time GUI visualisation.
 # ---------------------------------------------------------------------------
 
 _HOUSE_STATE: dict[str, dict] = {
@@ -135,6 +139,7 @@ class GetCurrentStatus(ToolBase):
 
     @param_desc(room_id="Room name: 'kitchen', 'bedroom', or 'living'.")
     def execute(self, room_id: str) -> str:
+        """Look up room data from the in-memory dict and format as a plain string."""
         room = _HOUSE_STATE.get(room_id)
         if room is None:
             return f"Unknown room '{room_id}'. Available: {', '.join(_HOUSE_STATE)}."
@@ -158,6 +163,7 @@ class SetTemperature(ToolBase):
         celsius="Target temperature as a number, e.g. '22' or '22.5'.",
     )
     def execute(self, room_id: str, celsius: str) -> str:
+        """Validate the room, then update the dict entry."""
         if room_id not in _HOUSE_STATE:
             return f"Unknown room '{room_id}'."
         temp = float(celsius)
@@ -176,6 +182,7 @@ class ToggleDevice(ToolBase):
         state="Desired state: 'on' or 'off'.",
     )
     def execute(self, device_id: str, state: str) -> str:
+        """Parse 'room.device', validate both parts, then flip the boolean in the dict."""
         parts = device_id.split(".", 1)
         if len(parts) != 2:
             return "Invalid device_id. Use format 'room.device', e.g. 'kitchen.lights'."
@@ -193,8 +200,7 @@ class ToggleDevice(ToolBase):
 #
 # Each vertex is a Pydantic BaseModel (via LlmStateVertex/StateVertex).
 # Fields declared as Annotated[T, Field(...)] are editable in the Inspector GUI.
-# json_schema_extra={"x-textarea": True} makes the Inspector render a multi-line
-# editor — the runtime value is still a plain str.
+# json_schema_extra={"x-textarea": True} renders a multi-line editor in Inspector.
 # ---------------------------------------------------------------------------
 
 

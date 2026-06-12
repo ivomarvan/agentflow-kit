@@ -13,6 +13,8 @@ using an external framework lives in `examples/frameworks/`.
 | `03_rag_review_loop.py` | Retrieve → Generate → Review retry loop | `05_langgraph_review_loop.py` |
 | `04_blog_pipeline.py` | Sequential pipeline: Researcher → Writer → Editor | `06_crewai_blog_team.py` |
 | `05_validated_tools.py` | Guardrailed tools with input validation | `07_guardrail_decorator.py` |
+| `06_smart_home.py` | Worker/Judge loop with safety validation | — |
+| `06_smart_home_live.py` | Same as above + GUI Live State panel (imports from `06_smart_home.py`) | — |
 
 ## Running examples
 
@@ -57,3 +59,11 @@ context. State flows forward: `topic → research_notes → draft → final_post
 **Guardrailed tools** (05): validation lives inside `ToolBase.execute()`. Invalid
 inputs return a `GUARDRAIL: …` error string (not an exception), so the LLM sees
 the rejection as a tool observation and can self-correct on the next turn.
+
+**Worker/Judge review loop** (06): the `DeviceWorker` vertex uses tools to
+inspect the current room state and proposes a plan. A separate `SafetyJudge`
+vertex validates safety rules and either approves or rejects the plan with a
+reason. On rejection, the Worker revises and resubmits (up to `max_revisions`
+times). `06_smart_home_live.py` extends this by replacing the dict-based tools
+with Pydantic model tools that mutate a shared `HouseState` instance, enabling
+the GUI Live State panel to show room changes in real-time.

@@ -257,6 +257,29 @@ def create_app(agent_app: AgentApp) -> FastAPI:
         """
         return app.state.agent_app.sample_prompts
 
+    @app.get("/api/live-state")
+    async def live_state_info() -> dict[str, Any]:
+        """Return the initial live-state schema and data if the agent has live_state.
+
+        Called once on GUI mount so the StateViewerPanel populates immediately
+        (before the first run) rather than waiting for the first StateUpdateEvent.
+
+        Returns:
+            ``{"has_live_state": False}`` when the agent has no live_state model.
+            Otherwise ``{"has_live_state": True, "display_schema": ..., "state_data": ...}``.
+        """
+        agent_app: AgentApp = app.state.agent_app
+        live = getattr(agent_app, "_live_state", None)
+        if live is None or not hasattr(live, "model_dump"):
+            return {"has_live_state": False}
+        from agentflow.gui.state_viewer import extract_display_schema  # noqa: PLC0415
+
+        return {
+            "has_live_state": True,
+            "display_schema": extract_display_schema(type(live)),
+            "state_data": live.model_dump(),
+        }
+
     @app.get("/api/tts/voices")
     async def tts_voices() -> list[dict[str, str]]:
         """Return the list of available Gemini TTS voices.

@@ -1,5 +1,7 @@
 <template>
-  <div v-if="svStore.hasData" class="state-viewer">
+  <div class="sv-panel">
+
+    <!-- Panel header — consistent style with Event Log and Conversation panes -->
     <div class="sv-header">
       <span
         class="sv-title"
@@ -9,74 +11,85 @@
         }"
       >Live State</span>
     </div>
-    <div
-      class="sv-grid"
-      :style="{ gridTemplateColumns: `repeat(${totalCols}, minmax(0, 1fr))` }"
-    >
-      <!-- Room boxes (nested models with room_hint) -->
+
+    <!-- Empty state — shown before first StateUpdateEvent arrives -->
+    <div v-if="!svStore.hasData" class="sv-empty">
+      <span class="sv-empty-icon">🏠</span>
+      <span>State not yet received.</span>
+    </div>
+
+    <!-- Grid of room boxes -->
+    <div v-else class="sv-body">
       <div
-        v-for="(fieldSchema, fieldName) in rooms"
-        :key="fieldName"
-        class="sv-room"
-        :style="{ gridColumn: `span ${fieldSchema.room_hint?.col_span ?? 1}` }"
+        class="sv-grid"
+        :style="{ gridTemplateColumns: `repeat(${totalCols}, minmax(0, 1fr))` }"
       >
-        <div class="room-label">{{ fieldSchema.room_hint?.label ?? fieldName }}</div>
-        <div class="room-fields">
-          <div
-            v-for="(subSchema, subName) in fieldSchema.nested_schema"
-            :key="subName"
-            :class="['room-field', { changed: isChanged(String(fieldName), String(subName)) }]"
-            v-tooltip.top="{ value: fieldTooltip(String(fieldName), String(subName), subSchema), showDelay: 350 }"
-          >
-            <template v-if="subSchema.display?.type === 'icon'">
-              <!-- Boolean icon field -->
-              <template v-if="subSchema.type === 'bool'">
-                <span class="field-emoji">{{ iconEmoji(subSchema.display.icon) }}</span>
-                <span
-                  class="field-bool-dot"
-                  :style="{
-                    background: getRoomValue(String(fieldName), String(subName))
-                      ? subSchema.display.on_color
-                      : subSchema.display.off_color
-                  }"
-                />
+        <!-- Room boxes (nested models with room_hint) -->
+        <div
+          v-for="(fieldSchema, fieldName) in rooms"
+          :key="fieldName"
+          class="sv-room"
+          :style="{ gridColumn: `span ${fieldSchema.room_hint?.col_span ?? 1}` }"
+        >
+          <div class="room-label">{{ fieldSchema.room_hint?.label ?? fieldName }}</div>
+          <div class="room-fields">
+            <div
+              v-for="(subSchema, subName) in fieldSchema.nested_schema"
+              :key="subName"
+              :class="['room-field', { changed: isChanged(String(fieldName), String(subName)) }]"
+              v-tooltip.top="{ value: fieldTooltip(String(fieldName), String(subName), subSchema), showDelay: 350 }"
+            >
+              <template v-if="subSchema.display?.type === 'icon'">
+                <!-- Boolean icon field -->
+                <template v-if="subSchema.type === 'bool'">
+                  <span class="field-emoji">{{ iconEmoji(subSchema.display.icon) }}</span>
+                  <span
+                    class="field-bool-dot"
+                    :style="{
+                      background: getRoomValue(String(fieldName), String(subName))
+                        ? subSchema.display.on_color
+                        : subSchema.display.off_color
+                    }"
+                  />
+                </template>
+                <!-- Numeric / string icon field -->
+                <template v-else>
+                  <span class="field-emoji">{{ iconEmoji(subSchema.display.icon) }}</span>
+                  <span class="field-value">
+                    {{ formatNum(getRoomValue(String(fieldName), String(subName)), subSchema) }}
+                  </span>
+                </template>
               </template>
-              <!-- Numeric / string icon field -->
+              <!-- Fallback: title + value -->
               <template v-else>
-                <span class="field-emoji">{{ iconEmoji(subSchema.display.icon) }}</span>
-                <span class="field-value">
-                  {{ formatNum(getRoomValue(String(fieldName), String(subName)), subSchema) }}
-                </span>
+                <span class="field-label">{{ subSchema.title ?? subName }}</span>
+                <span class="field-value">{{ getRoomValue(String(fieldName), String(subName)) }}</span>
               </template>
-            </template>
-            <!-- Fallback: title + value -->
-            <template v-else>
-              <span class="field-label">{{ subSchema.title ?? subName }}</span>
-              <span class="field-value">{{ getRoomValue(String(fieldName), String(subName)) }}</span>
-            </template>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Flat scalar fields (not rooms) -->
-      <div v-if="flatFields.length > 0" class="sv-room sv-flat">
-        <div class="room-label">State</div>
-        <div class="room-fields">
-          <div
-            v-for="[fName, fSchema] in flatFields"
-            :key="fName"
-            :class="['room-field', { changed: isChanged('', fName) }]"
-            v-tooltip.top="{ value: `${fSchema.title ?? fName}: ${svStore.stateData?.[fName]}`, showDelay: 350 }"
-          >
-            <span v-if="fSchema.display?.icon" class="field-emoji">
-              {{ iconEmoji(fSchema.display.icon) }}
-            </span>
-            <span class="field-label">{{ fSchema.title ?? fName }}</span>
-            <span class="field-value">{{ svStore.stateData?.[fName] }}</span>
+        <!-- Flat scalar fields (not rooms) -->
+        <div v-if="flatFields.length > 0" class="sv-room sv-flat">
+          <div class="room-label">State</div>
+          <div class="room-fields">
+            <div
+              v-for="[fName, fSchema] in flatFields"
+              :key="fName"
+              :class="['room-field', { changed: isChanged('', fName) }]"
+              v-tooltip.top="{ value: `${fSchema.title ?? fName}: ${svStore.stateData?.[fName]}`, showDelay: 350 }"
+            >
+              <span v-if="fSchema.display?.icon" class="field-emoji">
+                {{ iconEmoji(fSchema.display.icon) }}
+              </span>
+              <span class="field-label">{{ fSchema.title ?? fName }}</span>
+              <span class="field-value">{{ svStore.stateData?.[fName] }}</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
+
   </div>
 </template>
 
@@ -201,34 +214,62 @@ function isChanged(fieldName: string, subName: string): boolean {
 </script>
 
 <style scoped>
-.state-viewer {
+/* ── Full-height pane layout ─────────────────────────────────────── */
+.sv-panel {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--p-content-border-color, #e2e8f0);
-  border-radius: 8px;
-  background: var(--p-surface-ground, #f8fafc);
-  flex-shrink: 0;
+  height: 100%;
   overflow: hidden;
+  background: transparent;
 }
+
+/* ── Header — matches chat pane and event log headers ───────────── */
 .sv-header {
   display: flex;
   align-items: center;
-  padding: 0.22rem 0.6rem;
+  padding: 0.25rem 0.6rem;
   border-bottom: 1px solid var(--p-content-border-color, #e2e8f0);
   background: var(--p-surface-section, #f1f5f9);
+  flex-shrink: 0;
 }
 .sv-title {
-  font-size: 0.7rem;
-  font-weight: 700;
+  font-size: 0.72rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--p-text-muted-color, #888);
   cursor: default;
 }
+
+/* ── Empty state ─────────────────────────────────────────────────── */
+.sv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 0.4rem;
+  color: var(--p-text-muted-color, #94a3b8);
+  font-size: 0.82rem;
+  font-style: italic;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+}
+.sv-empty-icon {
+  font-size: 1.6rem;
+  opacity: 0.35;
+}
+
+/* ── Scrollable body ─────────────────────────────────────────────── */
+.sv-body {
+  flex: 1;
+  overflow: auto;
+  padding: 0.4rem 0.5rem;
+}
+
+/* ── Room grid ───────────────────────────────────────────────────── */
 .sv-grid {
   display: grid;
   gap: 0.4rem;
-  padding: 0.4rem 0.5rem;
   align-items: start;
 }
 .sv-room {
@@ -266,7 +307,6 @@ function isChanged(fieldName: string, subName: string): boolean {
   padding: 0.15rem 0.25rem;
   border-radius: 5px;
   min-width: 32px;
-  /* Flash animation: changed → amber background, then fade back */
   transition: background-color 1.5s ease-out;
 }
 .room-field.changed {

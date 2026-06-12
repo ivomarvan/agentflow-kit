@@ -1,9 +1,13 @@
 <template>
   <div class="chat-view-root">
-    <Splitter layout="vertical" class="chat-splitter">
 
-      <!-- ── TOP PANEL: conversation history + live state + input ── -->
-      <SplitterPanel :size="65" :minSize="25" class="chat-pane chat-top-pane">
+    <!-- Splitter is rendered only once, after hasLiveState is resolved from the API.
+         Rendering it before we know the panel count causes PrimeVue to change the
+         number of SplitterPanels mid-render, which breaks size distribution. -->
+    <Splitter v-if="splitterReady" layout="vertical" class="chat-splitter">
+
+      <!-- ── TOP PANEL: conversation history + input ── -->
+      <SplitterPanel :size="hasLiveState ? 45 : 65" :minSize="20" class="chat-pane chat-top-pane">
         <div class="chat-pane-inner">
 
           <!-- Panel header — consistent style with Event Log -->
@@ -85,20 +89,25 @@
               </div>
             </div>
 
-            <!-- Live state viewer — shown only when an agent with live_state is running -->
-            <StateViewerPanel />
-
           </div><!-- .chat-pane-content -->
 
         </div>
       </SplitterPanel>
 
+      <!-- ── MIDDLE PANEL: live agent state (only for apps with live_state) ── -->
+      <SplitterPanel v-if="hasLiveState" :size="20" :minSize="8" class="chat-pane chat-mid-pane">
+        <StateViewerPanel />
+      </SplitterPanel>
+
       <!-- ── BOTTOM PANEL: event log ── -->
-      <SplitterPanel :size="35" :minSize="12" class="chat-pane chat-bottom-pane">
+      <SplitterPanel :size="hasLiveState ? 35 : 35" :minSize="12" class="chat-pane chat-bottom-pane">
         <EventLogPanel />
       </SplitterPanel>
 
     </Splitter>
+
+    <!-- Placeholder while the live-state API call is in flight (avoids layout flash) -->
+    <div v-else class="chat-splitter" />
 
     <!-- Sample prompts popover (teleported to body by PrimeVue) -->
     <Popover ref="samplesPopover">
@@ -124,6 +133,7 @@ import EventLogPanel from './EventLogPanel.vue'
 import StateViewerPanel from '@/components/stateviewer/StateViewerPanel.vue'
 import { useChatStore } from '@/stores/chat'
 import { useVoiceStore } from '@/stores/voice'
+import { useStateViewerStore } from '@/stores/stateViewer'
 import { api } from '@/services/api'
 import { connectEventStream, type WsMessage } from '@/services/wsClient'
 import {
@@ -135,6 +145,13 @@ import {
 
 const chatStore  = useChatStore()
 const voiceStore = useVoiceStore()
+const svStore    = useStateViewerStore()
+
+/** True when the current agent has a live_state model → show middle pane. */
+const hasLiveState = computed(() => svStore.hasLiveStateCapability)
+
+/** Deferred to true after getLiveState() resolves so Splitter renders once with the correct panel count. */
+const splitterReady = ref(false)
 
 const promptInput    = ref('')
 const samples        = ref<string[]>([])
@@ -159,6 +176,19 @@ onMounted(async () => {
   if (sttAvailable.value) {
     stt = new SpeechToText(voiceStore.sttLang)
   }
+  // Pre-populate Live State panel with the agent's initial state (if any).
+  // splitterReady is set AFTER this resolves so the Splitter is rendered once
+  // with the correct panel count (2 or 3), preventing mid-render panel insertion.
+  try {
+    const liveStateData = await api.getLiveState()
+    if (liveStateData.has_live_state && liveStateData.display_schema && liveStateData.state_data) {
+      svStore.initFromApi(
+        liveStateData.display_schema as Parameters<typeof svStore.initFromApi>[0],
+        liveStateData.state_data,
+      )
+    }
+  } catch { /* agent without live state — ignore */ }
+  splitterReady.value = true
 })
 
 onUnmounted(() => {

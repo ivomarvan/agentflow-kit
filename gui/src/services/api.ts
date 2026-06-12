@@ -7,6 +7,12 @@ export interface AppInfo {
   doc: string
 }
 
+export interface LiveStateInfo {
+  has_live_state: boolean
+  display_schema?: Record<string, unknown>
+  state_data?: Record<string, unknown>
+}
+
 export interface RunResponse {
   run_id: string
   status: 'started' | 'conflict'
@@ -18,6 +24,9 @@ export const api = {
 
   getSamples: (): Promise<string[]> =>
     fetch(`${BASE}/api/samples`).then(r => r.json()),
+
+  getLiveState: (): Promise<LiveStateInfo> =>
+    fetch(`${BASE}/api/live-state`).then(r => r.json()),
 
   /** Interactive graph HTML (same as CLI ``graph --browser``). */
   getGraph: (): Promise<string> =>

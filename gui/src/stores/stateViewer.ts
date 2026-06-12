@@ -30,8 +30,17 @@ export const useStateViewerStore = defineStore('stateViewer', () => {
   const schema = ref<Record<string, FieldSchema> | null>(null)
   /** Current state data — updated after every tool call. */
   const stateData = ref<Record<string, unknown> | null>(null)
+  /** True when the agent app has a live_state model (set on GUI mount via /api/live-state). */
+  const hasLiveStateCapability = ref(false)
 
   const hasData = computed(() => schema.value !== null && stateData.value !== null)
+
+  /** Initialise from the /api/live-state response (called once on mount). */
+  function initFromApi(displaySchema: Record<string, FieldSchema>, initialData: Record<string, unknown>) {
+    hasLiveStateCapability.value = true
+    schema.value = displaySchema
+    stateData.value = initialData
+  }
 
   function handleStateUpdate(event: Record<string, unknown>) {
     if (event.display_schema) {
@@ -45,7 +54,8 @@ export const useStateViewerStore = defineStore('stateViewer', () => {
   function clear() {
     schema.value = null
     stateData.value = null
+    // hasLiveStateCapability intentionally kept — the app still has live_state
   }
 
-  return { schema, stateData, hasData, handleStateUpdate, clear }
+  return { schema, stateData, hasData, hasLiveStateCapability, initFromApi, handleStateUpdate, clear }
 })

@@ -171,7 +171,7 @@ class LlmCallVertex(LlmStateVertex):
     model: Annotated[str, Field(
         description="LLM model name (e.g. 'gpt-4o-mini'). Empty = use pool default.",
         json_schema_extra={"x-model-select": True},
-    )] = "gemini-2.0-flash"
+    )] = "deepseek-v4-flash"
 
     tools: Annotated[str, Field(description="Tool registry key from Context.")] = "default"
 
@@ -267,6 +267,8 @@ _app = AgentApp(
     system_prompt=_SYSTEM_PROMPT,
     default_question=_DEFAULT_QUESTION,
     sample_prompts=[
+        "What is 2^10?",
+        "Calculate square root of 144",
         "What is twice the vacation days count in our policy?",
         "How many sick days do we have, and what is 3 * 7?",
         "What are the remote work rules? Also compute (10 + 5) * 2.",

@@ -1,15 +1,31 @@
 """Unit tests — system prompts as Pydantic fields on StateVertex subclasses."""
 from __future__ import annotations
 
-import importlib
+import importlib.util
+import sys
+from pathlib import Path
 
 import pytest
 
 
 @pytest.fixture(scope="module")
 def smart_home():
-    """Load the smart home example module once per test module."""
-    return importlib.import_module("examples.agents.06_smart_home_assistant")
+    """Load the 06_smart_home example module once per test module.
+
+    Uses spec_from_file_location because Python identifiers cannot start with
+    a digit, making importlib.import_module("...06_smart_home") fail.
+    """
+    module_name = "_test_smart_home_base"
+    if module_name in sys.modules:
+        return sys.modules[module_name]
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        Path(__file__).parent.parent.parent / "examples" / "agents" / "06_smart_home.py",
+    )
+    mod = importlib.util.module_from_spec(spec)   # type: ignore[arg-type]
+    sys.modules[module_name] = mod
+    spec.loader.exec_module(mod)                  # type: ignore[union-attr]
+    return mod
 
 
 @pytest.mark.unit

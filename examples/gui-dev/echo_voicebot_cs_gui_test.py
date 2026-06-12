@@ -45,7 +45,7 @@ class EchoPatch:
 
 
 class EchoVertex(StateVertex):
-    """Return 'Slyšel jsem <question>.' without calling any LLM.
+    """Return 'Slyšel jsem: <question>.' without calling any LLM.
 
     Designed to test the VoiceBot tab end-to-end:
     speech-to-text → workflow → text-to-speech.
@@ -61,7 +61,7 @@ class EchoVertex(StateVertex):
         Returns:
             Tuple (StdSignal.ok, EchoPatch with the echo answer).
         """
-        answer = f"Slyšel jsem {state.question}."
+        answer = f"Slyšel jsem: {state.question}."
         logger.info("Echo answer: %s", answer)
         return StdSignal.ok, EchoPatch(answer=answer)
 
