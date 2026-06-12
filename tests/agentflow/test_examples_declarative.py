@@ -8,17 +8,17 @@ import pytest
 from agentflow import AgentApp
 
 DECLARATIVE_MODULES = [
-    "examples.agents.01_tool_calling_agent",
+    # framework/ — state machine mechanics (no or mock LLM)
+    "examples.framework.01_hello_state_machine",
+    "examples.framework.02_parallel_and_loop",
+    "examples.framework.03_live_graph",
+    "examples.framework.04_checkpoint_resume",
+    # agents/ — agent patterns with real LLM
+    "examples.agents.01_tool_calling",
     "examples.agents.02_react_agent",
-    "examples.agents.03_rag_review_loop",
-    "examples.agents.04_blog_pipeline",
+    "examples.agents.03_review_loop",
+    "examples.agents.04_pipeline",
     "examples.agents.05_validated_tools",
-    "examples.quickstart.00_hello_world",
-    "examples.quickstart.01_brief_example",
-    "examples.quickstart.02_tool_agent_demo",
-    "examples.quickstart.03_live_graph_demo",
-    "examples.quickstart.04_parallel_research_loop",
-    "examples.showcase",
 ]
 
 

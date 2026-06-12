@@ -18,7 +18,15 @@
       <span>State not yet received.</span>
     </div>
 
-    <!-- Grid of room boxes -->
+    <!-- Hotel guest book matrix -->
+    <HotelBookPanel
+      v-else-if="isHotelBookState"
+      class="sv-body"
+      :rooms="hotelRooms"
+      :last-action="hotelLastAction"
+    />
+
+    <!-- Grid of room boxes (smart home and similar) -->
     <div v-else class="sv-body">
       <div
         class="sv-grid"
@@ -97,8 +105,38 @@
 import { computed, watch, ref } from 'vue'
 import { useStateViewerStore } from '@/stores/stateViewer'
 import type { FieldSchema } from '@/stores/stateViewer'
+import HotelBookPanel from './HotelBookPanel.vue'
 
 const svStore = useStateViewerStore()
+
+const isHotelBookState = computed(() => {
+  const data = svStore.stateData
+  if (!data || !Array.isArray(data.rooms)) return false
+  const first = (data.rooms as Record<string, unknown>[])[0]
+  return first !== undefined && Array.isArray(first.reservations)
+})
+
+interface HotelRoomState {
+  room_id: string
+  name: string
+  capacity: number
+  price_per_night: number
+  reservations: Array<{
+    reservation_id: string
+    guest_name: string
+    check_in: string
+    check_out: string
+    total_price: number
+  }>
+}
+
+const hotelRooms = computed((): HotelRoomState[] =>
+  isHotelBookState.value ? (svStore.stateData?.rooms as HotelRoomState[]) : [],
+)
+
+const hotelLastAction = computed(() =>
+  isHotelBookState.value ? String(svStore.stateData?.last_action ?? '') : '',
+)
 
 // ---------------------------------------------------------------------------
 // Emoji mapping for icon names

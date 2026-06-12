@@ -9,7 +9,7 @@ def test_brief_example_runs_to_completion() -> None:
     import importlib
     from typing import cast
 
-    mod = importlib.import_module("examples.quickstart.01_brief_example")
+    mod = importlib.import_module("examples.framework.02_parallel_and_loop")
 
     app = mod.BriefExampleApp()
     from agentflow.llm.LlmPool import LlmPool
@@ -33,7 +33,7 @@ def test_brief_example_message_count_matches_cycles() -> None:
     import importlib
     from typing import cast
 
-    mod = importlib.import_module("examples.quickstart.01_brief_example")
+    mod = importlib.import_module("examples.framework.02_parallel_and_loop")
 
     app = mod.BriefExampleApp()
     from agentflow.llm.LlmPool import LlmPool
@@ -58,7 +58,7 @@ def test_brief_example_app_graph_is_state_graph() -> None:
 
     from agentflow.statemachine import StateGraph
 
-    mod = importlib.import_module("examples.quickstart.01_brief_example")
+    mod = importlib.import_module("examples.framework.02_parallel_and_loop")
 
     app = mod.BriefExampleApp()
     assert isinstance(app.graph, StateGraph)
