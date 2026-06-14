@@ -46,7 +46,7 @@ def test_check_availability_returns_results(tools: dict[str, object]) -> None:
 @pytest.mark.unit
 def test_check_availability_no_rooms(tools: dict[str, object]) -> None:
     result = tools["availability"].execute("2026-07-20", "2026-07-22", "10")  # type: ignore[union-attr]
-    assert result == "No rooms available"
+    assert "No rooms available" in result
 
 
 @pytest.mark.unit

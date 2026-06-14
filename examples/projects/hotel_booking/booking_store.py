@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from examples.projects.hotel_booking.live_state import (
+from .live_state import (
     _HOTEL,
     HotelBookState,
     Reservation,
@@ -227,3 +227,9 @@ class BookingStore:
 
 
 _STORE = BookingStore(_HOTEL)
+
+
+def set_booking_store(store: BookingStore) -> None:
+    """Replace the module-level store singleton (used by vertices and LLM tools)."""
+    global _STORE
+    _STORE = store

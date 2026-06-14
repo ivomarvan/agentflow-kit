@@ -88,6 +88,7 @@ mypy_path = "."
 # Fallback when running pytest without venv sync; normal workflow uses editable install.
 pythonpath = ["."]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 
 # Integration tests (marked @pytest.mark.integration) are EXCLUDED by default
 # because they make real LLM API calls and cost money.

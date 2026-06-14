@@ -302,7 +302,7 @@ class LlmConfig(BaseModel):
             timeout=timeout,
             available_models=available_models,
         )
-        logger.info(
+        logger.debug(
             "LlmConfig resolved: backend=%s model=%s timeout=%.0fs",
             backend,
             model,

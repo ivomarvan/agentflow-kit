@@ -69,6 +69,11 @@ async def test_llm_turn_vertex_passes_tools_parameter_to_achat() -> None:
             tools: list[dict[str, Any]] | None,
             temperature: float,
             model_override: str | None,
+            response_schema: type | None = None,
+            max_tokens: int | None = None,
+            stop: list[str] | None = None,
+            seed: int | None = None,
+            anthropic_cache_system: bool = False,
         ) -> ChatResponse:
             received_tools.append(tools)
             return ChatResponse(

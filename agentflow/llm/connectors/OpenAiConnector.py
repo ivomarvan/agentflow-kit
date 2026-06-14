@@ -23,6 +23,46 @@ from agentflow.llm.LlmConnectorBase import LlmConnectorBase
 logger = logging.getLogger(__name__)
 
 
+def _to_openai_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Recursively adapt a Pydantic JSON schema for OpenAI Structured Outputs.
+
+    OpenAI strict mode requires every object node to have:
+      - ``additionalProperties: false``
+      - all property keys present in ``required``
+
+    Pydantic ``model_json_schema()`` omits both by default, so this function
+    adds them throughout the entire schema tree (``properties``, ``$defs``,
+    ``anyOf``/``allOf``/``oneOf``, array ``items``).
+
+    Args:
+        schema: Raw JSON schema dict produced by ``model_json_schema()``.
+
+    Returns:
+        A new dict (deep copy) conforming to OpenAI strict schema rules.
+    """
+    schema = dict(schema)
+
+    if "properties" in schema:
+        # Ensure every property key appears in required.
+        existing_required: set[str] = set(schema.get("required", []))
+        schema["required"] = sorted(existing_required | set(schema["properties"].keys()))
+        schema["additionalProperties"] = False
+        schema["properties"] = {
+            k: _to_openai_strict_schema(v) for k, v in schema["properties"].items()
+        }
+
+    # Recurse into sub-schemas.
+    for key in ("anyOf", "allOf", "oneOf"):
+        if key in schema:
+            schema[key] = [_to_openai_strict_schema(s) for s in schema[key]]
+    if "items" in schema:
+        schema["items"] = _to_openai_strict_schema(schema["items"])
+    if "$defs" in schema:
+        schema["$defs"] = {k: _to_openai_strict_schema(v) for k, v in schema["$defs"].items()}
+
+    return schema
+
+
 class OpenAiConnector(LlmConnectorBase):
     """LlmConnectorBase implementation for all OpenAI-compatible backends.
 
@@ -42,7 +82,7 @@ class OpenAiConnector(LlmConnectorBase):
         # Lazy-initialised on first _do_achat() call to avoid startup overhead
         # when only the sync path is used.
         self._async_client_cache: AsyncOpenAI | None = None
-        logger.info(
+        logger.debug(
             "OpenAiConnector ready: backend=%s model=%s",
             config.backend,
             config.model,
@@ -83,15 +123,24 @@ class OpenAiConnector(LlmConnectorBase):
         tools: list[dict[str, Any]] | None,
         temperature: float,
         model_override: str | None,
+        response_schema: type | None = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
+        seed: int | None = None,
+        anthropic_cache_system: bool = False,
     ) -> ChatResponse:
         """Send a chat completion request and return a normalised response.
 
         Args:
             messages: OpenAI-format message list.
-            tools: Optional list of OpenAI-format tool definitions.  When
-                   provided, ``tool_choice`` is set to ``"auto"``.
+            tools: Optional list of OpenAI-format tool definitions.
             temperature: Sampling temperature.
             model_override: Per-call model name override.
+            response_schema: Optional Pydantic BaseModel for structured JSON output.
+            max_tokens: Maximum output tokens, or None for backend default.
+            stop: Stop sequences; generation halts at the first match.
+            seed: Random seed for reproducible output.
+            anthropic_cache_system: Ignored for OpenAI backends.
 
         Returns:
             ``ChatResponse`` with role, content, tool_calls, and usage.
@@ -104,11 +153,11 @@ class OpenAiConnector(LlmConnectorBase):
             "LLM request: backend=%s model=%s messages=%d tools=%d",
             self._config.backend, model, len(messages), len(tools) if tools else 0,
         )
-
-        kwargs = self._build_chat_kwargs(model, messages, tools, temperature)
+        kwargs = self._build_chat_kwargs(
+            model, messages, tools, temperature, response_schema, max_tokens, stop, seed,
+        )
         resp = self._client.chat.completions.create(**kwargs)
         response = self._parse_response(resp.choices[0].message, resp.usage)
-
         logger.debug(
             "LLM response: has_content=%s has_tool_calls=%s usage=%s",
             bool(response.content), response.has_tool_calls, response.usage,
@@ -121,18 +170,24 @@ class OpenAiConnector(LlmConnectorBase):
         tools: list[dict[str, Any]] | None,
         temperature: float,
         model_override: str | None,
+        response_schema: type | None = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
+        seed: int | None = None,
+        anthropic_cache_system: bool = False,
     ) -> ChatResponse:
         """Async counterpart to _do_chat() — uses AsyncOpenAI client natively.
 
-        Lazy-initialises ``AsyncOpenAI`` on first call; subsequent calls reuse
-        the same client instance.
-
         Args:
             messages: OpenAI-format message list.
-            tools: Optional list of OpenAI-format tool definitions.  When
-                   provided, ``tool_choice`` is set to ``"auto"``.
+            tools: Optional tool definitions.
             temperature: Sampling temperature.
             model_override: Per-call model name override.
+            response_schema: Optional Pydantic BaseModel for structured JSON output.
+            max_tokens: Maximum output tokens.
+            stop: Stop sequences.
+            seed: Random seed for reproducible output.
+            anthropic_cache_system: Ignored for OpenAI backends.
 
         Returns:
             ``ChatResponse`` with role, content, tool_calls, and usage.
@@ -145,11 +200,11 @@ class OpenAiConnector(LlmConnectorBase):
             "LLM async request: backend=%s model=%s messages=%d tools=%d",
             self._config.backend, model, len(messages), len(tools) if tools else 0,
         )
-
-        kwargs = self._build_chat_kwargs(model, messages, tools, temperature)
+        kwargs = self._build_chat_kwargs(
+            model, messages, tools, temperature, response_schema, max_tokens, stop, seed,
+        )
         resp = await self._async_client.chat.completions.create(**kwargs)
         response = self._parse_response(resp.choices[0].message, resp.usage)
-
         logger.debug(
             "LLM async response: has_content=%s has_tool_calls=%s usage=%s",
             bool(response.content), response.has_tool_calls, response.usage,
@@ -183,16 +238,27 @@ class OpenAiConnector(LlmConnectorBase):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None,
         temperature: float,
+        response_schema: type | None = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Assemble the kwargs dict for a ``chat.completions.create`` call.
 
         Omits ``temperature`` for reasoning models that reject the parameter.
+        When ``response_schema`` is a Pydantic BaseModel subclass, adds
+        ``response_format`` with the JSON schema for Structured Outputs.
 
         Args:
             model: Resolved model name (after override).
             messages: OpenAI-format message list.
             tools: Optional tool definitions; adds ``tool_choice`` when present.
             temperature: Sampling temperature (ignored for reasoning models).
+            response_schema: Optional Pydantic BaseModel subclass.  When set,
+                instructs the API to return JSON matching the schema.
+            max_tokens: Maximum output tokens; omitted when ``None``.
+            stop: Stop sequences; omitted when ``None``.
+            seed: Deterministic seed; omitted when ``None``.
 
         Returns:
             Keyword argument dict ready to unpack into ``create(**kwargs)``.
@@ -206,6 +272,25 @@ class OpenAiConnector(LlmConnectorBase):
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
+        if response_schema is not None:
+            # OpenAI Structured Outputs — compatible with gpt-4o-2024-08-06+
+            # and Gemini via the OpenAI-compatible endpoint.
+            # Strict mode requires additionalProperties=false and all keys in
+            # required on every object node — Pydantic doesn't add these by default.
+            kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_schema.__name__,
+                    "schema": _to_openai_strict_schema(response_schema.model_json_schema()),
+                    "strict": True,
+                },
+            }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        if stop is not None:
+            kwargs["stop"] = stop
+        if seed is not None:
+            kwargs["seed"] = seed
         return kwargs
 
     @staticmethod

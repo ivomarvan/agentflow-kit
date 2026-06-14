@@ -4,10 +4,8 @@
 import type { Component } from 'vue'
 import GenericJsonRenderer from './GenericJsonRenderer.vue'
 
-import HotelReservation from './hotel_reservation.vue'
 
 export const EVENT_RENDERERS: Record<string, Component> = {
-  "hotel.reservation": HotelReservation,
 }
 
 export { GenericJsonRenderer }

@@ -1,0 +1,7 @@
+Nyní přemýšlým jak uspořádat stavový graf. Zatím to proberme jen ve volné konverzaci - brainstormingu
+
+1) V stupním vrholu agent zjistí, zda se jedná o novou rezervaci, zrušení původní, nebo něco jiného.
+Tomu odpovídají po řadě tři cesty (tři různé vrcholy: 2)
+
+2) Vrchol získání  údajů k rezervaci. Agen dostane dosud nevyplněné údaje z Order (jejich textový popis z anotací) a požadavek na odpověď  ve formátu json s daty.
+To se opakuje v cyklu, dokud jsou data vyplněna To vede buď k rezerva.

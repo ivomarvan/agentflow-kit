@@ -177,26 +177,37 @@ class StateGraph(Describable):  # type: ignore[misc]
                     distances[neighbor] = distances[current] + 1
                     bfs_queue.append(neighbor)
 
-        # Warn only when forward (non-back-edge) predecessors have unequal depths.
+        # Collect all asymmetric join issues, then emit one grouped warning.
+        issues: list[tuple[str, list[tuple[str, int]]]] = []
         for node in join_nodes:
             preds = in_edges[node]
-            forward_preds = [p for p in preds if not self._can_reach(node, p, successors)]
+            # Deduplicate predecessors: multiple transitions from same node count once.
+            seen_pred: set[int] = set()
+            unique_preds = [p for p in preds if not (id(p) in seen_pred or seen_pred.add(id(p)))]  # type: ignore[func-returns-value]
+            forward_preds = [p for p in unique_preds if not self._can_reach(node, p, successors)]
             if len(forward_preds) < 2:
                 continue
             depths = [distances.get(p, -1) for p in forward_preds]
             if len(set(depths)) > 1:
-                _logger.warning(
-                    "Node %r has %d incoming transitions from branches of different depths "
-                    "(%s). It may run multiple times per cycle. If barrier semantics are "
-                    "needed, ensure branch symmetry or use an explicit Join (not yet "
-                    "implemented).",
-                    node.__class__.__name__,
-                    len(forward_preds),
-                    ", ".join(
-                        f"{p.__class__.__name__}=depth{d}"
-                        for p, d in zip(forward_preds, depths, strict=False)
-                    ),
-                )
+                pred_depths = [
+                    (p.__class__.__name__, d)
+                    for p, d in zip(forward_preds, depths, strict=False)
+                ]
+                issues.append((node.__class__.__name__, pred_depths))
+
+        if issues:
+            lines = [
+                "[TOPOLOGY WARNING] Asymmetric-join node(s) detected in state graph:",
+                "  Predecessor branches reach these nodes at different depths.",
+                "  Parallel graph  → node may run multiple times per BSP cycle.",
+                "  Sequential graph → harmless (one active branch at a time).",
+            ]
+            for node_name, pred_depths in issues:
+                lines.append(f"  ● {node_name!r}  ({len(pred_depths)} predecessors from different depths)")
+                for pred_name, depth in pred_depths:
+                    lines.append(f"      ← {pred_name}  [depth {depth}]")
+            lines.append("  To fix: balance branch depths or add an explicit Join barrier (not yet implemented).")
+            _logger.warning("\n".join(lines))
 
     def _normalize_transitions(self, transitions: Sequence[Transition]) -> list[Transition]:
         """Resolve all class references in transitions to singleton instances.

@@ -8,6 +8,7 @@ Each script demonstrates one orthogonal framework feature without requiring a re
 | `02_parallel_and_loop.py` | `Parallel` fan-out/fan-in + review loop | `FakeLlmConnector` |
 | `03_live_graph.py` | `LiveGraphHooks` — DOT snapshot per super-step | `FakeLlmConnector` |
 | `04_checkpoint_resume.py` | Pause / resume with `InMemoryCheckpointStore` | `FakeLlmConnector` |
+| `05_counter_live_model.py` | `LiveModel` hello world — standalone `/demo` GUI | None |
 
 ## Running
 
@@ -16,7 +17,17 @@ uv run python examples/framework/01_hello_state_machine.py run
 uv run python examples/framework/02_parallel_and_loop.py graph --browser
 uv run python examples/framework/03_live_graph.py run    # saves DOT files to nogit_data/graphs/
 uv run python examples/framework/04_checkpoint_resume.py run
+uv run python examples/framework/05_counter_live_model.py
 ```
+
+## 05 — CounterModel: LiveModel hello world
+
+`05_counter_live_model.py` demonstrates the `LiveModel` pattern: a self-describing domain
+model that exposes a typed Python API as tools and runs as a standalone GUI demo without
+any LLM or state graph.
+
+Open http://127.0.0.1:8765/demo — use the left panel to increment, decrement, set, or reset
+the counter; watch the right panel update live.
 
 ## Concepts illustrated
 

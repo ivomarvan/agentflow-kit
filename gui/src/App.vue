@@ -1,5 +1,6 @@
 <template>
-  <div class="app-container">
+  <DemoView v-if="isDemoMode" />
+  <div v-else class="app-container">
     <Tabs v-model:value="activeTab">
       <!-- Title and tab selector share one responsive row -->
       <div class="app-top-row">
@@ -54,8 +55,11 @@ import { Tabs, TabList, Tab, TabPanels, TabPanel } from 'primevue'
 import ChatView from '@/components/chat/ChatView.vue'
 import InspectorView from '@/components/inspector/InspectorView.vue'
 import GUISettingsView from '@/components/guisettings/GUISettingsView.vue'
+import DemoView from '@/views/DemoView.vue'
 import StickyMarkdownTooltipTitle from '@/components/ui/StickyMarkdownTooltipTitle.vue'
 import { api } from '@/services/api'
+
+const isDemoMode = window.location.pathname === '/demo' || window.location.search.includes('mode=demo')
 
 const appInfo  = ref<{ name: string; doc: string } | null>(null)
 const activeTab = ref('chat')

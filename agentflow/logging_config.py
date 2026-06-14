@@ -78,6 +78,10 @@ def setup_pretty_logging(level: int = logging.INFO) -> None:
     ``StreamHandler`` that uses ``PrettyFormatter``.  Call once per
     process — typically at the top of ``run_workflow()`` or ``__main__``.
 
+    Also silences noisy third-party loggers that produce INFO-level chatter
+    irrelevant to the agent workflow (httpx request logs, httpcore transport
+    details).  Their WARNING+ records still propagate so real errors are visible.
+
     Args:
         level: Minimum log level; defaults to ``logging.INFO``.
     """
@@ -88,3 +92,9 @@ def setup_pretty_logging(level: int = logging.INFO) -> None:
     handler.setFormatter(PrettyFormatter())
     root.addHandler(handler)
     root.setLevel(level)
+
+    # Suppress per-request INFO chatter from HTTP transport libraries.
+    # Their loggers inherit the root handler but get a higher effective level
+    # so only WARNING+ messages propagate (connection errors, timeouts, etc.).
+    for noisy_logger in ("httpx", "httpcore", "openai._base_client"):
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)

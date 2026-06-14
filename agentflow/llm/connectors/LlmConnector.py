@@ -105,7 +105,7 @@ class LlmConnector(BaseModel, LlmConnectorBase):
         # Sync Pydantic fields with resolved config so GUI reads actual values.
         object.__setattr__(self, "model", config.model)
         object.__setattr__(self, "timeout", config.timeout)
-        logger.info(
+        logger.debug(
             "LlmConnector ready: backend=%s model=%s cache=%s",
             config.backend,
             config.model,
@@ -119,7 +119,7 @@ class LlmConnector(BaseModel, LlmConnectorBase):
             updated_config = self._config.with_overrides(model=value)
             self._config = updated_config
             self._inner = self._build_inner(updated_config)
-            logger.info(
+            logger.debug(
                 "LlmConnector model updated: backend=%s model=%s",
                 self._config.backend,
                 self._config.model,
@@ -173,9 +173,17 @@ class LlmConnector(BaseModel, LlmConnectorBase):
         tools: list[dict[str, Any]] | None,
         temperature: float,
         model_override: str | None,
+        response_schema: type | None = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
+        seed: int | None = None,
+        anthropic_cache_system: bool = False,
     ):
         # Delegate to the inner backend's public chat() — inner has no cache.
-        return self._inner.chat(messages, tools, temperature, model_override)
+        return self._inner.chat(
+            messages, tools, temperature, model_override,
+            response_schema, max_tokens, stop, seed, anthropic_cache_system,
+        )
 
     async def _do_achat(
         self,
@@ -183,8 +191,16 @@ class LlmConnector(BaseModel, LlmConnectorBase):
         tools: list[dict[str, Any]] | None,
         temperature: float,
         model_override: str | None,
+        response_schema: type | None = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
+        seed: int | None = None,
+        anthropic_cache_system: bool = False,
     ):
-        return await self._inner.achat(messages, tools, temperature, model_override)
+        return await self._inner.achat(
+            messages, tools, temperature, model_override,
+            response_schema, max_tokens, stop, seed, anthropic_cache_system,
+        )
 
     # ------------------------------------------------------------------
     # Graph composition — expose inner backend as nested child

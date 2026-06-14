@@ -74,7 +74,12 @@ class _TrackedConnector:
     # ------------------------------------------------------------------
 
     async def achat(self, messages: list, tools: list | None = None,
-                    temperature: float = 0.2, model_override: str | None = None) -> Any:
+                    temperature: float = 0.2, model_override: str | None = None,
+                    response_schema: type | None = None,
+                    max_tokens: int | None = None,
+                    stop: list[str] | None = None,
+                    seed: int | None = None,
+                    anthropic_cache_system: bool = False) -> Any:
         """Forward to connector.achat() and record token usage."""
         ctx: Context = object.__getattribute__(self, "_ctx")
         connector = object.__getattribute__(self, "_connector")
@@ -87,7 +92,12 @@ class _TrackedConnector:
         if cache is not None:
             from agentflow.llm.LlmConnectorBase import _make_cache_key
             effective_model = model_override or connector.config.model
-            key = _make_cache_key(messages, tools, model=effective_model, temperature=temperature)
+            key = _make_cache_key(
+                messages, tools,
+                model=effective_model, temperature=temperature,
+                response_schema=response_schema, max_tokens=max_tokens,
+                stop=stop, seed=seed,
+            )
             cache_hit = cache.get(key) is not None
 
         from agentflow.events import LlmCallEvent, LlmResponseEvent
@@ -98,7 +108,10 @@ class _TrackedConnector:
             temperature=temperature,
         ))
 
-        response = await connector.achat(messages, tools, temperature, model_override)
+        response = await connector.achat(
+            messages, tools, temperature, model_override,
+            response_schema, max_tokens, stop, seed, anthropic_cache_system,
+        )
         ctx.stats.record(model, response.usage, cache_hit=cache_hit)
         # Update per-step counters used by runner to set StepEndEvent.from_cache.
         if cache_hit:

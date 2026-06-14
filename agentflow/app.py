@@ -51,6 +51,7 @@ from agentflow.events import EventBus
 
 if TYPE_CHECKING:
     from agentflow.describable.graph import Graph
+    from agentflow.live_model import LiveModel
     from agentflow.statemachine.context import Context
     from agentflow.statemachine.run_stats import RunStats
     from agentflow.statemachine.topology import StateGraph
@@ -94,6 +95,7 @@ class AgentApp(Describable):
         context: Context | None = None,
         state_graph: StateGraph | None = None,
         initial_state_factory: Callable[[str], Any] | None = None,
+        live_model: LiveModel | None = None,
         live_state: Any = None,
     ) -> None:
         super().__init__()
@@ -108,7 +110,14 @@ class AgentApp(Describable):
         self._context = context
         self._state_graph = state_graph
         self._initial_state_factory = initial_state_factory
-        self._live_state = live_state
+        self._live_model: LiveModel | None = live_model
+        """Optional LiveModel — preferred API for live state + demo tools."""
+        self._live_model_registry = None
+        if live_model is not None:
+            self._live_state = live_model.state
+            self._live_model_registry = live_model.tool_registry()
+        else:
+            self._live_state = live_state
         """Optional Pydantic BaseModel for live GUI state visualisation (StateViewerPanel)."""
         self._last_ctx: Context | None = None
         self.gui_script_name = ""
@@ -227,6 +236,15 @@ class AgentApp(Describable):
         """
         return f"{vertex_id}-Tools: {registry_key}"
 
+    def _merge_tool_registries(self) -> dict[str, Any]:
+        """Return context tool registries, optionally augmented with live_model tools."""
+        if self._context is None:
+            return {}
+        registries = dict(self._context.tool_registries)
+        if self._live_model_registry is not None:
+            registries["_live_model"] = self._live_model_registry
+        return registries
+
     async def run_workflow(self) -> str | None:
         """Execute the main application workflow.
 
@@ -253,7 +271,7 @@ class AgentApp(Describable):
 
         ctx = _Context(
             pool=self._context.pool,
-            tool_registries=self._context.tool_registries,
+            tool_registries=self._merge_tool_registries(),
             tools=self._context.tools,
             event_bus=self.event_bus,
             live_state=self._live_state,

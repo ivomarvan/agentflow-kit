@@ -45,23 +45,41 @@ def _make_cache_key(
     *,
     model: str,
     temperature: float,
+    response_schema: type | None = None,
+    max_tokens: int | None = None,
+    stop: list[str] | None = None,
+    seed: int | None = None,
 ) -> str:
     """Compute a stable SHA-256 cache key for an LLM call.
 
-    Including model and temperature ensures cache correctness when multiple
-    connectors share one LlmFileCache instance.
+    All call parameters that can affect the response content are included so
+    that entries for different configurations never collide.
 
     Args:
         messages: Full conversation history in OpenAI format.
         tools: Tool schema list, or None.
         model: Active model name (e.g. 'gpt-4o-mini').
         temperature: Sampling temperature for this call.
+        response_schema: Optional Pydantic model class for structured output.
+            Its name is included; schema and no-schema calls never share an entry.
+        max_tokens: Maximum number of output tokens, or None.
+        stop: Stop-sequence list, or None.
+        seed: Random seed for deterministic output, or None.
 
     Returns:
         64-character lowercase hex digest.
     """
     payload = json.dumps(
-        {"model": model, "temperature": temperature, "messages": messages, "tools": tools},
+        {
+            "model": model,
+            "temperature": temperature,
+            "messages": messages,
+            "tools": tools,
+            "response_schema": response_schema.__name__ if response_schema is not None else None,
+            "max_tokens": max_tokens,
+            "stop": stop,
+            "seed": seed,
+        },
         sort_keys=True,
         ensure_ascii=False,
     )
@@ -107,6 +125,11 @@ class LlmConnectorBase(Describable):
         tools: list[dict[str, Any]] | None,
         temperature: float,
         model_override: str | None,
+        response_schema: type | None = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
+        seed: int | None = None,
+        anthropic_cache_system: bool = False,
     ) -> ChatResponse:
         """Backend-specific synchronous chat implementation.
 
@@ -117,6 +140,13 @@ class LlmConnectorBase(Describable):
             tools: Tool schema list, or None.
             temperature: Sampling temperature.
             model_override: Per-call model name override.
+            response_schema: Optional Pydantic BaseModel subclass for structured JSON output.
+            max_tokens: Maximum number of output tokens.  ``None`` uses the backend default.
+            stop: List of stop sequences; generation halts at the first match.
+            seed: Integer seed for deterministic output (supported by OpenAI; ignored elsewhere).
+            anthropic_cache_system: When ``True``, marks the system message for
+                Anthropic prompt caching (``cache_control: ephemeral``).
+                Has no effect on non-Anthropic backends.
 
         Returns:
             Fresh ChatResponse from the backend.
@@ -130,6 +160,11 @@ class LlmConnectorBase(Describable):
         tools: list[dict[str, Any]] | None,
         temperature: float,
         model_override: str | None,
+        response_schema: type | None = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
+        seed: int | None = None,
+        anthropic_cache_system: bool = False,
     ) -> ChatResponse:
         """Backend-specific asynchronous chat implementation.
 
@@ -140,6 +175,11 @@ class LlmConnectorBase(Describable):
             tools: Tool schema list, or None.
             temperature: Sampling temperature.
             model_override: Per-call model name override.
+            response_schema: Optional Pydantic BaseModel subclass for structured JSON output.
+            max_tokens: Maximum number of output tokens.
+            stop: List of stop sequences.
+            seed: Integer seed for deterministic output (OpenAI only).
+            anthropic_cache_system: Mark system message for Anthropic prompt caching.
 
         Returns:
             Fresh ChatResponse from the backend.
@@ -164,6 +204,11 @@ class LlmConnectorBase(Describable):
         tools: list[dict[str, Any]] | None = None,
         temperature: float = 0.2,
         model_override: str | None = None,
+        response_schema: type | None = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
+        seed: int | None = None,
+        anthropic_cache_system: bool = False,
     ) -> ChatResponse:
         """Send a synchronous chat request, transparently serving from cache.
 
@@ -172,6 +217,12 @@ class LlmConnectorBase(Describable):
             tools: Optional tool schema list.
             temperature: Sampling temperature; lower values are more deterministic.
             model_override: Per-call model name override.
+            response_schema: Optional Pydantic BaseModel subclass.  When set,
+                the backend returns a JSON response conforming to the schema.
+            max_tokens: Maximum number of output tokens.  ``None`` uses the backend default.
+            stop: List of stop sequences; generation halts at the first match.
+            seed: Integer seed for deterministic output (OpenAI only).
+            anthropic_cache_system: Mark system message for Anthropic prompt caching.
 
         Returns:
             ``ChatResponse`` — from cache on hit, from backend on miss.
@@ -181,20 +232,31 @@ class LlmConnectorBase(Describable):
         """
         if self._cache is not None:
             effective_model = model_override or self.config.model
-            key = _make_cache_key(messages, tools, model=effective_model, temperature=temperature)
+            key = _make_cache_key(
+                messages, tools,
+                model=effective_model, temperature=temperature,
+                response_schema=response_schema, max_tokens=max_tokens,
+                stop=stop, seed=seed,
+            )
             hit = self._cache.get(key)
             if hit is not None:
-                logger.info("llm_call: model=%s  ← cache hit", self._model_label)
+                logger.debug("llm_call: model=%s  ← cache hit", self._model_label)
                 return hit
-            logger.info("llm_call: model=%s  [cache miss]", self._model_label)
-            response = self._do_chat(messages, tools, temperature, model_override)
+            logger.debug("llm_call: model=%s  [cache miss]", self._model_label)
+            response = self._do_chat(
+                messages, tools, temperature, model_override,
+                response_schema, max_tokens, stop, seed, anthropic_cache_system,
+            )
             self._cache.put(key, response)
             logger.debug(
                 "cache: stored  (%d/%d)", self._cache.size, getattr(self._cache, "max_size", "?")
             )
             return response
-        logger.info("llm_call: model=%s", self._model_label)
-        return self._do_chat(messages, tools, temperature, model_override)
+        logger.debug("llm_call: model=%s", self._model_label)
+        return self._do_chat(
+            messages, tools, temperature, model_override,
+            response_schema, max_tokens, stop, seed, anthropic_cache_system,
+        )
 
     async def achat(
         self,
@@ -202,6 +264,11 @@ class LlmConnectorBase(Describable):
         tools: list[dict[str, Any]] | None = None,
         temperature: float = 0.2,
         model_override: str | None = None,
+        response_schema: type | None = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
+        seed: int | None = None,
+        anthropic_cache_system: bool = False,
     ) -> ChatResponse:
         """Send an asynchronous chat request, transparently serving from cache.
 
@@ -210,6 +277,16 @@ class LlmConnectorBase(Describable):
             tools: Optional tool schema list.
             temperature: Sampling temperature.
             model_override: Per-call model name override.
+            response_schema: Optional Pydantic BaseModel subclass.  When set,
+                the backend returns a JSON response conforming to the schema.
+                Connector-specific translation:
+                  - OpenAI/Gemini: ``response_format`` with JSON schema.
+                  - Anthropic: system-prompt instruction with the JSON schema.
+            max_tokens: Maximum number of output tokens.  ``None`` uses the backend default.
+            stop: List of stop sequences; generation halts at the first match.
+            seed: Integer seed for deterministic output (OpenAI only; ignored elsewhere).
+            anthropic_cache_system: When ``True``, marks the system message for
+                Anthropic prompt caching.  No effect on other backends.
 
         Returns:
             ``ChatResponse`` — from cache on hit, from backend on miss.
@@ -219,20 +296,31 @@ class LlmConnectorBase(Describable):
         """
         if self._cache is not None:
             effective_model = model_override or self.config.model
-            key = _make_cache_key(messages, tools, model=effective_model, temperature=temperature)
+            key = _make_cache_key(
+                messages, tools,
+                model=effective_model, temperature=temperature,
+                response_schema=response_schema, max_tokens=max_tokens,
+                stop=stop, seed=seed,
+            )
             hit = self._cache.get(key)
             if hit is not None:
-                logger.info("llm_call: model=%s  ← cache hit", self._model_label)
+                logger.debug("llm_call: model=%s  ← cache hit", self._model_label)
                 return hit
-            logger.info("llm_call: model=%s  [cache miss]", self._model_label)
-            response = await self._do_achat(messages, tools, temperature, model_override)
+            logger.debug("llm_call: model=%s  [cache miss]", self._model_label)
+            response = await self._do_achat(
+                messages, tools, temperature, model_override,
+                response_schema, max_tokens, stop, seed, anthropic_cache_system,
+            )
             self._cache.put(key, response)
             logger.debug(
                 "cache: stored  (%d/%d)", self._cache.size, getattr(self._cache, "max_size", "?")
             )
             return response
-        logger.info("llm_call: model=%s", self._model_label)
-        return await self._do_achat(messages, tools, temperature, model_override)
+        logger.debug("llm_call: model=%s", self._model_label)
+        return await self._do_achat(
+            messages, tools, temperature, model_override,
+            response_schema, max_tokens, stop, seed, anthropic_cache_system,
+        )
 
     async def achat_with_tools(
         self,

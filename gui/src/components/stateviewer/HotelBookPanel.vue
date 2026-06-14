@@ -20,8 +20,8 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="room in rooms" :key="room.room_id">
-            <th class="hb-row-head">
+          <tr v-for="room in rooms" :key="room.room_id" :style="{ background: roomRowBg(room.room_id) }">
+            <th class="hb-row-head" :style="{ background: roomRowBg(room.room_id) }">
               <div class="hb-room-name">🛏 {{ room.name }}</div>
               <div class="hb-room-meta">×{{ room.capacity }} beds · €{{ room.price_per_night }}/night</div>
             </th>
@@ -32,6 +32,7 @@
                 occupied: cellGuest(room, day.iso),
                 flash: isFlashing(room.room_id, day.iso),
               }]"
+              :style="!cellGuest(room, day.iso) ? { background: roomCellBg(room.room_id) } : {}"
             >
               {{ cellGuest(room, day.iso) }}
             </td>
@@ -171,6 +172,30 @@ watch(
 
 function isFlashing(roomId: string, dayIso: string): boolean {
   return flashCells.value.has(`${roomId}/${dayIso}`)
+}
+
+// Subtle row background tinted by room colour.
+const ROOM_ROW_BG: Record<string, string> = {
+  red:   'rgba(220, 60,  60,  0.06)',
+  blue:  'rgba(60,  120, 220, 0.07)',
+  green: 'rgba(40,  160, 80,  0.07)',
+  white: 'rgba(160, 160, 160, 0.06)',
+}
+
+// Slightly more visible for empty data cells (header cell uses the same value).
+const ROOM_CELL_BG: Record<string, string> = {
+  red:   'rgba(220, 60,  60,  0.04)',
+  blue:  'rgba(60,  120, 220, 0.05)',
+  green: 'rgba(40,  160, 80,  0.05)',
+  white: 'rgba(160, 160, 160, 0.04)',
+}
+
+function roomRowBg(roomId: string): string {
+  return ROOM_ROW_BG[roomId] ?? 'transparent'
+}
+
+function roomCellBg(roomId: string): string {
+  return ROOM_CELL_BG[roomId] ?? 'transparent'
 }
 </script>
 

@@ -13,6 +13,31 @@ export interface LiveStateInfo {
   state_data?: Record<string, unknown>
 }
 
+export interface DemoToolSchema {
+  name: string
+  description: string
+  parameters: {
+    type: string
+    properties: Record<string, JsonSchemaField>
+    required?: string[]
+  }
+}
+
+export interface JsonSchemaField {
+  type?: string
+  description?: string
+  enum?: unknown[]
+  minimum?: number
+  maximum?: number
+  default?: unknown
+  'x-widget'?: string
+}
+
+export interface DemoActionResponse {
+  result: string | null
+  error: string | null
+}
+
 export interface RunResponse {
   run_id: string
   status: 'started' | 'conflict'
@@ -53,6 +78,28 @@ export const api = {
     }).then(async r => {
       const data = await r.json()
       if (!r.ok) return { run_id: '', status: 'conflict', detail: data.detail }
+      return data
+    }),
+
+  getDemoTools: (): Promise<DemoToolSchema[]> =>
+    fetch(`${BASE}/api/demo/tools`).then(async r => {
+      if (!r.ok) {
+        const data = await r.json()
+        throw new Error((data as { error?: string }).error ?? 'Failed to load demo tools')
+      }
+      return r.json()
+    }),
+
+  callDemoAction: (toolName: string, params: Record<string, unknown>): Promise<DemoActionResponse> =>
+    fetch(`${BASE}/api/demo/action/${encodeURIComponent(toolName)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    }).then(async r => {
+      const data = await r.json()
+      if (!r.ok) {
+        throw new Error((data as { detail?: string }).detail ?? 'Action failed')
+      }
       return data
     }),
 }

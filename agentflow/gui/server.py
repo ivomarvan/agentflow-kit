@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -137,6 +137,10 @@ def create_app(agent_app: AgentApp) -> FastAPI:
     # (required for ASGI test clients that skip the lifespan protocol).
     app.state.agent_app = agent_app
     app.state.run_state = RunState()
+
+    if getattr(agent_app, "_live_model", None) is not None:
+        demo_handler = WebSocketEventHandler("demo", app.state.run_state)
+        agent_app.event_bus.subscribe(demo_handler)
 
     # CORS — allow the Vite dev server and the default production port
     app.add_middleware(
@@ -280,6 +284,64 @@ def create_app(agent_app: AgentApp) -> FastAPI:
             "state_data": live.model_dump(),
         }
 
+    @app.get("/api/demo/tools")
+    async def demo_tools() -> Any:
+        """Return @action tool schemas for the demo ActionPanel.
+
+        Returns:
+            JSON list of tool schema dicts when ``live_model`` is registered.
+
+        Raises:
+            HTTPException: 400 when the agent has no ``live_model``.
+        """
+        agent_app: AgentApp = app.state.agent_app
+        live_model = getattr(agent_app, "_live_model", None)
+        if live_model is None:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No live_model registered"},
+            )
+        from agentflow.gui.demo_server import list_demo_tools  # noqa: PLC0415
+
+        return list_demo_tools(live_model)
+
+    @app.post("/api/demo/action/{tool_name}")
+    async def demo_action(tool_name: str, request: Request) -> Any:
+        """Execute one @action tool and push updated live state to the event bus.
+
+        Args:
+            tool_name: Registered tool name.
+            request: Raw request — body must be a JSON object of parameters.
+
+        Returns:
+            ``{"result": ..., "error": null}`` on success, or error payload when
+            the tool reports failure.
+
+        Raises:
+            HTTPException: 400 for invalid JSON; 404 for unknown tool.
+        """
+        agent_app: AgentApp = app.state.agent_app
+        live_model = getattr(agent_app, "_live_model", None)
+        if live_model is None:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No live_model registered"},
+            )
+        try:
+            body = await request.json()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="Invalid JSON body") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Request body must be a JSON object")
+
+        registry = live_model.tool_registry()
+        if registry.get(tool_name) is None:
+            raise HTTPException(status_code=404, detail=f"Unknown tool: {tool_name}")
+
+        from agentflow.gui.demo_server import execute_demo_action  # noqa: PLC0415
+
+        return await execute_demo_action(agent_app, tool_name, body)
+
     @app.get("/api/tts/voices")
     async def tts_voices() -> list[dict[str, str]]:
         """Return the list of available Gemini TTS voices.
@@ -384,6 +446,11 @@ def create_app(agent_app: AgentApp) -> FastAPI:
     # WebSocket
     # ------------------------------------------------------------------
 
+    @app.websocket("/ws/demo")
+    async def demo_websocket_endpoint(websocket: WebSocket) -> None:
+        """Stream live-model demo events (StateUpdateEvent) to the ActionPanel GUI."""
+        await websocket_endpoint(websocket, "demo")
+
     @app.websocket("/ws/{run_id}")
     async def websocket_endpoint(websocket: WebSocket, run_id: str) -> None:
         """Accept a WebSocket connection and stream events for *run_id*.
@@ -428,6 +495,18 @@ def create_app(agent_app: AgentApp) -> FastAPI:
             clients = run_state.ws_clients.get(run_id, [])
             if websocket in clients:
                 clients.remove(websocket)
+
+    # ------------------------------------------------------------------
+    # Demo page — same SPA as / but frontend reads ?mode=demo from path
+    # ------------------------------------------------------------------
+
+    @app.get("/demo")
+    async def demo_page() -> FileResponse:
+        """Serve the Vue SPA for LiveModel standalone demo mode."""
+        index = STATIC_DIR / "index.html"
+        if not index.exists():
+            raise HTTPException(status_code=503, detail="GUI static build not found")
+        return FileResponse(index)
 
     # ------------------------------------------------------------------
     # Static files — must be LAST so API routes take priority
@@ -547,6 +626,7 @@ def serve(
     port: int | None = None,
     host: str = "127.0.0.1",
     open_browser: bool = True,
+    demo_url_path: str = "",
 ) -> None:
     """Start FastAPI + uvicorn for the given AgentApp; optionally open browser.
 
@@ -561,6 +641,8 @@ def serve(
         port: Override port.  ``None`` falls back to env var or 8765.
         host: Bind address.  Defaults to ``127.0.0.1`` (localhost only).
         open_browser: When ``True``, open the browser after 1.5 s.
+        demo_url_path: Optional path suffix (e.g. ``"/demo"``) appended to the
+            opened browser URL for LiveModel standalone demos.
     """
     import os
     import threading
@@ -575,7 +657,7 @@ def serve(
     fastapi_app = create_app(agent_app)
 
     if open_browser:
-        url = f"http://{host}:{resolved_port}"
+        url = f"http://{host}:{resolved_port}{demo_url_path}"
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
 
     uvicorn.run(fastapi_app, host=host, port=resolved_port, log_level="info")

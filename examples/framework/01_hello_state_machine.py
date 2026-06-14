@@ -62,8 +62,9 @@ _app = AgentApp(
     state_graph=StateGraph(
         start=Uppercase,
         transitions=[
+            # Transition(Uppercase, StdSignal.ok, Done),
+            # Transition(Done, StdSignal.done, StdEnd),
             Transition(Uppercase, StdSignal.ok, Done),
-            Transition(Done, StdSignal.done, StdEnd),
         ],
     ),
     initial_state_factory=lambda q: AppState(text=q or "hello"),

@@ -47,6 +47,7 @@ from agentflow.llm.LlmConfig import OPENAI_COMPATIBLE_BACKENDS, SUPPORTED_BACKEN
 from agentflow.llm.LlmConnectorBase import LlmConnectorBase
 from agentflow.llm.LlmPool import LlmPool
 from agentflow.llm.OllamaManager import OllamaManager, OllamaModelInfo
+from agentflow.live_model import LiveModel, action
 from agentflow.logging_config import PrettyFormatter, setup_pretty_logging
 from agentflow.statemachine import (
     EnumSignal,
@@ -70,6 +71,9 @@ __all__ = [
     "LlmConnector",
     # Pool — transparent connector management
     "LlmPool",
+    # LiveModel
+    "LiveModel",
+    "action",
     # Backend-specific connectors
     "OpenAiConnector",
     "AnthropicConnector",

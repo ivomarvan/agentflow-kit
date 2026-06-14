@@ -31,9 +31,6 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Annotated
-
-from pydantic import BaseModel, ConfigDict, Field
 
 from agentflow import AgentApp
 from agentflow.llm.cache import LlmFileCache
@@ -44,9 +41,13 @@ from agentflow.statemachine import (
     StdEnd,
     Transition,
 )
-from agentflow.gui.state_viewer import icon, room
 from agentflow.tools.Tool import ToolBase, param_desc
 from agentflow.tools.ToolRegistry import ToolRegistry
+
+# Workspace root must be on sys.path so that 'examples.agents' is importable.
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from examples.agents.smart_home_model import KitchenState, SmartHomeModel
 
 # ---------------------------------------------------------------------------
 # Import reusable symbols from 06_smart_home.py
@@ -82,93 +83,28 @@ _DEFAULT_QUESTION    = _base._DEFAULT_QUESTION     # type: ignore[attr-defined]
 _SYSTEM_PROMPT       = _base._SYSTEM_PROMPT        # type: ignore[attr-defined]
 
 # ---------------------------------------------------------------------------
-# Live state models — Pydantic with display annotations
-#
-# icon("name")  → rendered as emoji + value/dot in the Live State panel
-# room("Label") → groups a nested model into a labelled room box
+# Live state — imported from smart_home_model (HouseState + room models)
 # ---------------------------------------------------------------------------
 
-
-class KitchenState(BaseModel):
-    """Kitchen room: temperature, lights, stove, and person count."""
-
-    model_config = ConfigDict(frozen=False)
-
-    temperature: Annotated[float, icon("thermometer", unit="°C")] = Field(20.0, title="Temperature")
-    lights:      Annotated[bool,  icon("bulb",        on_color="#fbbf24")] = Field(False, title="Lights")
-    stove:       Annotated[bool,  icon("flame",       on_color="#ef4444")] = Field(False, title="Stove")
-    persons:     Annotated[int,   icon("person")]                          = Field(1,     title="Persons")
+# Shared mutable instance — mutated by SmartHomeModel @action methods and
+# LiveDeviceWorkerVertex tool calls; monitored by the GUI Live State panel.
+_model = SmartHomeModel()
+_HOUSE = _model.state
 
 
-class BedroomState(BaseModel):
-    """Bedroom room: temperature, lights, person count."""
-
-    model_config = ConfigDict(frozen=False)
-
-    temperature: Annotated[float, icon("thermometer", unit="°C")] = Field(18.5, title="Temperature")
-    lights:      Annotated[bool,  icon("bulb",        on_color="#fbbf24")] = Field(True,  title="Lights")
-    persons:     Annotated[int,   icon("person")]                          = Field(0,     title="Persons")
-
-
-class LivingRoomState(BaseModel):
-    """Living room: temperature, lights, person count."""
-
-    model_config = ConfigDict(frozen=False)
-
-    temperature: Annotated[float, icon("thermometer", unit="°C")] = Field(21.0, title="Temperature")
-    lights:      Annotated[bool,  icon("bulb",        on_color="#fbbf24")] = Field(True,  title="Lights")
-    persons:     Annotated[int,   icon("person")]                          = Field(2,     title="Persons")
-
-
-class HouseState(BaseModel):
-    """Complete house state — drives the GUI Live State panel.
-
-    Fields annotated with ``room()`` appear as labelled room boxes in the Chat tab.
-    The col_span value controls how many grid columns the room box occupies.
-    """
-
-    model_config = ConfigDict(frozen=False)
-
-    kitchen: Annotated[KitchenState,    room("Kitchen",     col_span=2)] = Field(default_factory=KitchenState)
-    bedroom: Annotated[BedroomState,    room("Bedroom")]                 = Field(default_factory=BedroomState)
-    living:  Annotated[LivingRoomState, room("Living Room")]             = Field(default_factory=LivingRoomState)
-
-
-# Shared mutable instance — mutated by the overridden tools below;
-# monitored by the GUI Live State panel via AgentApp(live_state=_HOUSE).
-_HOUSE = HouseState()
-
-# ---------------------------------------------------------------------------
-# Overridden tools — identical API to the base file, but read/write _HOUSE
-# (a Pydantic model) instead of the plain dict in 06_smart_home.py
-# ---------------------------------------------------------------------------
-
-
-class GetCurrentStatus(ToolBase):
-    """Return temperature, light state and occupancy for a room."""
+class _LlmGetCurrentStatus(ToolBase):
+    """LLM tool — same name as 06_smart_home for DeviceWorker compatibility."""
 
     name = "get_current_status"
     description = "Return current state (temperature, lights, persons) for the given room."
 
     @param_desc(room_id="Room name: 'kitchen', 'bedroom', or 'living'.")
     def execute(self, room_id: str) -> str:
-        """Read room attributes from the Pydantic HouseState model."""
-        room_state = getattr(_HOUSE, room_id, None)
-        if room_state is None:
-            return f"Unknown room '{room_id}'. Available: kitchen, bedroom, living."
-        stove_part = (
-            f", stove={'on' if room_state.stove else 'off'}"
-            if isinstance(room_state, KitchenState) else ""
-        )
-        return (
-            f"Room '{room_id}': temperature={room_state.temperature}°C, "
-            f"lights={'on' if room_state.lights else 'off'}, "
-            f"persons={room_state.persons}{stove_part}."
-        )
+        return _model.get_status(room_id)
 
 
-class SetTemperature(ToolBase):
-    """Set the target temperature for a room."""
+class _LlmSetTemperature(ToolBase):
+    """LLM tool — accepts celsius as string like the base example."""
 
     name = "set_temperature"
     description = "Set the target temperature (°C) in the given room."
@@ -178,17 +114,11 @@ class SetTemperature(ToolBase):
         celsius="Target temperature as a number, e.g. '22' or '22.5'.",
     )
     def execute(self, room_id: str, celsius: str) -> str:
-        """Update temperature on the Pydantic model; GUI reflects the change instantly."""
-        room_state = getattr(_HOUSE, room_id, None)
-        if room_state is None:
-            return f"Unknown room '{room_id}'."
-        temp = float(celsius)
-        room_state.temperature = temp  # mutable because model_config frozen=False
-        return f"Temperature in '{room_id}' set to {temp}°C."
+        return _model.set_temperature(room_id, float(celsius))
 
 
-class ToggleDevice(ToolBase):
-    """Turn a device or light on or off."""
+class _LlmToggleDevice(ToolBase):
+    """LLM tool — device_id format room.device as in 06_smart_home."""
 
     name = "toggle_device"
     description = "Turn a device or light on or off. device_id format: 'room.device'."
@@ -198,7 +128,6 @@ class ToggleDevice(ToolBase):
         state="Desired state: 'on' or 'off'.",
     )
     def execute(self, device_id: str, state: str) -> str:
-        """Set the boolean attribute on the Pydantic model; GUI reflects the change."""
         parts = device_id.split(".", 1)
         if len(parts) != 2:
             return "Invalid device_id. Use format 'room.device', e.g. 'kitchen.lights'."
@@ -206,6 +135,16 @@ class ToggleDevice(ToolBase):
         room_state = getattr(_HOUSE, room_key, None)
         if room_state is None:
             return f"Unknown room '{room_key}'."
+        if device == "lights":
+            desired = state.lower() == "on"
+            if room_state.lights != desired:
+                _model.toggle_light(room_key)
+            return f"'{device_id}' turned {state.lower()}."
+        if device == "stove" and isinstance(room_state, KitchenState):
+            desired = state.lower() == "on"
+            if room_state.stove != desired:
+                _model.toggle_stove()
+            return f"'{device_id}' turned {state.lower()}."
         if not hasattr(room_state, device):
             return f"Unknown device '{device}' in room '{room_key}'."
         setattr(room_state, device, state.lower() == "on")
@@ -288,11 +227,13 @@ if __name__ == "__main__":
             pool=LlmPool(cache=LlmFileCache(__file__)),
             tool_registries={
                 "default": ToolRegistry([
-                    GetCurrentStatus(), SetTemperature(), ToggleDevice(),
+                    _LlmGetCurrentStatus(),
+                    _LlmSetTemperature(),
+                    _LlmToggleDevice(),
                 ]),
             },
         ),
-        live_state=_HOUSE,
+        live_model=_model,
         state_graph=StateGraph(
             start=IntentParserVertex,
             initialized_vertexes=[

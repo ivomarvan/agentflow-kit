@@ -72,6 +72,11 @@ class FakeLlmConnector(LlmConnectorBase):
         tools: list[dict[str, Any]] | None,
         temperature: float,
         model_override: str | None,
+        response_schema: type | None = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
+        seed: int | None = None,
+        anthropic_cache_system: bool = False,
     ) -> ChatResponse:
         """Return the next queued response.
 
@@ -80,6 +85,11 @@ class FakeLlmConnector(LlmConnectorBase):
             tools: Ignored.
             temperature: Ignored.
             model_override: Ignored.
+            response_schema: Ignored — preset strings are returned as-is.
+            max_tokens: Ignored.
+            stop: Ignored.
+            seed: Ignored.
+            anthropic_cache_system: Ignored.
 
         Returns:
             ``ChatResponse`` with the next queued string as content.
@@ -101,6 +111,11 @@ class FakeLlmConnector(LlmConnectorBase):
         tools: list[dict[str, Any]] | None,
         temperature: float,
         model_override: str | None,
+        response_schema: type | None = None,
+        max_tokens: int | None = None,
+        stop: list[str] | None = None,
+        seed: int | None = None,
+        anthropic_cache_system: bool = False,
     ) -> ChatResponse:
         """Async counterpart — delegates synchronously (no I/O).
 
@@ -109,6 +124,11 @@ class FakeLlmConnector(LlmConnectorBase):
             tools: Ignored.
             temperature: Ignored.
             model_override: Ignored.
+            response_schema: Ignored.
+            max_tokens: Ignored.
+            stop: Ignored.
+            seed: Ignored.
+            anthropic_cache_system: Ignored.
 
         Returns:
             ``ChatResponse`` with the next queued string as content.
@@ -116,7 +136,10 @@ class FakeLlmConnector(LlmConnectorBase):
         Raises:
             RuntimeError: When the response queue is empty.
         """
-        return self._do_chat(messages, tools, temperature, model_override)
+        return self._do_chat(
+            messages, tools, temperature, model_override,
+            response_schema, max_tokens, stop, seed, anthropic_cache_system,
+        )
 
     # ------------------------------------------------------------------
     # Queue management
