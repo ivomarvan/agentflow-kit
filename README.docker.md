@@ -26,13 +26,13 @@ docker compose logs -f
 
 ```bash
 # PostgreSQL backend
-uv pip install -e ".[postgres]"
+uv sync --extra postgres
 
 # Redis backend
-uv pip install -e ".[redis-backend]"
+uv sync --extra redis-backend
 
 # Both
-uv pip install -e ".[postgres,redis-backend]"
+uv sync --extra postgres --extra redis-backend
 ```
 
 ## Running integration tests
@@ -44,7 +44,7 @@ Integration tests require running Docker services and optional backend packages.
 docker compose up -d
 
 # Install extras
-uv pip install -e ".[postgres,redis-backend]"
+uv sync --extra postgres --extra redis-backend
 
 # Run all integration tests
 uv run pytest -m integration

@@ -17,14 +17,16 @@ No real LLM required. All scripts work with FakeLlmConnector or pure Python.
 
 | File | What it shows |
 |------|---------------|
-| `01_hello_state_machine.py` | Absolute minimum: two vertices, pure Python |
+| `01_hello_state_machine.py` | `AgentApp` + minimal `StateGraph`: two vertices, pure Python |
 | `02_parallel_and_loop.py` | `Parallel` fan-out/fan-in + review loop |
 | `03_live_graph.py` | `LiveGraphHooks` — DOT snapshot per super-step |
 | `04_checkpoint_resume.py` | Pause / resume with `InMemoryCheckpointStore` |
+| `05_counter_live_model.py` | `LiveModel` standalone demo (`/demo` GUI) |
 
 ```bash
-uv run python examples/framework/01_hello_state_machine.py run
+uv run python examples/framework/01_hello_state_machine.py run   # → HELLO
 uv run python examples/framework/02_parallel_and_loop.py graph --browser
+uv run python examples/framework/05_counter_live_model.py          # LiveModel /demo GUI
 ```
 
 ---
