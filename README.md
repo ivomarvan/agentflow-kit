@@ -85,6 +85,30 @@ You also have tools to easily create a **user interface for your domain model**.
 Each LLM connector has its own **cache**, so you don't waste tokens while debugging
 with repeated queries.
 
+### Automatic Tool Schema Generation
+
+The JSON Schema describing the tools to the LLMs is generated directly from your Python tool definitions and type hints. This keeps your implementation and schema perfectly in sync.
+
+```python
+class Calculator(ToolBase):
+    """Evaluate a simple arithmetic expression safely."""
+
+    @param_desc(expression="Arithmetic expression using digits and +-*/() only, e.g. '19 * 23'")
+    def execute(self, expression: str) -> str:
+        """Evaluate the expression; reject any non-arithmetic input.
+
+        Args:
+            expression: Math expression string.
+
+        Returns:
+            String with the numeric result, or an error message.
+        """
+        # ... implementation ...
+        pass
+
+_registry = ToolRegistry([Calculator(), ...])
+```
+
 ---
 
 ## Features
@@ -354,7 +378,7 @@ Free to use, modify, and distribute — including in commercial products. Attrib
 required: retain the copyright notice and license in any copy or derivative work.
 Patent rights from contributors are explicitly granted and protected.
 
-© 2024–2026 Ivo Marvan
+© 2026 Ivo Marvan
 
 ## AI-Assisted Development
 
